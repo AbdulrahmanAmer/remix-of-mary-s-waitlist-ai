@@ -443,7 +443,6 @@ const monitor: PlaybackMonitor = {
 };
 let monitorToken = 0;
 
-
 function base64ToBytes(base64: string) {
   const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
