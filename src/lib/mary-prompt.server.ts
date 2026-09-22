@@ -45,7 +45,9 @@ export function buildPrompt(
     .map(([k, v]) => `${k}: ${v}`)
     .join("\n");
 
-  const allCaptured = WAITLIST_FIELDS.every((f) => collected[f]);
+  // Phone is always offered but always skippable, so it never blocks the close.
+  const requiredFields = WAITLIST_FIELDS.filter((f) => f !== "phone");
+  const allCaptured = requiredFields.every((f) => collected[f]);
   const saidByMary = messages
     .filter((m) => m.role === "assistant")
     .map((m) => m.content)
