@@ -412,7 +412,7 @@ export function MaryExperience() {
 
   return (
     <main className="relative min-h-dvh overflow-hidden">
-      <AuroraBackground />
+      <AuroraBackground intensity={stage === "live" ? Math.min(1, 0.4 + level) : 0} />
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
         <header
           className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}
