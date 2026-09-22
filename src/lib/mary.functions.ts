@@ -54,6 +54,7 @@ export type MaryTurn = {
   /** They asked to be called back instead of finishing here. */
   callbackRequested: boolean;
   intent: TurnIntent;
+  mode: "neutral" | "rushed" | "skeptical" | "guarded" | "warm";
   /** She asked the wrap question this turn — no punctuation guessing. */
   wrapAsked: boolean;
   revealed: boolean;
@@ -118,6 +119,7 @@ export const maryTurn = createServerFn({ method: "POST" })
           declined: false,
           callbackRequested: false,
           intent: "answering" as const,
+          mode: "neutral" as const,
           wrapAsked: false,
           revealed: data.flags.revealed,
           lanesDone: data.flags.lanesDone,

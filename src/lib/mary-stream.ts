@@ -77,6 +77,7 @@ export async function streamMaryTurn(
       declined: false,
       callbackRequested: false,
       intent: "answering" as const,
+      mode: "neutral" as const,
       wrapAsked: false,
       revealed: input.flags.revealed,
       lanesDone: input.flags.lanesDone,
