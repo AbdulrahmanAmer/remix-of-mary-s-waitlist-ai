@@ -151,7 +151,7 @@ export const MaryPresence = memo(function MaryPresence({
       // Halo.
       const haloR = radius * (cur.halo + lv * 0.5 + bloom * 0.6);
       const halo = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, haloR);
-      halo.addColorStop(0, withAlpha(primary, 0.24 + lv * 0.16));
+      halo.addColorStop(0, withAlpha(primary, 0.3 + lv * 0.2));
       halo.addColorStop(0.55, withAlpha(primary, 0.08 + lv * 0.06));
       halo.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = halo;
@@ -172,17 +172,17 @@ export const MaryPresence = memo(function MaryPresence({
         cy,
         radius * 1.25,
       );
-      base.addColorStop(0, withAlpha(primary, 0.5 * cur.glow));
-      base.addColorStop(0.6, withAlpha(primary, 0.32 * cur.glow));
-      base.addColorStop(1, withAlpha(primary, 0.16));
+      base.addColorStop(0, withAlpha(primary, 0.92 * cur.glow));
+      base.addColorStop(0.62, withAlpha(primary, 0.62 * cur.glow));
+      base.addColorStop(1, withAlpha(primary, 0.22));
       ctx.fillStyle = base;
       ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
 
       // Drifting inner blooms.
       const blooms: Array<[number, number, number, number]> = [
-        [0.42, swirlPhase * 0.9, 0.72, 0.5],
-        [0.5, -swirlPhase * 0.62 + 2.2, 0.56, 0.38],
-        [0.3, swirlPhase * 1.4 + 4.1, 0.42, 0.3],
+        [0.42, swirlPhase * 0.9, 0.72, 0.78],
+        [0.5, -swirlPhase * 0.62 + 2.2, 0.56, 0.6],
+        [0.3, swirlPhase * 1.4 + 4.1, 0.42, 0.48],
       ];
       for (const [dist, phase, size, strength] of blooms) {
         const bx = cx + Math.cos(phase) * radius * dist;
@@ -198,7 +198,7 @@ export const MaryPresence = memo(function MaryPresence({
       const hx = cx - radius * 0.3 + Math.cos(swirlPhase * 0.4) * radius * 0.08;
       const hy = cy - radius * 0.36 + Math.sin(swirlPhase * 0.33) * radius * 0.06;
       const spec = ctx.createRadialGradient(hx, hy, 0, hx, hy, radius * 0.52);
-      spec.addColorStop(0, withAlpha(primary, 0.55));
+      spec.addColorStop(0, withAlpha(primary, 0.85));
       spec.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = spec;
       ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
@@ -206,7 +206,7 @@ export const MaryPresence = memo(function MaryPresence({
 
       // Surface edge.
       traceBlob(cx, cy, radius, breath);
-      ctx.strokeStyle = withAlpha(primary, 0.42 + lv * 0.25);
+      ctx.strokeStyle = withAlpha(primary, 0.6 + lv * 0.3);
       ctx.lineWidth = 1.2;
       ctx.stroke();
 
