@@ -1739,6 +1739,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
         startRecognition();
       }
     },
+    noteVerdict: (verdict, peak) => {
+      if (verdict === "mary") nearField.learnOwn(peak);
+      else nearField.learnAmbient(peak);
+    },
     close: () => {
       if (!alive) return;
       alive = false;
