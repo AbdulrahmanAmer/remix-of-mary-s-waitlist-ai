@@ -3,6 +3,10 @@ import { ClientOnly } from "@tanstack/react-router";
 import { BootGate } from "@/components/boot-gate";
 import { MaryBoot } from "@/components/mary-boot";
 
+// Shared links and QR codes need an absolute address for the preview card.
+// Update this when the custom domain goes live.
+const SITE_URL = "https://omnisuite.omnikom.ai";
+
 const title = "Join the OmniSuite Waitlist — Talk to MARY by Omnikom";
 const description =
   "MARY, the AI Revenue Concierge behind OmniSuite, a product by Omnikom, will sign you up for early access by voice or text.";
