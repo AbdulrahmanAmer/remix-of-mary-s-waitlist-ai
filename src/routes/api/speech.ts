@@ -18,11 +18,11 @@ export const Route = createFileRoute("/api/speech")({
         if (text.length > 1200) text = text.slice(0, 1200);
 
         const delivery =
-          "Read the line below as a real person speaking on a friendly phone call. " +
-          "Warm, relaxed and unhurried — a natural conversational pace, slightly slower than average. " +
-          "Let sentences breathe: a short breath at commas, a fuller pause at full stops. " +
-          "Gentle emphasis on the words that carry meaning, a light lift mid-sentence and a soft " +
-          "falling tone at the end. Never announcer-like, never rushed, no robotic evenness. " +
+          "Say the line below the way a real person talks in a live conversation. " +
+          "Normal everyday speaking speed — the tempo of someone chatting, not reading. " +
+          "Do not slow down, do not draw words out, do not leave long gaps; keep it light and moving. " +
+          "Warm and casual, with natural emphasis on the words that matter, a brief beat at commas " +
+          "and a soft falling tone at the end. Never announcer-like, never performed, no robotic evenness. " +
           "Speak only the line itself, exactly as written:\n\n";
 
         const upstream = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
