@@ -127,8 +127,10 @@ export function speak(
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(analyser);
-    if (playhead === 0) playhead = ctx.currentTime + 0.08;
-    else playhead = Math.max(playhead, ctx.currentTime);
+    if (playhead === 0) {
+      playhead = ctx.currentTime + 0.08;
+      startAt = playhead;
+    } else playhead = Math.max(playhead, ctx.currentTime);
     source.start(playhead);
     playhead += audioBuffer.duration;
     sources.add(source);
