@@ -652,7 +652,7 @@ export function MaryExperience() {
                 <motion.div
                   layout
                   transition={SPRING}
-                  className="no-scrollbar mx-auto w-full max-w-3xl space-y-2.5"
+                  className="no-scrollbar mx-auto w-full max-w-2xl space-y-2.5"
                 >
                   <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
@@ -748,7 +748,7 @@ export function MaryExperience() {
                         : { scale: 1 }
                   }
                   transition={SPRING}
-                  className="surface-floating mx-auto flex w-full max-w-3xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
+                  className="surface-floating mx-auto flex w-full max-w-2xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
                     onClick={toggleMic}
