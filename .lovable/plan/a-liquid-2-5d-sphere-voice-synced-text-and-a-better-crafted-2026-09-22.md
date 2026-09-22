@@ -12,7 +12,7 @@ The reveal will instead be driven by the actual audio: nothing appears until her
 
 The glow around the sphere reaches roughly two and a half times its own size, but the sphere is sized as if only its body had to fit — so on the shorter conversation view the halo and the outer rings get cut off at the top and bottom.
 
-The sphere will be sized from the space actually available *including* its glow, so the whole presence always sits inside its area with breathing room. It also gets a slightly wider stage in the conversation view so the light can spread sideways instead of being squeezed.
+The sphere will be sized from the space actually available _including_ its glow, so the whole presence always sits inside its area with breathing room. It also gets a slightly wider stage in the conversation view so the light can spread sideways instead of being squeezed.
 
 ## 3. A genuinely liquid, 2.5D sphere
 

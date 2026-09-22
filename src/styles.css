@@ -192,12 +192,7 @@
     content: "";
     position: absolute;
     inset: 0;
-    background: linear-gradient(
-      105deg,
-      transparent 32%,
-      oklch(1 0 0 / 40%) 48%,
-      transparent 64%
-    );
+    background: linear-gradient(105deg, transparent 32%, oklch(1 0 0 / 40%) 48%, transparent 64%);
     transform: translateX(-120%);
     transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
     pointer-events: none;
