@@ -1,20 +1,22 @@
-# Pin the details rail to the true edge of the screen
+# Natural conversation pacing + rail pinned to the screen edge
 
-## Problem
+Two pieces: the already-approved fix that pins the captured-details rail to the true right edge of the screen, and a rework of how the conversation flows so it feels like a person talking, not a form being filled.
 
-The captured-details rail (Name, Email, Phone, Business, Industry, Operations) renders mid-screen, right beside MARY's text, instead of floating at the far right edge of the window where the annotation shows it should be.
+## 1. Rail at the true screen edge (approved, carried forward)
 
-Root cause: the rail uses `position: fixed`, but it is mounted inside the live conversation section, which is an animated element (it enters with a move + blur). Browsers treat any transformed/filtered ancestor as the anchor for `fixed` positioning, so the rail pins itself to the conversation column's edge instead of the screen's edge. That is exactly the misplaced box in the screenshot.
+The rail renders mid-screen because it is mounted inside the animated conversation section — the entrance animation makes the browser anchor its "fixed" position to that column instead of the window. Move the mount to the untransformed outer shell so it genuinely floats at the far right edge, vertically centred, and bump the fly-in distance so captured details visibly travel in from off-screen. The conversation column keeps its reserved padding so nothing slides beneath it.
 
-## What changes
+## 2. A conversation that breathes
 
-- **Rail at the true screen edge.** Move the rail out of the animated conversation section and mount it at the top level of the experience, where nothing transformed wraps it. It then genuinely floats at the far right edge of the window, vertically centred, as a quiet overlay with no layout footprint.
-- **Fly-in still comes from far off-screen.** Captured details keep flying in from beyond the right edge and settling onto the rail — now noticeably farther, since the rail truly sits at the edge.
-- **Conversation stays centred and never collides.** The conversation column keeps its reserved right-side padding so no message, MARY line, or composer can slide beneath the rail at any window width; on phones the rail stays dots-only.
-- **Everything else untouched.** Voice, hands-free flow, sphere, waitlist logic, tokens and one-screen no-scrollbar layout stay exactly as they are.
+Today every turn is mechanical: you stop talking, and a beat later MARY instantly fires back one reply that always ends in the next question, in a fixed six-field order. That interrogation rhythm is what feels unnatural. Changes:
+
+- **A human beat before she answers.** After you finish, MARY holds a short thinking moment before speaking — a quick beat after a short answer, a slightly longer one after a long or detailed answer (like a person taking in what you said). Never instant, never identical twice; her presence shows the thinking state during it.
+- **Two-beat replies.** Her turn can now land as two short spoken moments — first a genuine reaction to what you said ("Oh nice, clinics are busy"), then the question as a second breath a moment later — instead of one compressed sentence that does both. This alone changes the rhythm from quiz to conversation.
+- **Flexible order, real listening.** The six details stop being a rigid checklist order. If you volunteer your name and business in one answer, she takes both and moves on; if your business answer already tells her the industry, she doesn't ask it again — she asks only for what's genuinely missing, in whatever order flows naturally. The goal is a short, warm conversation that ends with everything captured, not six questions asked.
+- **Rapport throughout.** She uses your name once she's learned it, reacts to the substance of answers, and varies her question style — the existing wrap ("you're all set — any questions before I finalise your spot?") and single closing line stay as they are.
 
 ## Technical notes
 
-- `src/components/mary-experience.tsx`: move the `<ProgressConstellation />` mount from inside the live `motion.section` to the untransformed outer shell (rendered once for the live stage, alongside it rather than within it).
-- `src/components/progress-constellation.tsx`: keep `fixed right-3 sm:right-5 lg:right-8 top-1/2`; bump the fly-in distance (`x: 220` → larger) so the entrance visibly travels from off-screen now that the rail is at the edge.
-- Verify with Playwright at 1018×702 and 1280×800: rail's right edge sits within ~40px of the window edge, no bubble overlaps its bounds, and the full signup still completes cleanly.
+- `src/lib/mary.functions.ts`: split her turn into `say` (the reaction) plus an optional `followUp` (the question); relax the fixed collection order in the system prompt — capture whatever is volunteered in any order, ask only for missing fields, never ask about something already implied; keep phases, never-repeat rules, wrap and close.
+- `src/components/mary-experience.tsx`: add a jittered thinking beat before speaking (scaled by the length of what you just said), then speak the reaction line, pause briefly, and speak the follow-up as a second line when present; the rail mounts at the shell root; everything else (hands-free, VAD, word-synced reveal, one-screen layout) untouched.
+- Verify with Playwright: scripted full conversation capturing the timing and transcript — confirm out-of-order capture works (name+business in one answer), the wrap question and closing line still fire, the rail sits at the window edge, no console errors.
