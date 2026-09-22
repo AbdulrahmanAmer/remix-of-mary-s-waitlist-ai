@@ -17,7 +17,32 @@ export type WaitlistField = (typeof WAITLIST_FIELDS)[number];
 export type Collected = Partial<Record<WaitlistField, string>>;
 
 /** What MARY has actually finished saying — beats she was cut off in don't count. */
-export type TurnFlags = { revealed: boolean; lanesDone: boolean };
+export type TurnFlags = {
+  revealed: boolean;
+  lanesDone: boolean;
+  /** The wrap question has been asked, so CLOSE is reachable. */
+  wrapAsked?: boolean | undefined;
+  /** They asked for a callback; the sales sequence is over. */
+  callback?: boolean | undefined;
+  /** How they are showing up, carried between turns. */
+  mode?: "neutral" | "rushed" | "skeptical" | "guarded" | "warm" | undefined;
+  /** Fields the last turn proposed without evidence, fed back so she asks instead. */
+  rejected?: string[] | undefined;
+};
+
+/** What the person's last message was actually doing, read before the funnel. */
+export const TURN_INTENTS = [
+  "greeting",
+  "answering",
+  "asking",
+  "correcting",
+  "objecting",
+  "callback",
+  "refusing",
+  "leaving",
+  "smalltalk",
+] as const;
+export type TurnIntent = (typeof TURN_INTENTS)[number];
 
 export type MaryTurn = {
   say: string;
@@ -26,6 +51,12 @@ export type MaryTurn = {
   nextField: WaitlistField | "none";
   complete: boolean;
   declined: boolean;
+  /** They asked to be called back instead of finishing here. */
+  callbackRequested: boolean;
+  intent: TurnIntent;
+  mode: "neutral" | "rushed" | "skeptical" | "guarded" | "warm";
+  /** She asked the wrap question this turn — no punctuation guessing. */
+  wrapAsked: boolean;
   revealed: boolean;
   lanesDone: boolean;
   /** Fields the model proposed without the person's words to back them. */
@@ -36,7 +67,14 @@ export const TurnInput = z.object({
   messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
   collected: z.record(z.string(), z.string()).default({}),
   flags: z
-    .object({ revealed: z.boolean(), lanesDone: z.boolean() })
+    .object({
+      revealed: z.boolean(),
+      lanesDone: z.boolean(),
+      wrapAsked: z.boolean().optional(),
+      callback: z.boolean().optional(),
+      mode: z.enum(["neutral", "rushed", "skeptical", "guarded", "warm"]).optional(),
+      rejected: z.array(z.string()).optional(),
+    })
     .default({ revealed: false, lanesDone: false }),
 });
 
@@ -79,6 +117,10 @@ export const maryTurn = createServerFn({ method: "POST" })
           nextField: "none",
           complete: false,
           declined: false,
+          callbackRequested: false,
+          intent: "answering" as const,
+          mode: "neutral" as const,
+          wrapAsked: false,
           revealed: data.flags.revealed,
           lanesDone: data.flags.lanesDone,
           rejected: [],

@@ -71,6 +71,29 @@ export function isAffirmation(text: string): boolean {
   return !list.some((t) => NEGATION.has(t));
 }
 
+/** "Jon" vs "John": one edit apart, which is what speech recognition does to names. */
+export function nearWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 3 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length === b.length) {
+      i += 1;
+      j += 1;
+    } else if (a.length > b.length) i += 1;
+    else j += 1;
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
 function overlap(quote: string, message: string): number {
   const q = tokens(quote);
   if (q.length === 0) return 0;
@@ -256,9 +279,20 @@ export function groundCollected(params: {
     let ok = false;
     switch (field) {
       case "name": {
-        const u = new Set(tokens(scopeText));
-        ok = tokens(value).some((t) => t.length >= 2 && u.has(t));
-        if (!ok && affirmed) ok = assistantOffered(value, lastAssistant);
+        // A name only counts when they said it themselves (allowing for a
+        // recognition slip of a letter or two) or clearly confirmed her guess.
+        const heard = tokens(scopeText);
+        const spoken = tokens(value).some(
+          (t) => t.length >= 2 && heard.some((h) => h === t || nearWord(h, t)),
+        );
+        // If she quoted them, the quote itself must be real and must not be a
+        // bare "yeah" standing in for words they never said.
+        const evidenceOk = evidence
+          ? quoteGrounded(evidence, scope) && !isAffirmation(evidence)
+          : true;
+        ok = spoken && evidenceOk;
+        if (!ok && affirmed && !/^(close|pretty|more|basically)\b/i.test(lastUser.trim()))
+          ok = assistantOffered(value, lastAssistant);
         break;
       }
       case "email": {

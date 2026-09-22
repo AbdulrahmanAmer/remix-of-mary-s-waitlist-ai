@@ -35,7 +35,32 @@ export const TurnSchema = z.object({
   nextField: z.enum(["name", "email", "phone", "business", "industry", "operations", "none"]),
   complete: z.boolean(),
   declined: z.boolean(),
-  phase: z.enum(["WELCOME", "DISCOVER", "REVEAL", "LANES", "CONTACT", "WRAP", "CLOSE"]),
+  // What their last message was doing — read before anything about the funnel.
+  intent: z.enum([
+    "greeting",
+    "answering",
+    "asking",
+    "correcting",
+    "objecting",
+    "callback",
+    "refusing",
+    "leaving",
+    "smalltalk",
+  ]),
+  mode: z.enum(["neutral", "rushed", "skeptical", "guarded", "warm"]),
+  callbackRequested: z.boolean(),
+  wrapAsked: z.boolean(),
+  phase: z.enum([
+    "WELCOME",
+    "DISCOVER",
+    "REVEAL",
+    "LANES",
+    "CONTACT",
+    "WRAP",
+    "CLOSE",
+    "CALLBACK",
+    "EXIT",
+  ]),
   revealed: z.boolean(),
   lanesDone: z.boolean(),
 });
@@ -69,22 +94,27 @@ export function buildPrompt(
   const discoveryDone = Boolean(
     collected["name"] && collected["business"] && collected["industry"] && collected["operations"],
   );
-  const wrapAsked = Boolean(lastAssistant && lastAssistant.includes("?"));
+  // The wrap question is marked explicitly by the turn that asked it — no
+  // guessing from punctuation, which stalled whenever a line was cut off.
+  const wrapAsked = Boolean(flags.wrapAsked);
   const wasCutOff = Boolean(lastAssistant && lastAssistant.includes(CUT_OFF_MARK));
+  const callback = Boolean(flags.callback);
 
-  const phase = !history
-    ? "WELCOME — the conversation is just starting. One sentence on who you are and what OmniSuite does, then ask if they want first access. No personal question yet."
-    : !discoveryDone
-      ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question."
-      : !revealed
-        ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn. Set revealed true."
-        : !lanesDone
-          ? "LANES — immediately tie Cultivate and Recover to their own situation, one short beat each, then land that it is three lanes in one system. No questions here. Set lanesDone true."
-          : !allCaptured
-            ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
-            : wrapAsked
-              ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the exact closing line and set complete true."
-              : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false.";
+  const phase = callback
+    ? "CALLBACK — they asked to be called back. The sales sequence is over: do not pitch, do not run discovery. You need only their name and a number, one ask per turn, skipping anything you already have. Promise nothing about timing — say the request goes straight to the team. Set callbackRequested true every turn from here."
+    : !history
+      ? "WELCOME — the very first thing you say. Greet them like a person first (a short hello on its own), then say who you are in one plain line, then what OmniSuite is in one plain line. Three short beats maximum, no stacking. No personal question at all this turn — end with something easy to respond to, not an intake question. Vary the wording; never use the same opener twice."
+      : !discoveryDone
+        ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question. If you still do not have their name and the conversation has warmth, ask for it lightly and naturally ('Sorry — I got ahead of myself. Who am I speaking with?'). If they have no business at all, say so is fine, mark declined and wind down warmly instead of continuing the ladder."
+        : !revealed
+          ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn. Set revealed true."
+          : !lanesDone
+            ? "LANES — immediately tie Cultivate and Recover to their own situation, one short beat each, then land that it is three lanes in one system. No questions here. Set lanesDone true."
+            : !allCaptured
+              ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
+              : wrapAsked
+                ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the exact closing line and set complete true."
+                : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false and set wrapAsked true on the turn where you ask it.";
 
   const missing = requiredFields.filter((f) => !collected[f]);
   const gate = missing.length
@@ -95,9 +125,28 @@ export function buildPrompt(
     ? `\n\nYour last line was cut off where marked: they spoke over you and did not hear the rest. Do not repeat it word for word and do not assume they heard it. What they said next comes first.`
     : "";
 
+  const rejectedNote = flags.rejected?.length
+    ? `\n\nLast turn you recorded ${flags.rejected.join(", ")} without their words behind it, so it was discarded. Do not assert it. Ask about it plainly, or let them volunteer it.`
+    : "";
+
+  const modeNote =
+    flags.mode && flags.mode !== "neutral"
+      ? `\n\nThey are coming across as ${flags.mode}. Match that: ${
+          flags.mode === "rushed"
+            ? "one short beat, get to the point, no build-up."
+            : flags.mode === "skeptical"
+              ? "no hype, concrete specifics, invite the pushback."
+              : flags.mode === "guarded"
+                ? "ask for less, explain why before you ask anything."
+                : "stay warm but keep moving."
+        }`
+      : "";
+
+  const intentRule = `\n\nRead their last message first and set "intent" to what it was doing. Intent outranks the phase: if they asked a question, answer it in full before anything else; if they corrected you, accept the correction without defending; if they objected, address the objection itself; if they said hello, greet back; if they want off the call, let them go warmly and set declined true; if they asked to be called back instead, set callbackRequested true and switch to taking a name and a number only. A turn may be acknowledgement only — "followUp" can be null. Never force the next funnel step onto a turn that changed the subject. Also set "mode" to how they are showing up and "wrapAsked" to whether this turn asks the final wrap question.`;
+
   return `Current phase: ${phase}\n\nReveal already delivered: ${revealed ? "yes" : "no"}\nLanes already explained: ${lanesDone ? "yes" : "no"}\n\nAlready captured (do not change these unless the person just corrected them):\n${known || "(nothing yet)"}\n\nConversation so far:\n${
     history || "(the conversation is just starting)"
-  }${gate}${cutOff}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move (or null). Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
+  }${gate}${cutOff}${rejectedNote}${modeNote}${intentRule}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move (or null). Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
 }
 
 /**
@@ -153,13 +202,20 @@ export function finishTurn(
   const required = WAITLIST_FIELDS.filter((f) => f !== "phone");
   const allCaptured = required.every((f) => collected[f]);
 
+  const callbackRequested = Boolean(input.flags.callback) || out.callbackRequested;
+
   return {
     say: out.say.trim(),
     followUp: out.followUp?.trim() ? out.followUp.trim() : null,
     collected,
     nextField: out.nextField,
-    complete: out.complete && allCaptured,
+    // A callback conversation never "completes" the waitlist sign-up.
+    complete: out.complete && allCaptured && !callbackRequested,
     declined: out.declined,
+    callbackRequested,
+    intent: out.intent,
+    mode: out.mode,
+    wrapAsked: Boolean(input.flags.wrapAsked) || out.wrapAsked,
     revealed: input.flags.revealed || out.revealed,
     lanesDone: input.flags.lanesDone || out.lanesDone,
     rejected: grounded.rejected,

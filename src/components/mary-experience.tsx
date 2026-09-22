@@ -16,7 +16,8 @@ import {
   type TurnFlags,
 } from "@/lib/mary.functions";
 import { streamMaryTurn } from "@/lib/mary-stream";
-import { submitWaitlist } from "@/lib/waitlist.functions";
+import { WaitlistVault } from "./waitlist-vault";
+import { loadProgress, saveProgress, sessionId } from "@/lib/waitlist-store";
 import {
   speak,
   startMicSession,
@@ -151,7 +152,13 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [echoHint, setEchoHint] = useState(false);
-  const [result, setResult] = useState<{ position: number; message: string } | null>(null);
+  const [result, setResult] = useState<{
+    position: number;
+    message: string;
+    callback?: boolean;
+  } | null>(null);
+  /** This visit's row in the browser store. */
+  const entryIdRef = useRef<string>("session");
 
   const speakRef = useRef<SpeakHandle | null>(null);
   /** The line currently being voiced, so a cut-off can keep only what was heard. */
@@ -190,7 +197,26 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   }, [micMuted]);
   useEffect(() => {
     collectedRef.current = collected;
+    // Write through on every confirmed detail: a refresh mid-call loses nothing.
+    if (Object.keys(collected).length > 0) saveProgress(entryIdRef.current, collected);
   }, [collected]);
+
+  // Pick up this visit's row, and anything already known about this person.
+  useEffect(() => {
+    const id = sessionId();
+    entryIdRef.current = id;
+    const existing = loadProgress(id);
+    if (!existing || existing.complete) return;
+    const known: Collected = {};
+    for (const field of WAITLIST_FIELDS) {
+      const value = existing[field];
+      if (value) known[field] = value;
+    }
+    if (Object.keys(known).length > 0) {
+      collectedRef.current = known;
+      setCollected(known);
+    }
+  }, []);
 
   /** Lines are written to the ref first so the queue never reads a stale list. */
   const commitLines = useCallback((next: Line[]) => {
@@ -291,29 +317,30 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     [commitLines, stopSpeaking],
   );
 
-  const finalize = useCallback(async (finalCollected: Collected) => {
+  const finalize = useCallback((finalCollected: Collected, opts: { callback?: boolean } = {}) => {
     sessionFinishedRef.current = true;
     sessionRef.current?.setMuted(true);
 
     const transcript = linesRef.current
       .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
       .join("\n");
-    try {
-      const response = await submitWaitlist({
-        data: {
-          name: finalCollected.name ?? "",
-          email: finalCollected.email ?? "",
-          phone: finalCollected.phone ?? "",
-          business: finalCollected.business ?? "",
-          industry: finalCollected.industry ?? "",
-          operations: finalCollected.operations ?? "",
-          transcript,
-        },
-      });
-      setResult({ position: response.position, message: response.message });
-    } catch {
-      setResult({ position: 0, message: "We captured your details." });
-    }
+    // Written straight to this browser — no round trip, so the close never waits.
+    const entry = saveProgress(entryIdRef.current, {
+      name: finalCollected.name ?? "",
+      email: finalCollected.email ?? "",
+      phone: finalCollected.phone ?? "",
+      business: finalCollected.business ?? "",
+      industry: finalCollected.industry ?? "",
+      operations: finalCollected.operations ?? "",
+      transcript,
+      complete: !opts.callback,
+      callbackRequested: Boolean(opts.callback),
+    });
+    setResult({
+      position: entry.position,
+      message: opts.callback ? "Callback request saved." : "Saved.",
+      callback: Boolean(opts.callback),
+    });
     setStage("done");
     setPresenceState("done");
   }, []);
@@ -384,7 +411,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         collectedRef.current = turn.collected;
 
         if (firstBeat) await firstBeat;
-        else await deliver(turn.say);
+        // The streamed beat was suppressed as a repeat, so the final line must
+        // not slip the same words through the back door.
+        else if (!previous.some((prev) => isNearRepeat(prev, turn.say))) await deliver(turn.say);
         // They cut in while she was thinking or mid-first-beat: their words are
         // already queued as the next turn, so this one ends here.
         if (stale()) return;
@@ -403,11 +432,24 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           lanesDone:
             flagsRef.current.lanesDone ||
             (turn.lanesDone && /cultivate/i.test(heardText) && /recover/i.test(heardText)),
+          // Carried forward so the next turn knows where the conversation stands.
+          wrapAsked: flagsRef.current.wrapAsked || turn.wrapAsked,
+          callback: flagsRef.current.callback || turn.callbackRequested,
+          mode: turn.mode,
+          rejected: turn.rejected,
         };
 
-        if (turn.complete) {
-          const allDone = WAITLIST_FIELDS.every((field) => turn.collected[field]);
-          if (allDone) await finalize(turn.collected);
+        // They asked to be called back: the request is saved as soon as there
+        // is a name and a number, and the sales sequence ends there.
+        if (turn.callbackRequested && turn.collected.name && turn.collected.phone) {
+          finalize(turn.collected, { callback: true });
+        } else if (turn.complete) {
+          const required = WAITLIST_FIELDS.filter((field) => field !== "phone");
+          if (required.every((field) => turn.collected[field])) finalize(turn.collected);
+        } else if (turn.declined) {
+          // Nothing to sell here — she lets them go and stops the ladder.
+          sessionFinishedRef.current = true;
+          sessionRef.current?.setMuted(true);
         }
       } catch {
         if (!stale()) await say("I hit a snag on my side — could you try that once more?");
