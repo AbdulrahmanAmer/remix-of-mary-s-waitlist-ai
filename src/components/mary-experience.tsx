@@ -610,9 +610,8 @@ export function MaryExperience() {
                 </span>
                 <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
               </div>
-              <div className="mt-3">
-                <ProgressConstellation collected={collected} />
-              </div>
+              <ProgressConstellation collected={collected} />
+
 
               <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
                 <motion.div
