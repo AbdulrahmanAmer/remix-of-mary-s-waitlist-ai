@@ -17,7 +17,16 @@ export type WaitlistField = (typeof WAITLIST_FIELDS)[number];
 export type Collected = Partial<Record<WaitlistField, string>>;
 
 /** What MARY has actually finished saying — beats she was cut off in don't count. */
-export type TurnFlags = { revealed: boolean; lanesDone: boolean };
+export type TurnFlags = {
+  revealed: boolean;
+  lanesDone: boolean;
+  /** The wrap question has been asked, so CLOSE is reachable. */
+  wrapAsked?: boolean;
+  /** They asked for a callback; the sales sequence is over. */
+  callback?: boolean;
+  /** How they are showing up, carried between turns. */
+  mode?: "neutral" | "rushed" | "skeptical" | "guarded" | "warm";
+};
 
 /** What the person's last message was actually doing, read before the funnel. */
 export const TURN_INTENTS = [
