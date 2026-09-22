@@ -49,6 +49,7 @@ import {
   type SpeakHandle,
   type Utterance,
 } from "@/lib/audio-engine";
+import { judgeAddressee } from "@/lib/addressee";
 
 /** Plain words for every way a microphone can fail to open. */
 function micMessage(error: unknown): string {
