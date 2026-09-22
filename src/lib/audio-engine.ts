@@ -45,8 +45,11 @@ export function getAudioContext(): AudioContext {
 }
 
 // ---------------------------------------------------------------------------
-// Output sink — her voice leaves through an <audio> element so the browser's
-// echo canceller has it as a reference and the mic stops hearing her.
+// Output sink — her voice leaves through a loopback peer connection and out of
+// an <audio> element. That is the one route browsers treat as "sound of the
+// far end", so their echo canceller subtracts it from the microphone. Playing
+// straight into the audio graph (or even into a plain element) leaves her
+// voice invisible to the canceller, and the mic hears every word she says.
 // ---------------------------------------------------------------------------
 type Sink = {
   node: MediaStreamAudioDestinationNode;
@@ -56,17 +59,50 @@ type Sink = {
 };
 let sink: Sink | null = null;
 
+/** Sends a stream out and back through the browser's call engine. */
+async function loopback(stream: MediaStream): Promise<MediaStream> {
+  const Ctor = window.RTCPeerConnection;
+  if (!Ctor) throw new Error("no webrtc");
+  const from = new Ctor();
+  const to = new Ctor();
+  const received = new MediaStream();
+  const connected = new Promise<MediaStream>((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error("loopback timeout")), 3000);
+    to.ontrack = (event) => {
+      received.addTrack(event.track);
+      window.clearTimeout(timer);
+      resolve(received);
+    };
+  });
+  from.onicecandidate = (e) => {
+    if (e.candidate) void to.addIceCandidate(e.candidate);
+  };
+  to.onicecandidate = (e) => {
+    if (e.candidate) void from.addIceCandidate(e.candidate);
+  };
+  for (const track of stream.getAudioTracks()) from.addTrack(track, stream);
+  const offer = await from.createOffer();
+  await from.setLocalDescription(offer);
+  await to.setRemoteDescription(offer);
+  const answer = await to.createAnswer();
+  await to.setLocalDescription(answer);
+  await from.setRemoteDescription(answer);
+  return connected;
+}
+
 function ensureSink(ctx: AudioContext): Sink {
   if (sink) return sink;
   const node = ctx.createMediaStreamDestination();
   const element = document.createElement("audio");
   element.setAttribute("playsinline", "");
   element.autoplay = true;
-  element.srcObject = node.stream;
   const created: Sink = { node, element, ok: false, ready: Promise.resolve(false) };
-  created.ready = element
-    .play()
-    .then(() => {
+  created.ready = loopback(node.stream)
+    .catch(() => node.stream)
+    .then(async (out) => {
+      element.srcObject = out;
+      document.body.appendChild(element);
+      await element.play();
       created.ok = true;
       return true;
     })
@@ -75,6 +111,7 @@ function ensureSink(ctx: AudioContext): Sink {
   return created;
 }
 
+/** Must finish before her first line, or that line escapes the canceller. */
 export async function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
@@ -164,7 +201,7 @@ export function speak(
   const token = ++monitorToken;
   monitor.active = true;
   monitor.paused = false;
-  monitor.lines = [...monitor.lines.slice(-3), text];
+  monitor.lines = [...monitor.lines.slice(-7), text];
   trace({ type: "speak", text });
   monitor.outputLatencyMs = Math.round(
     (((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) ||
@@ -521,7 +558,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
   // ---- PCM capture with a short pre-roll so the first syllable is never lost ----
   const processor = ctx.createScriptProcessor(4096, 1, 1);
-  const preRoll: Float32Array[] = [];
+  /** Recent frames, each marked with whether she was audible at the time. */
+  const preRoll: { audio: Float32Array; hers: boolean }[] = [];
   let chunks: Float32Array[] = [];
   let capturing = false;
   let capturePeak = 0;
@@ -539,7 +577,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       chunks.push(copy);
       if (peak > capturePeak) capturePeak = peak;
     } else {
-      preRoll.push(copy);
+      preRoll.push({ audio: copy, hers: monitor.active && !monitor.paused });
       // Enough to catch the first syllable, short enough that a cut-in
       // recording carries as little of her own voice as possible.
       if (preRoll.length > 3) preRoll.shift();
@@ -565,6 +603,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let lastSpeechAt = 0;
   let utteranceStartedAt = 0;
   let utteranceOverAssistant = false;
+  /** Loudest frame of this utterance recorded while she was NOT audible. */
+  let cleanPeak = 0;
   let lastFinalAt = 0;
   let lastCouplingReport = 0;
   let raf = 0;
@@ -609,7 +649,6 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       instance.lang = "en-US";
       instance.onresult = (event) => {
         if (muted) return;
-        const inHerWindow = assistantActive() || withinTail();
         let live = "";
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const result = event.results[i];
@@ -617,8 +656,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
           const raw = result[0].transcript.trim();
           if (!raw) continue;
           if (result.isFinal) {
-            const cleaned = inHerWindow ? stripAssistantEcho(raw, assistantLines()) : raw;
-            if (!cleaned || (inHerWindow && isEchoOfAssistant(cleaned, assistantLines()))) continue;
+            // Her words are stripped whatever the clock says: a late final
+            // result can land long after playback, and it is still her voice.
+            const cleaned = stripAssistantEcho(raw, assistantLines());
+            if (!cleaned || isEchoOfAssistant(cleaned, assistantLines())) continue;
             if (assistantActive() && !pending && !holding) {
               // Words over her speech with no matching sound: only a genuine
               // cut-in counts; "yeah" and "okay" let her carry on.
@@ -633,7 +674,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
           }
         }
         live = live.trim();
-        if (live && inHerWindow) {
+        if (live) {
           live = stripAssistantEcho(live, assistantLines());
           if (live && isEchoOfAssistant(live, assistantLines())) live = "";
         }
@@ -715,7 +756,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   };
 
   // ---- voice activity + interruption state machine ----
-  const tailMs = () => monitor.outputLatencyMs + 380;
+  const tailMs = () => monitor.outputLatencyMs + 700;
   let sincePlayback = Infinity;
   const withinTail = () => !assistantActive() && sincePlayback < tailMs();
 
@@ -723,8 +764,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     capturing = true;
     utteranceStartedAt = now;
     utteranceOverAssistant = overAssistant;
-    chunks = [...preRoll];
+    // Pre-roll recorded while she was audible is her voice, not theirs.
+    chunks = preRoll.filter((f) => !f.hers).map((f) => f.audio);
     capturePeak = 0;
+    cleanPeak = 0;
     lastSpeechAt = now;
   };
 
@@ -768,17 +811,22 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const durationMs = utteranceStartedAt ? now - utteranceStartedAt : 0;
     const wasHolding = holding;
     holding = false;
-    const audio = chunks.length ? encodeWav(chunks, ctx.sampleRate) : null;
+    // A recording with no loud moment of its own — every peak arrived while
+    // she was audible — is her coming back through the room. Never send it
+    // away to be written down.
+    const ownVoice = cleanPeak < 0.02;
+    const audio = chunks.length && !ownVoice ? encodeWav(chunks, ctx.sampleRate) : null;
     const peak = capturePeak;
     chunks = [];
     capturing = false;
     capturePeak = 0;
+    cleanPeak = 0;
     speechCandidateAt = 0;
     loudScore = 0;
     utteranceStartedAt = 0;
     let text = takeText();
     const lines = assistantLines();
-    if (text && (utteranceOverAssistant || withinTail())) {
+    if (text) {
       text = stripAssistantEcho(text, lines);
       if (text && isEchoOfAssistant(text, lines)) text = "";
     }
@@ -787,8 +835,14 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       text,
       durationMs: Math.round(durationMs),
       peak,
+      ownVoice,
       over: utteranceOverAssistant || wasHolding,
     });
+    if (!text && !audio) {
+      utteranceOverAssistant = false;
+      options.onInterruptCancelled?.();
+      return;
+    }
     options.onUtterance({
       text,
       audio,
@@ -859,8 +913,11 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       const settle = 180 + monitor.outputLatencyMs;
       if (age > settle) {
         pending.frames += 1;
-        if (peak >= baseThreshold * 1.15) {
+        // Her voice is still draining out of the room, so the bar stays at
+        // the echo model, not the plain noise floor.
+        if (peak >= Math.max(baseThreshold * 1.15, echoThreshold)) {
           pending.loud += 1;
+          cleanPeak = Math.max(cleanPeak, peak);
           lastSpeechAt = now;
         }
       }
@@ -913,8 +970,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     if (peak >= threshold) {
       lastSpeechAt = now;
+      cleanPeak = Math.max(cleanPeak, peak);
       if (scoreLoud(true) >= 7 && !capturing) {
         startCapture(now, false);
+        cleanPeak = peak;
         options.onSpeechStart?.();
       }
     } else if (!capturing) {

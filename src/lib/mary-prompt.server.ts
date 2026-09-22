@@ -3,7 +3,7 @@ import { z } from "zod";
 // directly, so the spec and her actual behaviour can never drift apart.
 import MARY_VOICE_SPEC from "../../docs/mary-voice.md?raw";
 import { groundCollected, type Proposed } from "./mary-grounding";
-import { CUT_OFF_MARK } from "./voice-logic";
+import { CUT_OFF_MARK, isEchoOfAssistant, stripAssistantEcho } from "./voice-logic";
 import type { Collected, MaryTurn, TurnFlags } from "./mary.functions";
 
 export const SYSTEM = MARY_VOICE_SPEC;
@@ -109,7 +109,22 @@ export function finishTurn(
   out: TurnObject,
   input: { messages: TurnMessage[]; collected: Record<string, string>; flags: TurnFlags },
 ): MaryTurn {
-  const userMessages = input.messages.filter((m) => m.role === "user").map((m) => m.content);
+  // Anything that is really MARY's own words coming back through the room is
+  // never allowed to stand as proof of what the person told her.
+  const spokenBefore = (index: number) =>
+    input.messages
+      .slice(0, index)
+      .filter((m) => m.role === "assistant")
+      .slice(-4)
+      .map((m) => m.content.replace(CUT_OFF_MARK, ""));
+  const userMessages = input.messages
+    .map((m, i) => {
+      if (m.role !== "user") return "";
+      const hers = spokenBefore(i);
+      const cleaned = stripAssistantEcho(m.content, hers);
+      return cleaned && isEchoOfAssistant(cleaned, hers) ? "" : cleaned;
+    })
+    .filter(Boolean);
   const lastAssistant = [...input.messages]
     .reverse()
     .find((m) => m.role === "assistant")
