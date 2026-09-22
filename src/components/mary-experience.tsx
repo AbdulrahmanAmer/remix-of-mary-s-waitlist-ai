@@ -257,7 +257,24 @@ export function MaryExperience() {
 
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
+
+        // A human beat before she answers — a quick pause after a short
+        // answer, a slightly longer one after a long or detailed message.
+        const lastUserWords =
+          nextLines
+            .filter((line) => line.role === "user")
+            .at(-1)
+            ?.text.split(/\s+/)
+            .filter(Boolean).length ?? 0;
+        const beat = 420 + Math.min(650, lastUserWords * 45) + Math.floor(Math.random() * 260);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, beat));
+
         await say(turn.say);
+        if (turn.followUp) {
+          // Second beat: a short breath, then the question lands as its own moment.
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 520));
+          await say(turn.followUp);
+        }
         if (turn.complete || turn.declined) {
           const allDone = WAITLIST_FIELDS.every((field) => turn.collected[field]);
           if (turn.complete && allDone) await finalize(turn.collected);
@@ -279,7 +296,12 @@ export function MaryExperience() {
   const sendUser = useCallback(
     async (text: string) => {
       const clean = text.trim();
-      if (!clean || busyRef.current) return;
+      if (!clean) return;
+      // If MARY is mid-turn, wait for her to finish rather than dropping the message.
+      while (busyRef.current) {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        if (sessionFinishedRef.current) return;
+      }
       stopSpeaking();
       setInterim("");
       setDraft("");
@@ -643,7 +665,6 @@ export function MaryExperience() {
                 </span>
                 <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
               </div>
-              <ProgressConstellation collected={collected} />
 
               <div
                 ref={trailRef}
@@ -850,13 +871,13 @@ export function MaryExperience() {
                   transition={SPRING}
                   className="mx-auto"
                 >
-                  <MaryPresence state="done" level={0} height={landingOrb} />
+                  <MaryPresence state="done" level={0} height={compact ? liveOrb : landingOrb} />
                 </motion.div>
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.14 }}
-                  className="eyebrow mt-7"
+                  className={`eyebrow ${compact ? "mt-3" : "mt-7"}`}
                 >
                   Early access confirmed
                 </motion.p>
@@ -864,7 +885,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.2 }}
-                  className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink"
+                  className={`mt-3 text-balance font-semibold leading-tight text-ink ${compact ? "text-4xl" : "text-5xl"}`}
                 >
                   You’re on the waitlist.
                 </motion.h1>
@@ -889,11 +910,11 @@ export function MaryExperience() {
                 )}
               </div>
 
-              <div className="mt-10 w-full text-left">
+              <div className={`w-full text-left ${compact ? "mt-6" : "mt-10"}`}>
                 <p className="text-center text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   Details confirmed
                 </p>
-                <dl className="mt-6 grid gap-6 sm:grid-cols-2">
+                <dl className={`grid sm:grid-cols-2 ${compact ? "mt-3 gap-4" : "mt-6 gap-6"}`}>
                   {WAITLIST_FIELDS.map((field, index) => (
                     <motion.div
                       key={field}
@@ -918,6 +939,8 @@ export function MaryExperience() {
             </motion.section>
           )}
         </AnimatePresence>
+
+        {stage === "live" && <ProgressConstellation collected={collected} />}
 
         <footer className="flex flex-wrap items-center justify-between gap-2 py-4 text-[0.68rem] text-muted-foreground">
           <span>OmniSuite · AI-native revenue infrastructure</span>
