@@ -469,21 +469,28 @@
    underneath rises into its place instead of being cut to. */
 .mary-boot--out {
   animation: mary-boot-out 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0s;
 }
 
 .mary-boot--out .mary-boot-orb {
   animation: mary-boot-orb-out 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0s;
 }
 
+/* The letters carry an inline entrance delay, so the exit must override it —
+   otherwise the negative offset makes them snap straight to their last frame. */
 .mary-boot--out .mary-boot-word span,
 .mary-boot--out .mary-boot-line,
 .mary-boot--out .mary-boot-caption {
   animation: mary-boot-text-out 0.56s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 0s !important;
 }
 
 .mary-boot--out .mary-boot-glow {
   animation: mary-boot-glow-out 0.8s ease-out both;
+  animation-delay: 0s;
 }
+
 
 @keyframes mary-boot-out {
   from {
