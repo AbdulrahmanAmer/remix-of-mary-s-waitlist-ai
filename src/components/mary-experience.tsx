@@ -540,7 +540,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.2 }}
-                  className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl"
+                  className={`max-w-xl text-pretty leading-relaxed text-muted-foreground ${compact ? "mt-3 text-base" : "mt-5 text-lg sm:text-xl"}`}
                 >
                   Your AI Revenue Concierge. She works the revenue you already have and personally
                   welcomes you to the OmniSuite launch waitlist.
