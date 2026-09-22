@@ -124,7 +124,7 @@ export const maryTurn = createServerFn({ method: "POST" })
 
     const prompt = `Current phase: ${phase}\n\nAlready captured:\n${known || "(nothing yet)"}\n\nConversation so far:\n${
       history || "(the conversation is just starting)"
-    }\n\nProduce MARY's next single spoken turn. It must not repeat anything you already said.`;
+    }\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" asks the one next thing (or null). Neither beat may repeat anything you already said.`;
 
     try {
       const result = streamText({
