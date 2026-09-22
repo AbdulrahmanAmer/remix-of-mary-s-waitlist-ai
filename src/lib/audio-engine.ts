@@ -1,0 +1,297 @@
+/**
+ * Browser-only audio engine: streamed MARY speech playback (PCM 24k SSE) and
+ * microphone capture (PCM -> 16k mono WAV) with live amplitude for visuals.
+ * Every export must be called from an effect or event handler, never at import.
+ */
+
+let sharedContext: AudioContext | null = null;
+
+export function getAudioContext(): AudioContext {
+  if (!sharedContext) {
+    const Ctor =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    sharedContext = new Ctor({ sampleRate: 24000 });
+  }
+  return sharedContext;
+}
+
+export async function unlockAudio() {
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+}
+
+function base64ToBytes(base64: string) {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes;
+}
+
+export type SpeakHandle = {
+  stop: () => void;
+  done: Promise<void>;
+};
+
+/** Streams MARY's speech and reports output amplitude (0..1) each frame. */
+export function speak(
+  text: string,
+  opts: {
+    onLevel?: (level: number) => void;
+    onFirstAudio?: () => void;
+    onEnd?: () => void;
+  } = {},
+): SpeakHandle {
+  const ctx = getAudioContext();
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  analyser.smoothingTimeConstant = 0.75;
+  analyser.connect(ctx.destination);
+
+  const buffer = new Uint8Array(analyser.frequencyBinCount);
+  const sources = new Set<AudioBufferSourceNode>();
+  const controller = new AbortController();
+
+  let playhead = 0;
+  let pending = new Uint8Array(0);
+  let stopped = false;
+  let raf = 0;
+  let firstAudioFired = false;
+  let resolveDone: () => void = () => {};
+  const done = new Promise<void>((resolve) => {
+    resolveDone = resolve;
+  });
+
+  const tick = () => {
+    if (stopped) return;
+    analyser.getByteTimeDomainData(buffer);
+    let peak = 0;
+    for (let i = 0; i < buffer.length; i++) {
+      const v = Math.abs(buffer[i]! - 128) / 128;
+      if (v > peak) peak = v;
+    }
+    opts.onLevel?.(Math.min(1, peak * 1.6));
+    raf = requestAnimationFrame(tick);
+  };
+
+  const finish = () => {
+    if (stopped) return;
+    stopped = true;
+    cancelAnimationFrame(raf);
+    opts.onLevel?.(0);
+    opts.onEnd?.();
+    try {
+      analyser.disconnect();
+    } catch {
+      /* already disconnected */
+    }
+    resolveDone();
+  };
+
+  const stop = () => {
+    controller.abort();
+    for (const src of sources) {
+      try {
+        src.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+    sources.clear();
+    finish();
+  };
+
+  const enqueue = (incoming: Uint8Array) => {
+    const merged = new Uint8Array(pending.length + incoming.length);
+    merged.set(pending);
+    merged.set(incoming, pending.length);
+    const usable = merged.length - (merged.length % 2);
+    pending = merged.slice(usable);
+    if (usable === 0) return;
+
+    const samples = new Int16Array(merged.buffer, 0, usable / 2);
+    const floats = Float32Array.from(samples, (s) => s / 32768);
+    const audioBuffer = ctx.createBuffer(1, floats.length, 24000);
+    audioBuffer.copyToChannel(floats, 0);
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(analyser);
+    if (playhead === 0) playhead = ctx.currentTime + 0.08;
+    else playhead = Math.max(playhead, ctx.currentTime);
+    source.start(playhead);
+    playhead += audioBuffer.duration;
+    sources.add(source);
+    source.onended = () => sources.delete(source);
+    if (!firstAudioFired) {
+      firstAudioFired = true;
+      opts.onFirstAudio?.();
+    }
+  };
+
+  (async () => {
+    await unlockAudio();
+    raf = requestAnimationFrame(tick);
+    try {
+      const res = await fetch("/api/speech", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: controller.signal,
+      });
+      if (!res.ok || !res.body) throw new Error(`speech ${res.status}`);
+
+      const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      let bufferText = "";
+      while (true) {
+        const { value, done: streamDone } = await reader.read();
+        if (streamDone) break;
+        bufferText += value;
+        const parts = bufferText.split("\n\n");
+        bufferText = parts.pop() ?? "";
+        for (const part of parts) {
+          for (const line of part.split("\n")) {
+            if (!line.startsWith("data:")) continue;
+            const payloadText = line.slice(5).trim();
+            if (!payloadText || payloadText === "[DONE]") continue;
+            try {
+              const payload = JSON.parse(payloadText) as {
+                type?: string;
+                audio?: string;
+              };
+              if (payload.type === "speech.audio.delta" && payload.audio) {
+                enqueue(base64ToBytes(payload.audio));
+              }
+            } catch {
+              /* ignore malformed frame */
+            }
+          }
+        }
+      }
+      const tail = Math.max(0, playhead - ctx.currentTime) * 1000 + 120;
+      await new Promise((r) => setTimeout(r, tail));
+      finish();
+    } catch {
+      finish();
+    }
+  })();
+
+  return { stop, done };
+}
+
+export type Recorder = {
+  stop: () => Promise<Blob>;
+  cancel: () => void;
+};
+
+/** Captures mic PCM and returns a complete 16k mono WAV blob on stop. */
+export async function startRecording(onLevel?: (level: number) => void): Promise<Recorder> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true },
+  });
+  const ctx = new AudioContext();
+  const source = ctx.createMediaStreamSource(stream);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  analyser.smoothingTimeConstant = 0.7;
+  source.connect(analyser);
+
+  const processor = ctx.createScriptProcessor(4096, 1, 1);
+  const chunks: Float32Array[] = [];
+  processor.onaudioprocess = (event) => {
+    chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+  };
+  source.connect(processor);
+  processor.connect(ctx.destination);
+
+  const data = new Uint8Array(analyser.frequencyBinCount);
+  let raf = 0;
+  const tick = () => {
+    analyser.getByteTimeDomainData(data);
+    let peak = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = Math.abs(data[i]! - 128) / 128;
+      if (v > peak) peak = v;
+    }
+    onLevel?.(Math.min(1, peak * 1.8));
+    raf = requestAnimationFrame(tick);
+  };
+  raf = requestAnimationFrame(tick);
+
+  const teardown = () => {
+    cancelAnimationFrame(raf);
+    onLevel?.(0);
+    processor.onaudioprocess = null;
+    try {
+      processor.disconnect();
+      analyser.disconnect();
+      source.disconnect();
+    } catch {
+      /* noop */
+    }
+    stream.getTracks().forEach((t) => t.stop());
+  };
+
+  return {
+    cancel: () => {
+      teardown();
+      void ctx.close().catch(() => {});
+    },
+    stop: async () => {
+      teardown();
+      const rate = ctx.sampleRate;
+      await ctx.close().catch(() => {});
+      return encodeWav(chunks, rate);
+    },
+  };
+}
+
+function encodeWav(chunks: Float32Array[], sampleRate: number, target = 16000) {
+  let total = 0;
+  for (const c of chunks) total += c.length;
+  const merged = new Float32Array(total);
+  let offset = 0;
+  for (const c of chunks) {
+    merged.set(c, offset);
+    offset += c.length;
+  }
+
+  const ratio = sampleRate / target;
+  const outLength = Math.max(1, Math.floor(merged.length / ratio));
+  const out = new Int16Array(outLength);
+  for (let i = 0; i < outLength; i++) {
+    const sample = merged[Math.floor(i * ratio)] ?? 0;
+    const clamped = Math.max(-1, Math.min(1, sample));
+    out[i] = clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff;
+  }
+
+  const bytes = new ArrayBuffer(44 + out.length * 2);
+  const view = new DataView(bytes);
+  const writeString = (pos: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(pos + i, str.charCodeAt(i));
+  };
+  writeString(0, "RIFF");
+  view.setUint32(4, 36 + out.length * 2, true);
+  writeString(8, "WAVE");
+  writeString(12, "fmt ");
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, target, true);
+  view.setUint32(28, target * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeString(36, "data");
+  view.setUint32(40, out.length * 2, true);
+  new Int16Array(bytes, 44).set(out);
+  return new Blob([bytes], { type: "audio/wav" });
+}
+
+export async function transcribe(blob: Blob): Promise<string> {
+  if (blob.size < 2048) return "";
+  const form = new FormData();
+  form.append("file", blob, "recording.wav");
+  const res = await fetch("/api/transcribe", { method: "POST", body: form });
+  if (!res.ok) return "";
+  const data = (await res.json()) as { text?: string };
+  return (data.text ?? "").trim();
+}
