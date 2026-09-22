@@ -77,6 +77,8 @@
 
   html {
     color-scheme: light;
+    height: 100%;
+    overflow: hidden;
   }
 
   body {
@@ -84,6 +86,9 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 
   h1,
@@ -143,5 +148,14 @@
     animation-duration: 0.001ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.001ms !important;
+  }
+}
+
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+
+  &::-webkit-scrollbar {
+    display: none;
   }
 }

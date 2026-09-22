@@ -47,6 +47,21 @@ const STAGE_IN = { duration: 0.6, ease: EASE } as const;
 const SOFT = { duration: 0.42, ease: EASE } as const;
 const SPRING = { type: "spring", stiffness: 210, damping: 26, mass: 0.9 } as const;
 
+// Tracks the live viewport height so the single-screen layout can shrink
+// instead of spilling over on short windows.
+function useViewportHeight(): number {
+  const [height, setHeight] = useState(() =>
+    typeof window === "undefined" ? 900 : window.innerHeight,
+  );
+  useEffect(() => {
+    const update = () => setHeight(window.innerHeight);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return height;
+}
+
 const TYPING_LINES = [
   "Take your time writing what you have in mind — I'm right here with you.",
   "No rush at all, I'll wait while you type.",
@@ -72,6 +87,8 @@ function uid() {
 
 export function MaryExperience() {
   const reduced = useReducedMotion();
+  const viewportHeight = useViewportHeight();
+  const trailRef = useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
   const [collected, setCollected] = useState<Collected>({});
@@ -454,14 +471,24 @@ export function MaryExperience() {
     if (stage === "live") inputRef.current?.focus();
   }, [stage]);
 
+  // Keep the newest turn in view without ever showing a scrollbar.
+  useEffect(() => {
+    const node = trailRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [lines, interim, stage, viewportHeight]);
+
   const lastMary = [...lines].reverse().find((line) => line.role === "mary");
   const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
+  const compact = viewportHeight < 780;
+  const landingOrb = Math.max(110, Math.min(200, Math.round(viewportHeight * 0.2)));
+  const liveOrb = Math.max(84, Math.min(132, Math.round(viewportHeight * 0.14)));
 
   return (
-    <main className="relative min-h-dvh overflow-hidden">
+    <main className="relative h-dvh overflow-hidden">
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
-      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
+      <div className="relative z-10 mx-auto flex h-dvh min-h-0 w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
         <motion.header
           layout
           transition={SPRING}
@@ -498,7 +525,7 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -14, filter: "blur(4px)" }}
               transition={STAGE_IN}
-              className="flex flex-1 flex-col items-center justify-center py-10 text-center sm:py-14"
+              className="no-scrollbar flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto py-4 text-center"
             >
               <div className="mx-auto flex max-w-3xl flex-col items-center">
                 <motion.p
@@ -513,7 +540,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.12 }}
-                  className="mt-5 text-balance text-5xl font-semibold leading-[0.98] text-ink sm:text-7xl lg:text-8xl"
+                  className={`text-balance font-semibold leading-[0.98] text-ink ${compact ? "mt-3 text-4xl sm:text-5xl" : "mt-5 text-5xl sm:text-6xl lg:text-7xl"}`}
                 >
                   Meet <span className="text-muted-foreground">MARY.</span>
                 </motion.h1>
@@ -521,7 +548,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.2 }}
-                  className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl"
+                  className={`max-w-xl text-pretty leading-relaxed text-muted-foreground ${compact ? "mt-3 text-base" : "mt-5 text-lg sm:text-xl"}`}
                 >
                   Your AI Revenue Concierge. She works the revenue you already have and personally
                   welcomes you to the OmniSuite launch waitlist.
@@ -530,9 +557,9 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, scale: 0.94 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ ...SPRING, delay: 0.24 }}
-                  className="mt-6 w-full max-w-md"
+                  className={`w-full max-w-md ${compact ? "mt-2" : "mt-6"}`}
                 >
-                  <MaryPresence state="idle" level={0} height={200} />
+                  <MaryPresence state="idle" level={0} height={landingOrb} />
                 </motion.div>
                 <MotionButton
                   onClick={begin}
@@ -542,7 +569,7 @@ export function MaryExperience() {
                   transition={{ ...SOFT, delay: 0.32 }}
                   whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
-                  className="mt-7 h-13 rounded-full px-8 shadow-soft"
+                  className={`h-13 rounded-full px-8 shadow-soft ${compact ? "mt-4" : "mt-7"}`}
                 >
                   Talk to MARY <ArrowRight />
                 </MotionButton>
@@ -553,7 +580,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ ...SOFT, delay: 0.4 }}
-                  className="mt-10 flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm"
+                  className={`flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm ${compact ? "mt-5" : "mt-10"}`}
                 >
                   <span>
                     <strong className="text-ink">Convert</strong> fresh demand
@@ -578,9 +605,9 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
               transition={STAGE_IN}
-              className="mx-auto flex w-full max-w-4xl flex-1 flex-col py-5 lg:py-7"
+              className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col py-3 pr-10 md:pr-44 lg:py-5"
             >
-              <MaryPresence state={presence} level={level} height={128} />
+              <MaryPresence state={presence} level={level} height={liveOrb} />
               <div className="mt-1 flex items-center justify-between gap-4 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 <span className="inline-flex items-center gap-2">
                   <motion.span
@@ -612,11 +639,14 @@ export function MaryExperience() {
               </div>
               <ProgressConstellation collected={collected} />
 
-              <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
+              <div
+                ref={trailRef}
+                className="no-scrollbar mt-3 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-y-auto"
+              >
                 <motion.div
                   layout
                   transition={SPRING}
-                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto pr-7 md:pr-0"
+                  className="no-scrollbar mx-auto w-full max-w-3xl space-y-2.5"
                 >
                   <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
@@ -651,7 +681,9 @@ export function MaryExperience() {
                       <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
                         MARY
                       </p>
-                      <p className="text-pretty text-xl leading-relaxed text-ink sm:text-2xl">
+                      <p
+                        className={`text-pretty leading-relaxed text-ink ${compact ? "text-lg" : "text-xl sm:text-2xl"}`}
+                      >
                         {lastMary.text.split(/\s+/).map((word, index) => (
                           <motion.span
                             key={`${lastMary.id}-${index}`}
@@ -803,7 +835,7 @@ export function MaryExperience() {
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={STAGE_IN}
-              className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-10 text-center"
+              className="no-scrollbar mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center overflow-y-auto py-4 text-center"
             >
               <div>
                 <motion.div
@@ -812,7 +844,7 @@ export function MaryExperience() {
                   transition={SPRING}
                   className="mx-auto w-full max-w-md"
                 >
-                  <MaryPresence state="done" level={0} height={200} />
+                  <MaryPresence state="done" level={0} height={landingOrb} />
                 </motion.div>
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}

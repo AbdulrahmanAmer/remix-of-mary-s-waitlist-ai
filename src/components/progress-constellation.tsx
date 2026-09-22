@@ -36,7 +36,7 @@ export function ProgressConstellation({ collected }: { collected: Collected }) {
               className="flex items-center gap-2.5"
               title={value ?? LABELS[field]}
             >
-              <span className="hidden max-w-36 truncate text-right text-[0.6rem] font-semibold uppercase tracking-[0.12em] md:inline">
+              <span className="hidden max-w-28 truncate text-right text-[0.6rem] font-semibold uppercase tracking-[0.12em] md:inline">
                 <span className={value ? "text-ink/80" : "text-muted-foreground/70"}>
                   {value ?? LABELS[field]}
                 </span>
