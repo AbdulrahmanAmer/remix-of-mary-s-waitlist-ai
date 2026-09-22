@@ -558,7 +558,7 @@ export function MaryExperience() {
                   </div>
                 </div>
 
-                <div className="border-t border-border bg-surface/70 p-3 sm:p-4">
+                <div className="pt-3">
                   {micError && (
                     <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>
                   )}
