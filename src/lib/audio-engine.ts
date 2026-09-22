@@ -1380,6 +1380,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       // A final result after the last sound is a strong "they're done".
       if (lastFinalAt > lastSpeechAt && liveText) wait = Math.min(wait, 380);
       if (now - lastSpeechAt >= wait) flush();
+      // Steady room noise can keep refreshing the silence clock; nothing that
+      // actually sounds like speech for this long means the turn is over.
+      else if (now - lastRealSpeechAt >= 2500) flush();
     }
 
     if (capturing && now - utteranceStartedAt >= maxUtteranceMs) flush();
