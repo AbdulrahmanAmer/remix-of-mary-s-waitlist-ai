@@ -246,13 +246,21 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
           content: line.text,
         }));
-        let turn: MaryTurn = await maryTurn({
-          data: { messages, collected: collectedRef.current as Record<string, string> },
-        });
+        const previous = nextLines.filter((line) => line.role === "mary").map((line) => line.text);
+
+        // Her first beat starts playing the moment it is written, while the
+        // rest of the turn is still being generated.
+        let firstBeat: Promise<void> | null = null;
+        let turn: MaryTurn = await streamMaryTurn(
+          { messages, collected: collectedRef.current },
+          (text) => {
+            if (previous.some((prev) => isNearRepeat(prev, text))) return;
+            if (!firstBeat) firstBeat = say(text);
+          },
+        );
 
         // Safety net: if MARY nearly repeats a line she already said, ask for a fresh take once.
-        const previous = nextLines.filter((line) => line.role === "mary").map((line) => line.text);
-        if (previous.some((prev) => isNearRepeat(prev, turn.say)) && !turn.complete) {
+        if (!firstBeat && previous.some((prev) => isNearRepeat(prev, turn.say)) && !turn.complete) {
           try {
             const fresh = await maryTurn({
               data: {
@@ -278,21 +286,12 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
 
-        // A human beat before she answers — a quick pause after a short
-        // answer, a slightly longer one after a long or detailed message.
-        const lastUserWords =
-          nextLines
-            .filter((line) => line.role === "user")
-            .at(-1)
-            ?.text.split(/\s+/)
-            .filter(Boolean).length ?? 0;
-        const beat = 420 + Math.min(650, lastUserWords * 45) + Math.floor(Math.random() * 260);
-        await new Promise<void>((resolve) => window.setTimeout(resolve, beat));
+        if (firstBeat) await firstBeat;
+        else await say(turn.say);
 
-        await say(turn.say);
         if (turn.followUp) {
           // Second beat: a short breath, then the question lands as its own moment.
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 520));
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
           await say(turn.followUp);
         }
         if (turn.complete || turn.declined) {
@@ -306,7 +305,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         lastActivityRef.current = Date.now();
         inputRef.current?.focus();
         if (handsFreeRef.current && !sessionFinishedRef.current) {
-          window.setTimeout(() => void startListeningRef.current(), 180);
+          window.setTimeout(() => void startListeningRef.current(), 120);
         }
       }
     },
