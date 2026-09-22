@@ -165,6 +165,7 @@ export function speak(
   monitor.active = true;
   monitor.paused = false;
   monitor.lines = [...monitor.lines.slice(-3), text];
+  trace({ type: "speak", text });
   monitor.outputLatencyMs = Math.round(
     (((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) ||
       ctx.baseLatency ||
@@ -342,6 +343,7 @@ export function speak(
       monitor.level = 0;
     }
     opts.onLevel?.(0);
+    trace({ type: "pause", fraction: Number((heard / totalEstimate()).toFixed(2)) });
   };
 
   const resume = () => {
@@ -351,6 +353,7 @@ export function speak(
     const back = Math.min(cursor, Math.round(RATE * 0.15));
     cursor -= back;
     completed = cursor;
+    trace({ type: "resume" });
     schedule();
   };
 
