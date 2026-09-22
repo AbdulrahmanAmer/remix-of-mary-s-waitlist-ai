@@ -698,6 +698,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           </AnimatePresence>
         </motion.header>
 
+        {/* No section renders during the intro flight — this spacer keeps the
+            footer pinned to the bottom instead of collapsing under the header. */}
+        {stage === "intro" && <div aria-hidden="true" className="flex-1" />}
         <AnimatePresence mode="wait" initial={false}>
           {stage === "landing" && (
             <motion.section
