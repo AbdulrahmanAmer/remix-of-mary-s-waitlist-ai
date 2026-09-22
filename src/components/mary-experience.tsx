@@ -987,6 +987,35 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
         {stage === "live" && <ProgressConstellation collected={collected} />}
 
+        {/* The mark itself, flying: centre stage, a bloom, then a pop into the corner. */}
+        <AnimatePresence>
+          {stage === "intro" && flight && (
+            <motion.img
+              key="flight"
+              src={lockupAsset.url}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none fixed left-0 top-0 z-40 h-auto"
+              initial={{
+                x: flight.from.x,
+                y: flight.from.y,
+                width: flight.from.w,
+                opacity: 1,
+                filter: "blur(0px)",
+              }}
+              animate={{
+                x: [flight.from.x, flight.mid.x, flight.mid.x, flight.to.x],
+                y: [flight.from.y, flight.mid.y, flight.mid.y, flight.to.y],
+                width: [flight.from.w, flight.mid.w, flight.mid.w * 1.06, flight.to.w],
+                opacity: [1, 1, 1, 0],
+                filter: ["blur(0px)", "blur(0px)", "blur(0px)", "blur(3px)"],
+              }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              transition={{ duration: 1.05, times: [0, 0.52, 0.72, 1], ease: EASE }}
+            />
+          )}
+        </AnimatePresence>
+
         <footer className="flex flex-wrap items-center justify-between gap-2 py-4 text-[0.68rem] text-muted-foreground">
           <span>OmniSuite · AI-native revenue infrastructure</span>
           <span>
