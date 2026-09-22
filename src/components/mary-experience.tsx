@@ -23,6 +23,17 @@ type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 
 const MotionButton = motion.create(Button);
 
+// Word-overlap check: catches MARY re-saying a line she already delivered.
+function isNearRepeat(previous: string, next: string): boolean {
+  const words = (text: string) => new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean));
+  const a = words(previous);
+  const b = words(next);
+  if (!a.size || !b.size) return false;
+  let overlap = 0;
+  for (const word of a) if (b.has(word)) overlap += 1;
+  return overlap / Math.min(a.size, b.size) >= 0.8;
+}
+
 // One motion vocabulary for the whole experience.
 const EASE = [0.22, 1, 0.36, 1] as const;
 const STAGE_IN = { duration: 0.6, ease: EASE } as const;
