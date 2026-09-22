@@ -75,6 +75,26 @@ const STOPWORDS = new Set([
   "can",
   "will",
   "would",
+  "ive",
+  "youre",
+  "were",
+  "theyre",
+  "dont",
+  "cant",
+  "wont",
+  "isnt",
+  "have",
+  "has",
+  "had",
+  "been",
+  "being",
+  "did",
+  "does",
+  "any",
+  "some",
+  "very",
+  "too",
+  "also",
 ]);
 
 export function tokens(text: string): string[] {
@@ -83,6 +103,7 @@ export function tokens(text: string): string[] {
     .replace(/['’]/g, "")
     .replace(/[^a-z0-9\s@.]/g, " ")
     .split(/\s+/)
+    .map((t) => t.replace(/^\.+|\.+$/g, ""))
     .filter(Boolean);
 }
 
