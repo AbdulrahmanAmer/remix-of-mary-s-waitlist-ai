@@ -125,6 +125,25 @@ export function buildPrompt(
     ? `\n\nYour last line was cut off where marked: they spoke over you and did not hear the rest. Do not repeat it word for word and do not assume they heard it. What they said next comes first.`
     : "";
 
+  const rejectedNote = flags.rejected?.length
+    ? `\n\nLast turn you recorded ${flags.rejected.join(", ")} without their words behind it, so it was discarded. Do not assert it. Ask about it plainly, or let them volunteer it.`
+    : "";
+
+  const modeNote =
+    flags.mode && flags.mode !== "neutral"
+      ? `\n\nThey are coming across as ${flags.mode}. Match that: ${
+          flags.mode === "rushed"
+            ? "one short beat, get to the point, no build-up."
+            : flags.mode === "skeptical"
+              ? "no hype, concrete specifics, invite the pushback."
+              : flags.mode === "guarded"
+                ? "ask for less, explain why before you ask anything."
+                : "stay warm but keep moving."
+        }`
+      : "";
+
+  const intentRule = `\n\nRead their last message first and set "intent" to what it was doing. Intent outranks the phase: if they asked a question, answer it in full before anything else; if they corrected you, accept the correction without defending; if they objected, address the objection itself; if they said hello, greet back; if they want off the call, let them go warmly and set declined true; if they asked to be called back instead, set callbackRequested true and switch to taking a name and a number only. A turn may be acknowledgement only — "followUp" can be null. Never force the next funnel step onto a turn that changed the subject. Also set "mode" to how they are showing up and "wrapAsked" to whether this turn asks the final wrap question.`;
+
   return `Current phase: ${phase}\n\nReveal already delivered: ${revealed ? "yes" : "no"}\nLanes already explained: ${lanesDone ? "yes" : "no"}\n\nAlready captured (do not change these unless the person just corrected them):\n${known || "(nothing yet)"}\n\nConversation so far:\n${
     history || "(the conversation is just starting)"
   }${gate}${cutOff}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move (or null). Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
