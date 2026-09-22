@@ -1360,6 +1360,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     if (peak >= threshold) {
       lastSpeechAt = now;
+      // Clearly above the room, not just over the line: this is what stops a
+      // noisy café from holding a recording open until the 45-second cap.
+      if (peak >= threshold * 1.6) lastRealSpeechAt = now;
       cleanPeak = Math.max(cleanPeak, peak);
       if (scoreLoud(true) >= 7 && !capturing) {
         startCapture(now, false);
