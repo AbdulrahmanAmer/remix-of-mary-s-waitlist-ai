@@ -1387,6 +1387,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     chunks = preRoll.filter((f) => !f.hers).map((f) => f.audio);
     capturePeak = 0;
     cleanPeak = 0;
+    nearFrames = 0;
     lastSpeechAt = now;
     lastRealSpeechAt = now;
   };
