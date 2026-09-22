@@ -801,9 +801,14 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     );
 
     // ---- she is paused: was that really you? ----
+    // Her voice takes a moment to drain out of the room after the pause, so
+    // the first stretch is ignored; after that, a mic that stays loud with
+    // nothing playing can only be a person. The check always ends in a
+    // decision, one way or the other.
     if (pending) {
       const age = now - pending.at;
-      if (age > 160) {
+      const settle = 180 + monitor.outputLatencyMs;
+      if (age > settle) {
         pending.frames += 1;
         if (peak >= baseThreshold * 1.15) {
           pending.loud += 1;
@@ -812,7 +817,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       }
       if (pending.words || pending.loud >= 6) {
         confirmInterrupt();
-      } else if (age >= 700 && pending.loud < 3) {
+      } else if (age >= settle + 520) {
         cancelInterrupt();
       }
       return;
@@ -824,6 +829,14 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
         if (!speechCandidateAt) speechCandidateAt = now;
         if (now - speechCandidateAt >= 110) {
           speechCandidateAt = 0;
+          trace({
+            type: "energy",
+            peak: Number(peak.toFixed(3)),
+            threshold: Number(echoThreshold.toFixed(3)),
+            expected: Number(echo.expectedEcho.toFixed(3)),
+            coupling: Number(echo.coupling.toFixed(2)),
+            playback: Number(monitor.level.toFixed(3)),
+          });
           beginCandidate(false);
         }
       } else {
