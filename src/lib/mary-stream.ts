@@ -25,13 +25,31 @@ export async function streamMaryTurn(
     experience: input.experience,
   };
 
-  const response = await fetch("/api/turn", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // A stalled connection must never leave her thinking forever: the request is
+  // dropped if nothing arrives for a while, and she answers from here instead.
+  const controller = new AbortController();
+  let watchdog = 0;
+  const arm = (ms: number) => {
+    window.clearTimeout(watchdog);
+    watchdog = window.setTimeout(() => controller.abort(), ms);
+  };
+  arm(15000);
+
+  let response: Response;
+  try {
+    response = await fetch("/api/turn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch {
+    window.clearTimeout(watchdog);
+    return maryTurn({ data: body });
+  }
 
   if (!response.ok || !response.body) {
+    window.clearTimeout(watchdog);
     return maryTurn({ data: body });
   }
 
@@ -57,18 +75,26 @@ export async function streamMaryTurn(
     }
   };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += value;
-    let index = buffer.indexOf("\n");
-    while (index >= 0) {
-      handle(buffer.slice(0, index));
-      buffer = buffer.slice(index + 1);
-      index = buffer.indexOf("\n");
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      // Each piece that lands buys the connection more time.
+      arm(15000);
+      buffer += value;
+      let index = buffer.indexOf("\n");
+      while (index >= 0) {
+        handle(buffer.slice(0, index));
+        buffer = buffer.slice(index + 1);
+        index = buffer.indexOf("\n");
+      }
     }
+    handle(buffer);
+  } catch {
+    // The line went quiet mid-answer: keep whatever she already said.
+  } finally {
+    window.clearTimeout(watchdog);
   }
-  handle(buffer);
 
   if (turn) return turn;
   if (failed) {

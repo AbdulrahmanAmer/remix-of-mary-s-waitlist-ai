@@ -33,11 +33,14 @@ import {
   type LeadPayload,
 } from "@/lib/lead-sync";
 import {
+  isInAppBrowser,
+  micPermissionState,
   MicUnavailableError,
   speak,
   startMicSession,
   transcribe,
   unlockAudio,
+  type MicFailure,
   type MicSession,
   type SpeakHandle,
   type Utterance,
@@ -45,21 +48,33 @@ import {
 
 /** Plain words for every way a microphone can fail to open. */
 function micMessage(error: unknown): string {
-  const reason = error instanceof MicUnavailableError ? error.reason : "unknown";
+  const reason: MicFailure = error instanceof MicUnavailableError ? error.reason : "unknown";
+  // Inside Instagram, LinkedIn or WhatsApp there is no address bar and no
+  // setting to change — the only real fix is opening the link properly.
+  if (isInAppBrowser() && (reason === "denied" || reason === "unsupported")) {
+    return "This is an in-app browser, so it won't hand me the microphone. Tap the ⋯ menu and choose “Open in browser” for voice — or just type here.";
+  }
   switch (reason) {
     case "denied":
-      return "Microphone is blocked. Allow it in your browser's address bar, or just type — I'm reading either way.";
+      return "I couldn't get the microphone. Tap the mic button to ask again, allow it, or just type — I'm reading either way.";
     case "no-device":
       return "I can't find a microphone on this device. Typing works perfectly.";
     case "busy":
-      return "Another app is using your microphone. Close it and reload, or keep going by typing.";
+      return "Another app is using your microphone. Close it, then tap the mic button to try again — or keep going by typing.";
     case "insecure":
       return "This page needs a secure (https) address to use the microphone. You can still type to me.";
     case "unsupported":
       return "This browser won't let me listen — Safari, Chrome or Edge will. Typing works here.";
     default:
-      return "I couldn't open the microphone. You can keep the conversation going by typing.";
+      return "I couldn't open the microphone. Tap the mic button to try again, or keep going by typing.";
   }
+}
+
+/** The line dropped mid-call — say what happened and how to get it back. */
+function micLostMessage(reason: MicFailure): string {
+  if (reason === "busy")
+    return "Something else took the microphone. Tap the mic button to pick the line back up, or carry on by typing.";
+  return "The microphone disconnected — a headset unplugged, maybe. Tap the mic button to reopen the line, or keep typing.";
 }
 import {
   CUT_OFF_MARK,
@@ -181,6 +196,7 @@ function useVisualViewport(active: boolean): { height: number; keyboard: boolean
 const IDLE_NUDGES = [
   "Whenever you're ready — you can talk to me or type it out.",
   "I'm still here. Say the word, or type it if that's easier.",
+  "No rush at all — I'll be right here when you want to pick it back up.",
 ];
 
 const FIELD_LABELS: Record<string, string> = {
@@ -276,6 +292,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const [listeningPhase, setListeningPhase] = useState<ListeningPhase>("idle");
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  /** Bumped to ask the browser for the microphone all over again. */
+  const [micAttempt, setMicAttempt] = useState(0);
   const [echoHint, setEchoHint] = useState(false);
   const [result, setResult] = useState<ConversationResult | null>(null);
   /** This visit's row in the browser store and in the sheet. */
@@ -943,6 +961,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             maybeShowEchoHint();
           },
           onUtterance: (utterance) => handleUtteranceRef.current(utterance),
+          // Headset unplugged, or another app grabbed the mic mid-call.
+          onLost: (reason) => {
+            if (cancelled) return;
+            sessionRef.current = null;
+            setMicLive(false);
+            setMicError(micLostMessage(reason));
+            setListeningPhase("paused");
+            setInterim("");
+            setLevel(0);
+            session?.close();
+          },
         });
         if (cancelled) {
           session.close();
@@ -968,7 +997,48 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       setMicLive(false);
       session?.close();
     };
-  }, [maybeShowEchoHint, stage]);
+  }, [maybeShowEchoHint, micAttempt, stage]);
+
+  /** Ask for the microphone again — after a refusal, a swap, or a stolen line. */
+  const retryMic = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    micMutedRef.current = false;
+    setMicMuted(false);
+    setMicError(null);
+    setMicAttempt((n) => n + 1);
+  }, []);
+
+  // If they go into browser settings and allow the microphone, the line should
+  // come back on its own — nobody should have to reload to be heard.
+  useEffect(() => {
+    if (stage !== "live" || micLive) return;
+    let stop = () => {};
+    void (async () => {
+      const state = await micPermissionState();
+      if (state !== "denied" && state !== "prompt") return;
+      try {
+        const status = await (
+          navigator as unknown as {
+            permissions: {
+              query: (d: { name: string }) => Promise<{
+                state: string;
+                addEventListener?: (t: string, fn: () => void) => void;
+                removeEventListener?: (t: string, fn: () => void) => void;
+              }>;
+            };
+          }
+        ).permissions.query({ name: "microphone" });
+        const onChange = () => {
+          if (status.state === "granted") retryMic();
+        };
+        status.addEventListener?.("change", onChange);
+        stop = () => status.removeEventListener?.("change", onChange);
+      } catch {
+        /* the browser keeps its permissions private; the mic button still works */
+      }
+    })();
+    return () => stop();
+  }, [micLive, retryMic, stage]);
 
   /** Mute keeps the call open but stops her hearing you. */
   const toggleMicMute = useCallback(() => {
@@ -998,9 +1068,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
   useEffect(() => {
     if (stage !== "live") return;
+    // She nudges when she cannot hear you: muted, or no microphone at all.
+    const deaf = micMuted || !micLive;
+    if (!deaf) return;
     const timer = window.setInterval(() => {
-      // She only nudges when she genuinely cannot hear you.
-      if (busyRef.current || speakRef.current || !micMutedRef.current || draft.length > 0) return;
+      if (busyRef.current || speakRef.current || draft.length > 0) return;
       if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length)
         return;
       lastActivityRef.current = Date.now();
@@ -1009,7 +1081,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       if (line) void say(line);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [draft.length, micMuted, say, stage]);
+  }, [draft.length, micLive, micMuted, say, stage]);
 
   useEffect(() => {
     return () => {
@@ -1436,15 +1508,21 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   className="surface-floating mx-auto flex w-full max-w-xl items-end gap-1 rounded-[1.6rem] bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
-                    onClick={toggleMicMute}
+                    onClick={micLive ? toggleMicMute : retryMic}
                     whileTap={reduced ? {} : { scale: 0.94 }}
                     whileHover={reduced ? {} : { scale: 1.04 }}
                     transition={SPRING}
-                    aria-label={micMuted ? "Unmute your microphone" : "Mute your microphone"}
+                    aria-label={
+                      !micLive
+                        ? "Try the microphone again"
+                        : micMuted
+                          ? "Unmute your microphone"
+                          : "Mute your microphone"
+                    }
                     size="icon"
-                    className={`surface-raised relative size-11 shrink-0 rounded-full ${micMuted ? "" : "bg-primary text-primary-foreground"}`}
+                    className={`surface-raised relative size-11 shrink-0 rounded-full ${micMuted || !micLive ? "" : "bg-primary text-primary-foreground"}`}
                   >
-                    {micMuted ? <MicOff /> : <Mic />}
+                    {micLive && !micMuted ? <Mic /> : <MicOff />}
                   </MotionButton>
                   <textarea
                     ref={inputRef}
@@ -1459,13 +1537,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                     rows={1}
                     enterKeyHint="send"
                     placeholder={
-                      listeningPhase === "hearing"
-                        ? "I can hear you…"
-                        : listeningPhase === "finishing"
-                          ? "Finishing your answer…"
-                          : micMuted
-                            ? "Muted — type your answer"
-                            : "Speak or type your answer"
+                      !micLive
+                        ? "Type your answer"
+                        : listeningPhase === "hearing"
+                          ? "I can hear you…"
+                          : listeningPhase === "finishing"
+                            ? "Finishing your answer…"
+                            : micMuted
+                              ? "Muted — type your answer"
+                              : "Speak or type your answer"
                     }
                     className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground sm:text-sm"
                   />

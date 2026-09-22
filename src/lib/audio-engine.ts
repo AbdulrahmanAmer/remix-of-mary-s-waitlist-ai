@@ -518,6 +518,15 @@ export function speak(
     await unlockAudio();
     raf = requestAnimationFrame(tick);
     const pending = { bytes: new Uint8Array(0) };
+    // Conference wifi: if her voice never starts arriving, she must not sit
+    // silently "speaking" forever — cut the request and show the line instead.
+    const firstByteGuard = window.setTimeout(() => {
+      if (!stopped && total === 0) controller.abort();
+    }, 9000);
+    // And a whole line can never take longer than this, however bad the line is.
+    const wholeLineGuard = window.setTimeout(() => {
+      if (!stopped && !streamDone) controller.abort();
+    }, 60000);
     try {
       const res = await fetch("/api/speech", {
         method: "POST",
@@ -557,6 +566,9 @@ export function speak(
     } catch {
       streamDone = true;
       if (!stopped && total === 0) finish();
+    } finally {
+      window.clearTimeout(firstByteGuard);
+      window.clearTimeout(wholeLineGuard);
     }
   })();
 
@@ -606,6 +618,8 @@ export type MicSessionOptions = {
   onInterruptCancelled?: () => void;
   /** How loudly the microphone hears her (0 = headphones, ~0.3+ = laptop speakers). */
   onEchoCoupling?: (coupling: number) => void;
+  /** The microphone went away mid-call: headset unplugged, another app took it. */
+  onLost?: (reason: MicFailure) => void;
   silenceMs?: number;
   maxUtteranceMs?: number;
 };
@@ -662,6 +676,39 @@ function micFailureFrom(error: unknown): MicFailure {
   if (name === "NotReadableError" || name === "AbortError" || name === "TrackStartError")
     return "busy";
   return "unknown";
+}
+
+/**
+ * True inside an app's built-in browser (Instagram, Facebook, LinkedIn, X,
+ * WhatsApp, TikTok). Those often strip the microphone entirely, and the fix is
+ * "open this in your real browser", not "check your settings".
+ */
+export function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|Line\/|Twitter|MicroMessenger|TikTok|Snapchat|Pinterest|WhatsApp|GSA\//i.test(
+    ua,
+  );
+}
+
+/** What the browser already knows about the microphone, before we ask for it. */
+export async function micPermissionState(): Promise<"granted" | "denied" | "prompt" | "unknown"> {
+  try {
+    const query = (
+      navigator as unknown as {
+        permissions?: { query?: (d: { name: string }) => Promise<{ state: string }> };
+      }
+    ).permissions?.query;
+    if (!query) return "unknown";
+    const status = await query.call(
+      (navigator as unknown as { permissions: unknown }).permissions,
+      { name: "microphone" },
+    );
+    const state = status.state;
+    return state === "granted" || state === "denied" || state === "prompt" ? state : "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {
@@ -1165,6 +1212,33 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     if (capturing && now - utteranceStartedAt >= maxUtteranceMs) flush();
   };
 
+  // ---- device health: a headset unplugged or a mic stolen by another app must
+  // be noticed, not left as an eternally silent line ----
+  let lost = false;
+  const reportLost = (reason: MicFailure) => {
+    if (lost || !alive) return;
+    lost = true;
+    options.onLost?.(reason);
+  };
+  const track = stream.getAudioTracks()[0];
+  if (track) {
+    track.addEventListener("ended", () => reportLost("no-device"));
+    // A route change mutes the track for a moment; only a lasting mute counts.
+    track.addEventListener("mute", () => {
+      window.setTimeout(() => {
+        if (alive && track.muted && track.readyState === "live") reportLost("busy");
+      }, 1500);
+    });
+    track.addEventListener("unmute", () => {
+      lost = false;
+    });
+  }
+  const onDeviceChange = () => {
+    const current = stream.getAudioTracks()[0];
+    if (!current || current.readyState === "ended") reportLost("no-device");
+  };
+  navigator.mediaDevices.addEventListener?.("devicechange", onDeviceChange);
+
   raf = requestAnimationFrame(tick);
   startRecognition();
   // Belt and braces: if recognition quietly died, bring it back.
@@ -1175,6 +1249,11 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     if (alive) {
       const playback = getAudioContext();
       if (playback.state === "suspended") void playback.resume().catch(() => {});
+    }
+    // A dead capture track looks exactly like a very quiet room; it isn't.
+    if (alive && !muted) {
+      const live = stream.getAudioTracks()[0];
+      if (!live || live.readyState === "ended") reportLost("no-device");
     }
     if (
       alive &&
@@ -1227,7 +1306,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       } catch {
         /* noop */
       }
-      stream.getTracks().forEach((track) => track.stop());
+      navigator.mediaDevices.removeEventListener?.("devicechange", onDeviceChange);
+      stream.getTracks().forEach((each) => each.stop());
       void ctx.close().catch(() => {});
     },
   };

@@ -51,6 +51,8 @@ export const Route = createFileRoute("/api/speech")({
               },
             },
           }),
+          // Never hold a line open on a voice that is not coming.
+          signal: AbortSignal.timeout(20000),
         });
 
         if (!upstream.ok || !upstream.body) {
