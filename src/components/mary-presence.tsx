@@ -140,7 +140,7 @@ export const MaryPresence = memo(function MaryPresence({
       // reports. Browser zoom changes the effective ratio, so recompute it too.
       const zoom = window.visualViewport?.scale ?? 1;
       const raw = (window.devicePixelRatio || 1) * (zoom > 1 ? zoom : 1);
-      const dpr = small ? 2 : Math.min(3, Math.max(2, raw));
+      const dpr = small ? 2.5 : Math.min(4, Math.max(3, raw));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(boxHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
