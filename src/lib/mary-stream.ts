@@ -75,18 +75,26 @@ export async function streamMaryTurn(
     }
   };
 
-  while (true) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += value;
-    let index = buffer.indexOf("\n");
-    while (index >= 0) {
-      handle(buffer.slice(0, index));
-      buffer = buffer.slice(index + 1);
-      index = buffer.indexOf("\n");
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      // Each piece that lands buys the connection more time.
+      arm(15000);
+      buffer += value;
+      let index = buffer.indexOf("\n");
+      while (index >= 0) {
+        handle(buffer.slice(0, index));
+        buffer = buffer.slice(index + 1);
+        index = buffer.indexOf("\n");
+      }
     }
+    handle(buffer);
+  } catch {
+    // The line went quiet mid-answer: keep whatever she already said.
+  } finally {
+    window.clearTimeout(watchdog);
   }
-  handle(buffer);
 
   if (turn) return turn;
   if (failed) {
