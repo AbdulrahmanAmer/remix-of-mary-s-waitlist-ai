@@ -418,9 +418,7 @@ export function MaryExperience() {
 
   return (
     <main className="relative min-h-dvh overflow-hidden">
-      <AuroraBackground
-        intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)}
-      />
+      <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
         <motion.header
           layout
@@ -549,7 +547,11 @@ export function MaryExperience() {
                         ? { opacity: 1, scale: 1 }
                         : { opacity: [0.45, 1, 0.45], scale: [1, 1.25, 1] }
                     }
-                    transition={{ duration: 2.4, repeat: handsFree && !reduced ? Infinity : 0, ease: "easeInOut" }}
+                    transition={{
+                      duration: 2.4,
+                      repeat: handsFree && !reduced ? Infinity : 0,
+                      ease: "easeInOut",
+                    }}
                     className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
                   />
                   <AnimatePresence mode="wait" initial={false}>
@@ -571,7 +573,11 @@ export function MaryExperience() {
               </div>
 
               <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
-                <motion.div layout transition={SPRING} className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto">
+                <motion.div
+                  layout
+                  transition={SPRING}
+                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto"
+                >
                   <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
                       <motion.div
@@ -597,7 +603,11 @@ export function MaryExperience() {
                   </AnimatePresence>
 
                   {lastMary && (
-                    <motion.div layout transition={SPRING} className="mx-auto max-w-2xl pt-2 text-center">
+                    <motion.div
+                      layout
+                      transition={SPRING}
+                      className="mx-auto max-w-2xl pt-2 text-center"
+                    >
                       <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
                         MARY
                       </p>
@@ -721,7 +731,13 @@ export function MaryExperience() {
                 <div className="mt-2 text-center text-[0.68rem] text-muted-foreground">
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.p
-                      key={listeningPhase === "hearing" || listeningPhase === "finishing" ? listeningPhase : handsFree ? "hf" : "idle"}
+                      key={
+                        listeningPhase === "hearing" || listeningPhase === "finishing"
+                          ? listeningPhase
+                          : handsFree
+                            ? "hf"
+                            : "idle"
+                      }
                       initial={reduced ? false : { opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
