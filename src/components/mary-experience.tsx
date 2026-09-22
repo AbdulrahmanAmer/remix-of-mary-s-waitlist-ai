@@ -1644,7 +1644,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                       <button
                         type="button"
                         onClick={() => {
-                          void replayLastLine();
+                          // They cannot hear her: move her voice to the speakers for good.
+                          void replayLastLine({ viaSpeakers: true });
                         }}
                         className="rounded-full border border-border px-2.5 py-0.5 text-[0.68rem] transition-colors hover:bg-muted"
                       >

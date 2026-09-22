@@ -1,12 +1,14 @@
 # Roadmap
 
 ## Now
+- [ ] Her voice double-plays: find every path that can start the same line twice (element + call route, retry/fallback, resume, streamed `say` + final turn) and close them
+- [ ] Whole-code health pass: remove dead/broken branches that affect behaviour, reconcile stale comments and the roadmap with what the code does
 - [ ] Connect the Google Sheet: paste `docs/google-sheets/Code.gs` into the sheet's Apps Script, deploy as a web app, then add `SHEETS_WEBAPP_URL` (and optional `SHEETS_WEBAPP_SECRET`) as project secrets — waits on the owner
 
 ## Next
 - [ ] Real waitlist position everywhere: once the sheet answers, retire the on-device estimate on the end screen and in the owner view
 - [ ] Cut-in confirmation should be echo-aware (compare against the echo model's expected tail, not only the room floor) and require words when speaker coupling is high
-- [ ] Move the microphone graph from ScriptProcessorNode to an AudioWorklet
+- [ ] Drop the ScriptProcessorNode fallback once no supported browser still needs it (AudioWorklet is already the primary capture path)
 - [ ] Scripted /api/turn conversations for the edge cases (ambiguous "a shop", one-word "consulting", guess-correction) as a repeatable check
 - [ ] Field-notes quality gate: a repeatable script that replays saved transcripts through /api/reflect and flags notes that leak names or contradict the playbook
 
@@ -16,7 +18,7 @@
 - [x] MARY learns: after each conversation she debriefs herself (summary, objections, what worked/stalled, up to 5 PII-free lessons); lessons live in the browser and pool in the sheet's Experience tab, and the best ones ride into every turn as field notes
 - [x] Google Sheet receiver (`docs/google-sheets/Code.gs` + README): Waitlist / Experience / Activity tabs, upsert by session, status that never downgrades, real position handed out once, partial rows for people who leave, secret check, self-test; verified in a simulated spreadsheet
 - [x] Closing: sign-up ends with the exact launch line, callback confirms name + number and says goodbye, decline gets one warm line; the end screen is personal (position, what happens next, details confirmed / what the team receives) — verified for all three on a phone-sized screen
-- [x] Owner view (Ctrl/Cmd+Shift+W): sheet connection status, conversations with transcripts, and MARY's field notes
+- [x] Owner view (Ctrl/Cmd+Shift+O, or five quick taps on "omnikom" in the footer): sheet connection status, conversations with transcripts, MARY's field notes, sound & mic check
 - [x] Remove unsafe direct-speaker fallback; protected WebRTC playback now retries after failure and otherwise stays silent instead of entering the microphone
 - [x] Close the caption watchdog race: no restart can bypass MARY's playback quarantine, and interruption captions reopen only after her measured output tail clears
 - [x] Hard-stop browser live captioning while MARY is audible; reopen a fresh captioning session only after playback pauses or its echo tail clears
