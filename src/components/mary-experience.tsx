@@ -329,6 +329,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const pendingInterruptRef = useRef(false);
   /** The cut-in is real — she stays quiet until the person's words are handled. */
   const holdRef = useRef(false);
+  /** When the hold started, so it can never last longer than a person would wait. */
+  const holdSinceRef = useRef(0);
   const falseInterruptsRef = useRef(0);
   const couplingRef = useRef(0);
   const echoHintShownRef = useRef(false);
