@@ -4,7 +4,7 @@ import { ArrowRight, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
 
 import { AuroraBackground } from "./aurora-background";
 import { BrandLockup } from "./brand-lockup";
-import { MaryOrb, type OrbState } from "./mary-orb";
+import { MaryPresence, PRESENCE_LABEL, type PresenceState } from "./mary-presence";
 import { ProgressConstellation } from "./progress-constellation";
 import { Button } from "@/components/ui/button";
 import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
@@ -51,7 +51,7 @@ export function MaryExperience() {
   const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
   const [collected, setCollected] = useState<Collected>({});
-  const [orbState, setOrbState] = useState<OrbState>("idle");
+  const [presence, setPresenceState] = useState<PresenceState>("idle");
   const [level, setLevel] = useState(0);
   const [reveal, setReveal] = useState(0);
   const [interim, setInterim] = useState("");
@@ -118,25 +118,25 @@ export function MaryExperience() {
       raf = requestAnimationFrame(animateWords);
 
       if (mutedRef.current) {
-        setOrbState("speaking");
+        setPresenceState("speaking");
         return new Promise<void>((resolve) => {
           window.setTimeout(() => {
             cancelAnimationFrame(raf);
             setReveal(words);
-            setOrbState("idle");
+            setPresenceState("idle");
             resolve();
           }, duration);
         });
       }
 
       stopSpeaking();
-      setOrbState("speaking");
+      setPresenceState("speaking");
       const handle = speak(text, {
         onLevel: setLevel,
         onEnd: () => {
           cancelAnimationFrame(raf);
           setReveal(words);
-          setOrbState((current) => (current === "speaking" ? "idle" : current));
+          setPresenceState((current) => (current === "speaking" ? "idle" : current));
         },
       });
       speakRef.current = handle;
@@ -169,13 +169,13 @@ export function MaryExperience() {
       setResult({ position: 0, message: "We captured your details." });
     }
     setStage("done");
-    setOrbState("success");
+    setPresenceState("done");
   }, []);
 
   const runTurn = useCallback(
     async (nextLines: Line[]) => {
       busyRef.current = true;
-      setOrbState("thinking");
+      setPresenceState("thinking");
       try {
         const turn: MaryTurn = await maryTurn({
           data: {
@@ -230,7 +230,7 @@ export function MaryExperience() {
     recorderRef.current = null;
     setRecording(false);
     setListeningPhase("finishing");
-    setOrbState("thinking");
+    setPresenceState("thinking");
     recognitionRef.current?.stop();
     recognitionRef.current = null;
 
@@ -240,7 +240,7 @@ export function MaryExperience() {
       if (spoken) {
         await sendUser(spoken);
       } else if (handsFreeRef.current && !sessionFinishedRef.current) {
-        setOrbState("idle");
+        setPresenceState("idle");
         setListeningPhase("listening");
         window.setTimeout(() => void startListeningRef.current(), 350);
       }
@@ -306,7 +306,7 @@ export function MaryExperience() {
         onLevel: setLevel,
         onSpeechStart: () => {
           setListeningPhase("hearing");
-          setOrbState("listening");
+          setPresenceState("hearing");
         },
         onSilence: () => void finishListeningRef.current(),
         onMaxDuration: () => void finishListeningRef.current(),
@@ -319,7 +319,7 @@ export function MaryExperience() {
       setRecording(true);
       setMicError(null);
       setListeningPhase("listening");
-      setOrbState("listening");
+      setPresenceState("listening");
       startInterim();
     } catch {
       setHandsFreeMode(false);
@@ -335,7 +335,7 @@ export function MaryExperience() {
     if (handsFreeRef.current) {
       setHandsFreeMode(false);
       setRecording(false);
-      setOrbState("idle");
+      setPresenceState("idle");
       recognitionRef.current?.stop();
       recognitionRef.current = null;
       const recorder = recorderRef.current;
@@ -362,7 +362,7 @@ export function MaryExperience() {
         setRecording(false);
         setInterim("");
         setListeningPhase("paused");
-        setOrbState("idle");
+        setPresenceState("idle");
       }
       if (
         wasEmpty &&
@@ -412,7 +412,7 @@ export function MaryExperience() {
 
   return (
     <main className="relative min-h-dvh overflow-hidden">
-      <AuroraBackground />
+      <AuroraBackground intensity={stage === "live" ? Math.min(1, 0.4 + level) : 0} />
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
         <header
           className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}
@@ -454,9 +454,8 @@ export function MaryExperience() {
                   Your AI Revenue Concierge. She works the revenue you already have and personally
                   welcomes you to the OmniSuite launch waitlist.
                 </p>
-                <div className="relative mt-8">
-                  <div className="absolute inset-5 -z-10 rounded-full bg-primary/10" />
-                  <MaryOrb state="idle" level={0} size={176} />
+                <div className="mt-6 w-full max-w-md">
+                  <MaryPresence state="idle" level={0} height={200} />
                 </div>
                 <MotionButton
                   onClick={begin}
@@ -494,151 +493,142 @@ export function MaryExperience() {
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
               className="mx-auto flex w-full max-w-4xl flex-1 flex-col py-5 lg:py-7"
             >
-              <div className="flex justify-center py-1">
-                <MaryOrb state={orbState} level={level} size={128} />
+              <MaryPresence state={presence} level={level} height={128} />
+              <div className="mt-1 flex items-center justify-between gap-4 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
+                  />
+                  {handsFree ? "Hands-free" : PRESENCE_LABEL[presence]}
+                </span>
+                <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
               </div>
               <div className="mt-3">
                 <ProgressConstellation collected={collected} />
               </div>
 
-              <div className="mt-4 flex min-h-[28rem] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-lift">
-                <div className="flex items-center justify-between border-b border-border px-5 py-3">
-                  <div>
-                    <p className="font-semibold text-ink">MARY</p>
-                    <p className="text-xs text-muted-foreground">AI Revenue Concierge</p>
-                  </div>
-                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <span
-                      className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
-                    />
-                    {handsFree ? "Hands-free" : "Ready"}
-                  </span>
-                </div>
-
-                <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
-                  <div className="mx-auto w-full max-w-3xl space-y-3 overflow-y-auto">
-                    <AnimatePresence initial={false}>
-                      {history.map((line) => (
-                        <motion.div
-                          key={line.id}
-                          layout
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
-                          className={
-                            line.role === "user" ? "flex justify-end" : "flex justify-start"
-                          }
+              <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
+                <div className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto">
+                  <AnimatePresence initial={false}>
+                    {history.map((line, index) => (
+                      <motion.div
+                        key={line.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 0.35 + (index / Math.max(1, history.length)) * 0.5 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                        className={line.role === "user" ? "flex justify-end" : "flex justify-start"}
+                      >
+                        <div
+                          className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/90 text-background" : "bg-surface text-muted-foreground"}`}
                         >
-                          <div
-                            className={`max-w-[88%] rounded-xl px-4 py-3 text-sm leading-relaxed ${line.role === "user" ? "rounded-br-sm bg-ink text-background" : "rounded-bl-sm bg-surface text-ink"}`}
+                          {line.text}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+
+                  {lastMary && (
+                    <div className="mx-auto max-w-2xl text-center">
+                      <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
+                        MARY
+                      </p>
+                      <p className="text-pretty text-xl leading-relaxed text-ink sm:text-2xl">
+                        {lastMary.text.split(/\s+/).map((word, index) => (
+                          <motion.span
+                            key={`${lastMary.id}-${index}`}
+                            initial={false}
+                            animate={
+                              index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }
+                            }
+                            transition={{ duration: 0.22 }}
+                            className="mr-[0.28em] inline-block"
                           >
-                            {line.text}
-                          </div>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-
-                    {lastMary && (
-                      <div className="mx-auto max-w-2xl text-center">
-                        <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
-                          MARY
-                        </p>
-                        <p className="text-pretty text-xl leading-relaxed text-ink sm:text-2xl">
-                          {lastMary.text.split(/\s+/).map((word, index) => (
-                            <motion.span
-                              key={`${lastMary.id}-${index}`}
-                              initial={false}
-                              animate={
-                                index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }
-                              }
-                              transition={{ duration: 0.22 }}
-                              className="mr-[0.28em] inline-block"
-                            >
-                              {word}
-                            </motion.span>
-                          ))}
-                        </p>
-                      </div>
-                    )}
-                    {interim && (
-                      <p className="text-right text-sm italic text-muted-foreground">{interim}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="border-t border-border bg-surface/70 p-3 sm:p-4">
-                  {micError && (
-                    <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>
+                            {word}
+                          </motion.span>
+                        ))}
+                      </p>
+                    </div>
                   )}
-                  <motion.div
-                    animate={
-                      reduced
-                        ? false
-                        : recording || orbState === "speaking"
-                          ? { scale: pulseScale, borderColor: "var(--primary)" }
-                          : { scale: 1 }
-                    }
-                    transition={
-                      recording || orbState === "speaking"
-                        ? { type: "spring", stiffness: 240, damping: 24 }
-                        : { duration: 0.25 }
-                    }
-                    className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
-                  >
-                    <MotionButton
-                      onClick={toggleMic}
-                      whileTap={reduced ? {} : { scale: 0.94 }}
-                      aria-label={
-                        handsFree ? "Pause hands-free listening" : "Start hands-free listening"
-                      }
-                      size="icon"
-                      className={`relative size-11 shrink-0 rounded-lg ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
-                    >
-                      {handsFree ? <Square className="fill-current" /> : <Mic />}
-                    </MotionButton>
-                    <textarea
-                      ref={inputRef}
-                      value={draft}
-                      onChange={(event) => onDraftChange(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          void sendUser(draft);
-                        }
-                      }}
-                      rows={1}
-                      placeholder={
-                        listeningPhase === "hearing"
-                          ? "I can hear you…"
-                          : listeningPhase === "finishing"
-                            ? "Finishing your answer…"
-                            : handsFree
-                              ? "Listening — or type your answer"
-                              : "Speak or type your answer"
-                      }
-                      className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
-                    />
-                    <Button
-                      onClick={() => void sendUser(draft)}
-                      disabled={!draft.trim()}
-                      size="icon"
-                      variant="ghost"
-                      aria-label="Send"
-                      className="size-11 shrink-0 rounded-lg"
-                    >
-                      <Send />
-                    </Button>
-                  </motion.div>
-                  <p className="mt-2 text-center text-[0.68rem] text-muted-foreground">
-                    {listeningPhase === "hearing"
-                      ? "Keep speaking — MARY replies when you finish."
-                      : listeningPhase === "finishing"
-                        ? "Got it. MARY is preparing her reply."
-                        : handsFree
-                          ? "Hands-free is on. Speak naturally; no second tap needed."
-                          : "Tap the microphone once for hands-free conversation, or type anytime."}
-                  </p>
+                  {interim && (
+                    <p className="text-right text-sm italic text-muted-foreground">{interim}</p>
+                  )}
                 </div>
+              </div>
+
+              <div className="pt-3">
+                {micError && (
+                  <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>
+                )}
+                <motion.div
+                  animate={
+                    reduced
+                      ? false
+                      : recording || presence === "speaking"
+                        ? { scale: pulseScale, borderColor: "var(--primary)" }
+                        : { scale: 1 }
+                  }
+                  transition={
+                    recording || presence === "speaking"
+                      ? { type: "spring", stiffness: 240, damping: 24 }
+                      : { duration: 0.25 }
+                  }
+                  className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
+                >
+                  <MotionButton
+                    onClick={toggleMic}
+                    whileTap={reduced ? {} : { scale: 0.94 }}
+                    aria-label={
+                      handsFree ? "Pause hands-free listening" : "Start hands-free listening"
+                    }
+                    size="icon"
+                    className={`relative size-11 shrink-0 rounded-lg ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
+                  >
+                    {handsFree ? <Square className="fill-current" /> : <Mic />}
+                  </MotionButton>
+                  <textarea
+                    ref={inputRef}
+                    value={draft}
+                    onChange={(event) => onDraftChange(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void sendUser(draft);
+                      }
+                    }}
+                    rows={1}
+                    placeholder={
+                      listeningPhase === "hearing"
+                        ? "I can hear you…"
+                        : listeningPhase === "finishing"
+                          ? "Finishing your answer…"
+                          : handsFree
+                            ? "Listening — or type your answer"
+                            : "Speak or type your answer"
+                    }
+                    className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
+                  />
+                  <Button
+                    onClick={() => void sendUser(draft)}
+                    disabled={!draft.trim()}
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Send"
+                    className="size-11 shrink-0 rounded-lg"
+                  >
+                    <Send />
+                  </Button>
+                </motion.div>
+                <p className="mt-2 text-center text-[0.68rem] text-muted-foreground">
+                  {listeningPhase === "hearing"
+                    ? "Keep speaking — MARY replies when you finish."
+                    : listeningPhase === "finishing"
+                      ? "Got it. MARY is preparing her reply."
+                      : handsFree
+                        ? "Hands-free is on. Speak naturally; no second tap needed."
+                        : "Tap the microphone once for hands-free conversation, or type anytime."}
+                </p>
               </div>
             </motion.section>
           )}
@@ -652,8 +642,8 @@ export function MaryExperience() {
               className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-10 text-center"
             >
               <div>
-                <div className="flex justify-center">
-                  <MaryOrb state="success" level={0.3} size={190} />
+                <div className="mx-auto w-full max-w-md">
+                  <MaryPresence state="done" level={0} height={200} />
                 </div>
                 <p className="eyebrow mt-7">Early access confirmed</p>
                 <h1 className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink">
