@@ -405,8 +405,9 @@ export function speak(
       lastAdvanceAt = now;
       return;
     }
-    // Waiting on the network for the first bytes is not a stall.
-    if (!firstAudioFired && !streamDone) {
+    // Waiting on the network — for the first bytes, or for more of them with
+    // everything received already played — is not an output stall.
+    if (!streamDone && (!firstAudioFired || (cursor >= total && active.length === 0))) {
       lastAdvanceAt = now;
       return;
     }
