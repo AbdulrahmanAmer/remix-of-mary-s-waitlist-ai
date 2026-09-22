@@ -170,6 +170,9 @@ export const MaryPresence = memo(function MaryPresence({
     let raf = 0;
     let t = 0;
     let lv = 0;
+    let smoothed = 0;
+    let cost = 0;
+
     let sweep = 0;
     let bloom = 0;
     let lastDone = false;
