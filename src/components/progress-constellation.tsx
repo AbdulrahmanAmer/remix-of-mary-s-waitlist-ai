@@ -35,7 +35,7 @@ export function ProgressConstellation({ collected }: { collected: Collected }) {
                 {value ? (
                   <motion.span
                     key="value"
-                    initial={{ opacity: 0, x: 220, filter: "blur(6px)" }}
+                    initial={{ opacity: 0, x: 420, filter: "blur(6px)" }}
                     animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
                     transition={SPRING}
                     className="hidden max-w-24 truncate text-right text-[0.6rem] font-semibold uppercase tracking-[0.12em] text-ink/80 md:inline"

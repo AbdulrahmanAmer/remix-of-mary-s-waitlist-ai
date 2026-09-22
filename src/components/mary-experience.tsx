@@ -918,6 +918,8 @@ export function MaryExperience() {
           )}
         </AnimatePresence>
 
+        {stage === "live" && <ProgressConstellation collected={collected} />}
+
         <footer className="flex flex-wrap items-center justify-between gap-2 py-4 text-[0.68rem] text-muted-foreground">
           <span>OmniSuite · AI-native revenue infrastructure</span>
           <span>
