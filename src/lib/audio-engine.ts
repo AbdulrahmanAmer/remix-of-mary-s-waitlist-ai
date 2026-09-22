@@ -753,7 +753,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       text = stripAssistantEcho(text, lines);
       if (text && isEchoOfAssistant(text, lines)) text = "";
     }
-    trace({ type: "utterance", text, durationMs: Math.round(durationMs), peak, over: utteranceOverAssistant || wasHolding });
+    trace({
+      type: "utterance",
+      text,
+      durationMs: Math.round(durationMs),
+      peak,
+      over: utteranceOverAssistant || wasHolding,
+    });
     options.onUtterance({
       text,
       audio,

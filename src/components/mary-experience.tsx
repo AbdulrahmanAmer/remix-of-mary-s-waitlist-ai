@@ -501,7 +501,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const enterLive = useCallback(async () => {
     setStage("live");
     lastActivityRef.current = Date.now();
-    await runTurn([]);
+    // Her welcome sits in the same queue as everything said after it.
+    const run = chainRef.current.then(() => runTurn([])).catch(() => {});
+    chainRef.current = run;
+    await run;
   }, [runTurn]);
 
   // Talk to MARY: the attribution wipes back behind the divider, the page

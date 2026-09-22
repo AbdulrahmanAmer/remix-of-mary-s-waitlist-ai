@@ -159,46 +159,99 @@ export function isEchoOfAssistant(transcript: string, assistantLines: string[]):
   return false;
 }
 
+/** Two words the transcriber could plausibly have meant as the same word. */
+function similarWord(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b;
+  const longer = shorter === a ? b : a;
+  if (shorter.length >= 3 && longer.startsWith(shorter)) return true;
+  if (a.length >= 5 && b.length >= 5) {
+    let prefix = 0;
+    while (prefix < a.length && prefix < b.length && a[prefix] === b[prefix]) prefix += 1;
+    return prefix >= 4;
+  }
+  return false;
+}
+
+/**
+ * Longest stretch of `list` starting at `from` (going forward) or ending at
+ * `from` (going backward) that follows a contiguous stretch of MARY's words.
+ * One garbled word in the middle is tolerated when the words on both sides of
+ * it line up again.
+ */
+function alignedRun(list: string[], from: number, assistant: string[], dir: 1 | -1): number {
+  let best = 0;
+  for (let j = 0; j < assistant.length; j++) {
+    if (!similarWord(list[from] ?? "", assistant[j] ?? "")) continue;
+    let run = 1;
+    let misses = 0;
+    for (;;) {
+      const word = list[from + dir * run];
+      const hers = assistant[j + dir * run];
+      if (word === undefined || hers === undefined) break;
+      if (similarWord(word, hers)) {
+        run += 1;
+        continue;
+      }
+      const nextWord = list[from + dir * (run + 1)];
+      const nextHers = assistant[j + dir * (run + 1)];
+      if (
+        misses === 0 &&
+        nextWord !== undefined &&
+        nextHers !== undefined &&
+        similarWord(nextWord, nextHers)
+      ) {
+        misses = 1;
+        run += 2;
+        continue;
+      }
+      break;
+    }
+    if (run > best) best = run;
+  }
+  return best;
+}
+
 /**
  * Removes MARY's words from the edges of a transcript that caught both voices,
  * e.g. "that's convert running actually I run a bakery" → "actually I run a bakery".
  * Only contiguous runs of two or more of her words are stripped, so a person
- * who genuinely reuses one of her words keeps it.
+ * who genuinely reuses one of her words keeps it. A garbled word or two in
+ * front of her run ("and omni want first access hold on…") goes with it.
  */
 export function stripAssistantEcho(transcript: string, assistantLines: string[]): string {
   const words = transcript.split(/\s+/).filter(Boolean);
   if (words.length < 2) return transcript.trim();
   const assistant = tokens(assistantLines.join(" "));
   if (assistant.length === 0) return transcript.trim();
-  const assistantJoined = ` ${assistant.join(" ")} `;
   const norm = words.map((w) => tokens(w)[0] ?? "");
 
-  const runFromStart = () => {
-    let best = 0;
-    for (let end = 2; end <= norm.length; end++) {
-      const gram = norm.slice(0, end).filter(Boolean).join(" ");
-      if (gram && assistantJoined.includes(` ${gram} `)) best = end;
-      else if (end > 2) break;
-    }
-    return best;
-  };
-  const runFromEnd = () => {
-    let best = 0;
-    for (let size = 2; size <= norm.length; size++) {
-      const gram = norm
-        .slice(norm.length - size)
-        .filter(Boolean)
-        .join(" ");
-      if (gram && assistantJoined.includes(` ${gram} `)) best = size;
-      else if (size > 2) break;
-    }
-    return best;
+  const strongEnough = (start: number, run: number, skipped: number) => {
+    if (run < 2) return false;
+    if (skipped === 0) return true;
+    // A run that does not start at the very edge has to be unmistakably hers.
+    const slice = norm.slice(start, start + run);
+    return run >= 3 || contentTokens(slice).length >= 2;
   };
 
-  const head = runFromStart();
-  const tail = head >= words.length ? 0 : runFromEnd();
-  const kept = words.slice(head, words.length - tail);
-  return kept.join(" ").trim();
+  let head = 0;
+  for (let start = 0; start <= 2 && start < norm.length - 1; start++) {
+    const run = alignedRun(norm, start, assistant, 1);
+    if (strongEnough(start, run, start)) head = Math.max(head, start + run);
+  }
+
+  let tail = 0;
+  if (head < words.length) {
+    for (let skip = 0; skip <= 2 && skip < norm.length - 1; skip++) {
+      const end = norm.length - 1 - skip;
+      const run = alignedRun(norm, end, assistant, -1);
+      if (strongEnough(end - run + 1, run, skip)) tail = Math.max(tail, skip + run);
+    }
+  }
+
+  if (head + tail >= words.length) return "";
+  return words.slice(head, words.length - tail).join(" ").trim();
 }
 
 const BACKCHANNELS = new Set([
