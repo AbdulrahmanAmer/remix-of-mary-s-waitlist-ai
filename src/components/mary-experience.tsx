@@ -51,7 +51,7 @@ export function MaryExperience() {
   const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
   const [collected, setCollected] = useState<Collected>({});
-  const [orbState, setPresenceState] = useState<PresenceState>("idle");
+  const [presence, setPresenceState] = useState<PresenceState>("idle");
   const [level, setLevel] = useState(0);
   const [reveal, setReveal] = useState(0);
   const [interim, setInterim] = useState("");
@@ -169,7 +169,7 @@ export function MaryExperience() {
       setResult({ position: 0, message: "We captured your details." });
     }
     setStage("done");
-    setPresenceState("success");
+    setPresenceState("done");
   }, []);
 
   const runTurn = useCallback(
@@ -495,7 +495,7 @@ export function MaryExperience() {
               className="mx-auto flex w-full max-w-4xl flex-1 flex-col py-5 lg:py-7"
             >
               <div className="flex justify-center py-1">
-                <MaryOrb state={orbState} level={level} size={128} />
+                <MaryOrb state={presence} level={level} size={128} />
               </div>
               <div className="mt-3">
                 <ProgressConstellation collected={collected} />
@@ -574,12 +574,12 @@ export function MaryExperience() {
                     animate={
                       reduced
                         ? false
-                        : recording || orbState === "speaking"
+                        : recording || presence === "speaking"
                           ? { scale: pulseScale, borderColor: "var(--primary)" }
                           : { scale: 1 }
                     }
                     transition={
-                      recording || orbState === "speaking"
+                      recording || presence === "speaking"
                         ? { type: "spring", stiffness: 240, damping: 24 }
                         : { duration: 0.25 }
                     }
