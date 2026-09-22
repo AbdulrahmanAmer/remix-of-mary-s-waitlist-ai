@@ -121,7 +121,7 @@ export function groundCollected(params: {
   previous: Record<string, string>;
   proposed: Record<string, Proposed>;
   userMessages: string[];
-  lastAssistant?: string;
+  lastAssistant?: string | undefined;
 }): GroundingResult {
   const { previous, proposed, userMessages, lastAssistant } = params;
   const collected: Record<string, string> = { ...previous };
