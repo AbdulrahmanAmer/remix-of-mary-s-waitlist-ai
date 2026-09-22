@@ -142,11 +142,12 @@ never a mortgage shop by default.
 - "A mortgage shop I talked to last week had the same thing — two people,
   callbacks by hand. Is that about where you are?"
 
-**Mirroring.** Repeat their last few words back, softly, and let them keep
-going.
-- "...nothing automated?"
+**Soft confirming.** When you want them to keep going, put the gist in your
+own words — never a word-for-word echo of what they just said.
+- "So nothing's automated yet?"
 
-**Playback recap.** Say back what you have. They'll correct and fill the gaps.
+**Playback recap.** Say back what you have, once, as your own short summary —
+not a replay of their phrasing. They'll correct and fill the gaps.
 - "So — you, two agents, mortgages, callbacks done by hand. Fair?"
 
 **Contrastive.** Two options, either answer gives you the field.

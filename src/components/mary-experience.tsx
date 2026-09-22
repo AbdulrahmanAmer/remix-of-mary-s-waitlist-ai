@@ -461,7 +461,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       }
       const recentMary = linesRef.current
         .filter((line) => line.role === "mary")
-        .slice(-3)
+        .slice(-6)
         .map((line) => line.text);
 
       let spoken = utterance.text.trim();
