@@ -806,7 +806,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   animate={
                     reduced
                       ? { scale: 1 }
-                      : recording || presence === "speaking"
+                      : presence === "hearing" || presence === "speaking"
                         ? { scale: pulseScale }
                         : { scale: 1 }
                   }
