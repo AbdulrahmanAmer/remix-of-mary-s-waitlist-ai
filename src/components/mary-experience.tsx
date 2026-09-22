@@ -137,6 +137,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const completingRef = useRef(false);
   const sessionFinishedRef = useRef(false);
   const startListeningRef = useRef<() => Promise<void>>(async () => {});
+  const armBargeInRef = useRef<() => Promise<void>>(async () => {});
   const finishListeningRef = useRef<() => Promise<void>>(async () => {});
   const mutedRef = useRef(false);
   const collectedRef = useRef<Collected>({});
@@ -287,6 +288,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
+
+        // The mic stays open through her turn, so you can talk over her.
+        void armBargeInRef.current();
 
         if (firstBeat) await firstBeat;
         else await say(turn.say);
@@ -497,6 +501,51 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   }, [setHandsFreeMode, startInterim, stopSpeaking]);
 
   startListeningRef.current = startListening;
+
+  /** Listens while MARY is talking: the first real word from you stops her. */
+  const armBargeIn = useCallback(async () => {
+    if (
+      !handsFreeRef.current ||
+      recorderRef.current ||
+      sessionFinishedRef.current ||
+      completingRef.current
+    ) {
+      return;
+    }
+    try {
+      let interrupted = false;
+      const recorder = await startRecording({
+        // Her own voice through the speakers must not count as an interruption.
+        thresholdScale: 2.4,
+        onLevel: (value) => {
+          if (interrupted) setLevel(value);
+        },
+        onSpeechStart: () => {
+          interrupted = true;
+          stopSpeaking();
+          setRecording(true);
+          setListeningPhase("hearing");
+          setPresenceState("hearing");
+        },
+        onSilence: () => {
+          if (interrupted) void finishListeningRef.current();
+        },
+        onMaxDuration: () => {
+          if (interrupted) void finishListeningRef.current();
+        },
+      });
+      if (!handsFreeRef.current || sessionFinishedRef.current || recorderRef.current) {
+        recorder.cancel();
+        return;
+      }
+      recorderRef.current = recorder;
+      startInterim();
+    } catch {
+      // Barge-in is a bonus; the conversation works without it.
+    }
+  }, [startInterim, stopSpeaking]);
+
+  armBargeInRef.current = armBargeIn;
 
   const toggleMic = useCallback(async () => {
     lastActivityRef.current = Date.now();
