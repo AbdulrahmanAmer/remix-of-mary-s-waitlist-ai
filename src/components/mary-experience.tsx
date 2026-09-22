@@ -588,11 +588,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         >
           <div ref={lockupRef} className="min-w-0">
             <BrandLockup
+              // Remounting on the stage switch replays the reveal, so the mark
+              // slides back in from the side once it has popped at centre.
+              key={stage === "live" || stage === "done" ? "corner" : "stage"}
               compact={stage === "live" || stage === "done"}
               centered={stage === "landing" || stage === "intro"}
               wiping={stage === "intro"}
               hidden={stage === "intro" && flight !== null}
-              revealDelay={introDelay}
+              revealDelay={stage === "landing" ? introDelay : 0}
+              slideIn={stage === "live"}
             />
           </div>
           <AnimatePresence>
