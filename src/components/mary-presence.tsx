@@ -218,8 +218,9 @@ export const MaryPresence = memo(function MaryPresence({
         cy + R * 0.25,
         R * 1.15,
       );
-      pool.addColorStop(0, withAlpha(primary, (0.34 + lv * 0.26) * cur.glow));
-      pool.addColorStop(0.45, withAlpha(primary, 0.12 * cur.glow));
+      pool.addColorStop(0, withAlpha(primary, (0.3 + lv * 0.26) * cur.glow));
+      pool.addColorStop(0.3, withAlpha(primary, 0.09 * cur.glow));
+      pool.addColorStop(0.75, withAlpha(primary, 0.02));
       pool.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = pool;
       ctx.fillRect(cx - R * 1.2, cy - R * 1.2, R * 2.4, R * 2.4);
