@@ -25,9 +25,9 @@ function Index() {
   return (
     <ClientOnly
       fallback={
-        <div className="relative min-h-screen">
+        <div className="relative h-dvh overflow-hidden">
           <AuroraBackground />
-          <div className="relative z-10 grid min-h-screen place-items-center">
+          <div className="relative z-10 grid h-dvh place-items-center">
             <p className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
               Waking MARY
             </p>
