@@ -583,11 +583,20 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
         <motion.header
+          ref={headerRef}
           layout
           transition={SPRING}
-          className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}
+          className={`flex min-h-12 items-center gap-4 ${stage === "landing" || stage === "intro" ? "justify-center" : "justify-between"}`}
         >
-          <BrandLockup compact={stage !== "landing"} centered={stage === "landing"} />
+          <div ref={lockupRef} className="min-w-0">
+            <BrandLockup
+              compact={stage === "live" || stage === "done"}
+              centered={stage === "landing" || stage === "intro"}
+              wiping={stage === "intro"}
+              hidden={stage === "intro" && flight !== null}
+              revealDelay={introDelay}
+            />
+          </div>
           <AnimatePresence>
             {stage === "live" && (
               <motion.button
