@@ -385,14 +385,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
     window.setTimeout(() => {
       const mark = lockupRef.current?.querySelector("img");
-      const header = headerRef.current;
-      if (!mark || !header) return;
+      if (!mark) return;
       const r = mark.getBoundingClientRect();
-      const hr = header.getBoundingClientRect();
       // Cap the growth at the mark's native width so it stays razor sharp.
       const grown = Math.min(r.width * 2.7, Math.min(320, window.innerWidth * 0.62));
       const grownH = (grown / r.width) * r.height;
-      const restW = r.width * (28 / r.height);
       setFlight({
         from: { x: r.left, y: r.top, w: r.width },
         mid: {
@@ -400,7 +397,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           y: window.innerHeight / 2 - grownH / 2,
           w: grown,
         },
-        to: { x: hr.left, y: hr.top + (hr.height - 28) / 2, w: restW },
       });
     }, 420);
 
