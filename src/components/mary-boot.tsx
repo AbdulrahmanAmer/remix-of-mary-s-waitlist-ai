@@ -1,12 +1,25 @@
 // Full-screen boot sequence shown while MARY's experience loads.
 // Pure CSS animation so it renders identically before and after hydration.
+// `elapsedMs` lets the hydrated copy resume the same arc the placeholder
+// started, instead of restarting from frame zero.
 
-export function MaryBoot({ exiting = false }: { exiting?: boolean }) {
+const LETTER_DELAYS = ["0.85s", "0.99s", "1.13s", "1.27s"];
+
+export function MaryBoot({
+  exiting = false,
+  elapsedMs = 0,
+}: {
+  exiting?: boolean;
+  elapsedMs?: number;
+}) {
+  const elapsed = `${(elapsedMs / 1000).toFixed(3)}s`;
+
   return (
     <div
       className={`mary-boot relative grid h-dvh place-items-center overflow-hidden ${
         exiting ? "mary-boot--out" : ""
       }`}
+      style={{ ["--boot-elapsed" as string]: elapsed }}
     >
       {/* soft lime glow that blooms in from the centre */}
       <div className="mary-boot-glow" aria-hidden="true" />
@@ -23,10 +36,14 @@ export function MaryBoot({ exiting = false }: { exiting?: boolean }) {
         </div>
 
         <p className="mary-boot-word mt-10 font-display text-lg font-semibold tracking-[0.42em] text-ink">
-          <span style={{ animationDelay: "0.55s" }}>M</span>
-          <span style={{ animationDelay: "0.68s" }}>A</span>
-          <span style={{ animationDelay: "0.81s" }}>R</span>
-          <span style={{ animationDelay: "0.94s" }}>Y</span>
+          {["M", "A", "R", "Y"].map((letter, index) => (
+            <span
+              key={letter}
+              style={{ animationDelay: `calc(${LETTER_DELAYS[index]} - ${elapsed})` }}
+            >
+              {letter}
+            </span>
+          ))}
         </p>
 
         {/* hairline that draws itself across, then dissolves */}
