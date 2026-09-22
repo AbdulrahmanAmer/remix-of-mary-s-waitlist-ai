@@ -800,7 +800,10 @@ export function speak(
     if (!paused || stopped) return;
     paused = false;
     if (monitorToken === token) monitor.paused = false;
-    const back = Math.min(cursor, Math.round(RATE * 0.15));
+    // A sliver of overlap so the joint is smooth, short enough not to repeat
+    // a syllable she already said.
+    const back = Math.min(cursor, Math.round(RATE * 0.05));
+
     cursor -= back;
     completed = cursor;
     trace({ type: "resume" });
