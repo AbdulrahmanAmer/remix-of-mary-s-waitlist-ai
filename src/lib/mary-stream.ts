@@ -25,13 +25,31 @@ export async function streamMaryTurn(
     experience: input.experience,
   };
 
-  const response = await fetch("/api/turn", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  // A stalled connection must never leave her thinking forever: the request is
+  // dropped if nothing arrives for a while, and she answers from here instead.
+  const controller = new AbortController();
+  let watchdog = 0;
+  const arm = (ms: number) => {
+    window.clearTimeout(watchdog);
+    watchdog = window.setTimeout(() => controller.abort(), ms);
+  };
+  arm(15000);
+
+  let response: Response;
+  try {
+    response = await fetch("/api/turn", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
+  } catch {
+    window.clearTimeout(watchdog);
+    return maryTurn({ data: body });
+  }
 
   if (!response.ok || !response.body) {
+    window.clearTimeout(watchdog);
     return maryTurn({ data: body });
   }
 
