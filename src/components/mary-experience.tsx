@@ -174,6 +174,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const flagsRef = useRef<TurnFlags>({ revealed: false, lanesDone: false });
   /** One queue for the whole call, so utterances are answered in the order they were said. */
   const chainRef = useRef<Promise<void>>(Promise.resolve());
+  const turnGenerationRef = useRef(0);
   const handleUtteranceRef = useRef<(u: Utterance) => void>(() => {});
 
   const mutedRef = useRef(false);
@@ -317,6 +318,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     async (nextLines: Line[]) => {
       busyRef.current = true;
       interruptRef.current = false;
+      // Every turn gets its own number; a turn that was overtaken by a newer
+      // one stops at its next step instead of speaking over it.
+      const generation = ++turnGenerationRef.current;
+      const stale = () => turnGenerationRef.current !== generation || interruptRef.current;
       setPresenceState("thinking");
       /** Beats the person heard all the way through this turn. */
       const heard: string[] = [];
@@ -324,7 +329,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         await say(text);
         // A cut-off flips interruptRef before the line resolves, so anything
         // that resolves without it was heard all the way through.
-        if (!interruptRef.current) heard.push(text);
+        if (!stale()) heard.push(text);
       };
       try {
         const messages = toMessages(nextLines);
@@ -339,10 +344,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         // rest of the turn is still being generated.
         let firstBeat: Promise<void> | null = null;
         let turn: MaryTurn = await streamMaryTurn(request, (text) => {
-          if (interruptRef.current) return;
+          if (stale()) return;
           if (previous.some((prev) => isNearRepeat(prev, text))) return;
           if (!firstBeat) firstBeat = deliver(text);
         });
+        if (stale()) return;
 
         // Safety net: if MARY nearly repeats a line she already said, ask for a fresh take once.
         if (!firstBeat && previous.some((prev) => isNearRepeat(prev, turn.say)) && !turn.complete) {
@@ -369,21 +375,22 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           }
         }
 
+        if (stale()) return;
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
 
-        // They cut in while she was thinking or mid-first-beat: their words are
-        // already queued as the next turn, so this one ends here.
-        if (interruptRef.current) return;
-
         if (firstBeat) await firstBeat;
         else await deliver(turn.say);
+        // They cut in while she was thinking or mid-first-beat: their words are
+        // already queued as the next turn, so this one ends here.
+        if (stale()) return;
 
-        if (turn.followUp && !interruptRef.current && !holdRef.current) {
+        if (turn.followUp && !holdRef.current) {
           // Second beat: a short breath, then the question lands as its own moment.
           await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
-          if (!interruptRef.current) await deliver(turn.followUp);
+          if (!stale() && !holdRef.current) await deliver(turn.followUp);
         }
+        if (stale()) return;
 
         // The reveal and the lanes only count once they were heard in full.
         const heardText = heard.join(" ");
@@ -394,18 +401,20 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             (turn.lanesDone && /cultivate/i.test(heardText) && /recover/i.test(heardText)),
         };
 
-        if (turn.complete && !interruptRef.current) {
+        if (turn.complete) {
           const allDone = WAITLIST_FIELDS.every((field) => turn.collected[field]);
           if (allDone) await finalize(turn.collected);
         }
       } catch {
-        if (!interruptRef.current)
-          await say("I hit a snag on my side — could you try that once more?");
+        if (!stale()) await say("I hit a snag on my side — could you try that once more?");
       } finally {
-        busyRef.current = false;
-        lastActivityRef.current = Date.now();
-        setListeningPhase(micMutedRef.current ? "paused" : "listening");
-        inputRef.current?.focus();
+        // Only the newest turn hands the floor back.
+        if (turnGenerationRef.current === generation) {
+          busyRef.current = false;
+          lastActivityRef.current = Date.now();
+          setListeningPhase(micMutedRef.current ? "paused" : "listening");
+          inputRef.current?.focus();
+        }
       }
     },
     [finalize, say],

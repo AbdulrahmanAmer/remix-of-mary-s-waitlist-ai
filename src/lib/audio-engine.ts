@@ -540,7 +540,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       if (peak > capturePeak) capturePeak = peak;
     } else {
       preRoll.push(copy);
-      if (preRoll.length > 5) preRoll.shift();
+      // Enough to catch the first syllable, short enough that a cut-in
+      // recording carries as little of her own voice as possible.
+      if (preRoll.length > 3) preRoll.shift();
     }
   };
   source.connect(processor);
