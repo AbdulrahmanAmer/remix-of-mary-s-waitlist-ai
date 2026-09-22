@@ -414,7 +414,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         collectedRef.current = turn.collected;
 
         if (firstBeat) await firstBeat;
-        else await deliver(turn.say);
+        // The streamed beat was suppressed as a repeat, so the final line must
+        // not slip the same words through the back door.
+        else if (!previous.some((prev) => isNearRepeat(prev, turn.say))) await deliver(turn.say);
         // They cut in while she was thinking or mid-first-beat: their words are
         // already queued as the next turn, so this one ends here.
         if (stale()) return;
