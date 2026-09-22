@@ -196,6 +196,7 @@ function useVisualViewport(active: boolean): { height: number; keyboard: boolean
 const IDLE_NUDGES = [
   "Whenever you're ready — you can talk to me or type it out.",
   "I'm still here. Say the word, or type it if that's easier.",
+  "No rush at all — I'll be right here when you want to pick it back up.",
 ];
 
 const FIELD_LABELS: Record<string, string> = {
@@ -1067,9 +1068,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
   useEffect(() => {
     if (stage !== "live") return;
+    // She nudges when she cannot hear you: muted, or no microphone at all.
+    const deaf = micMuted || !micLive;
+    if (!deaf) return;
     const timer = window.setInterval(() => {
-      // She only nudges when she genuinely cannot hear you.
-      if (busyRef.current || speakRef.current || !micMutedRef.current || draft.length > 0) return;
+      if (busyRef.current || speakRef.current || draft.length > 0) return;
       if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length)
         return;
       lastActivityRef.current = Date.now();
@@ -1078,7 +1081,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       if (line) void say(line);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [draft.length, micMuted, say, stage]);
+  }, [draft.length, micLive, micMuted, say, stage]);
 
   useEffect(() => {
     return () => {
