@@ -831,24 +831,29 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       return;
     }
 
+    // Speech is bursty: a syllable gap must not reset the clock, so onset is a
+    // running score that climbs on loud frames and eases off on quiet ones.
+    const scoreLoud = (loud: boolean) => {
+      loudScore = loud ? Math.min(10, loudScore + 1) : Math.max(0, loudScore - 1);
+      if (loud && !speechCandidateAt) speechCandidateAt = now;
+      if (loudScore === 0) speechCandidateAt = 0;
+      return loudScore;
+    };
+
     if (speaking) {
       // Her own voice must clear the echo model before it counts as you.
-      if (peak >= echoThreshold) {
-        if (!speechCandidateAt) speechCandidateAt = now;
-        if (now - speechCandidateAt >= 110) {
-          speechCandidateAt = 0;
-          trace({
-            type: "energy",
-            peak: Number(peak.toFixed(3)),
-            threshold: Number(echoThreshold.toFixed(3)),
-            expected: Number(echo.expectedEcho.toFixed(3)),
-            coupling: Number(echo.coupling.toFixed(2)),
-            playback: Number(monitor.level.toFixed(3)),
-          });
-          beginCandidate(false);
-        }
-      } else {
+      if (scoreLoud(peak >= echoThreshold) >= 6) {
+        loudScore = 0;
         speechCandidateAt = 0;
+        trace({
+          type: "energy",
+          peak: Number(peak.toFixed(3)),
+          threshold: Number(echoThreshold.toFixed(3)),
+          expected: Number(echo.expectedEcho.toFixed(3)),
+          coupling: Number(echo.coupling.toFixed(2)),
+          playback: Number(monitor.level.toFixed(3)),
+        });
+        beginCandidate(false);
       }
       return;
     }
@@ -856,14 +861,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const threshold = withinTail() ? echoThreshold : baseThreshold;
 
     if (peak >= threshold) {
-      if (!speechCandidateAt) speechCandidateAt = now;
       lastSpeechAt = now;
-      if (!capturing && now - speechCandidateAt >= 140) {
+      if (scoreLoud(true) >= 7 && !capturing) {
         startCapture(now, false);
         options.onSpeechStart?.();
       }
     } else if (!capturing) {
-      speechCandidateAt = 0;
+      scoreLoud(false);
       if (!withinTail()) noiseFloor = noiseFloor * 0.985 + peak * 0.015;
       // Words the level detector missed (a quiet talker) still make a turn.
       if (committed && now - lastFinalAt > 450) flush();
