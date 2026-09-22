@@ -1223,19 +1223,43 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   initial={reduced ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ ...SOFT, delay: introDelay + 0.4 }}
-                  className={`flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm ${compact ? "mt-5" : "mt-10"}`}
+                  className={`w-full overflow-hidden text-xs text-muted-foreground sm:text-sm ${compact ? "mt-5" : "mt-10"} marquee-mask`}
                 >
-                  <span>
-                    <strong className="text-ink">Convert</strong> fresh demand
-                  </span>
-                  <span className="text-border-strong">·</span>
-                  <span>
-                    <strong className="text-ink">Cultivate</strong> your database
-                  </span>
-                  <span className="text-border-strong">·</span>
-                  <span>
-                    <strong className="text-ink">Recover</strong> opportunities
-                  </span>
+                  <div className="marquee-track flex w-max items-center gap-x-8 sm:w-full sm:flex-wrap sm:justify-center sm:gap-y-2">
+                    <span>
+                      <strong className="text-ink">Convert</strong> fresh demand
+                    </span>
+                    <span className="text-border-strong">·</span>
+                    <span>
+                      <strong className="text-ink">Cultivate</strong> your database
+                    </span>
+                    <span className="text-border-strong">·</span>
+                    <span>
+                      <strong className="text-ink">Recover</strong> opportunities
+                    </span>
+                    {/* Duplicate keeps the phone marquee looping seamlessly */}
+                    <span aria-hidden="true" className="text-border-strong sm:hidden">
+                      ·
+                    </span>
+                    <span aria-hidden="true" className="sm:hidden">
+                      <strong className="text-ink">Convert</strong> fresh demand
+                    </span>
+                    <span aria-hidden="true" className="text-border-strong sm:hidden">
+                      ·
+                    </span>
+                    <span aria-hidden="true" className="sm:hidden">
+                      <strong className="text-ink">Cultivate</strong> your database
+                    </span>
+                    <span aria-hidden="true" className="text-border-strong sm:hidden">
+                      ·
+                    </span>
+                    <span aria-hidden="true" className="sm:hidden">
+                      <strong className="text-ink">Recover</strong> opportunities
+                    </span>
+                    <span aria-hidden="true" className="text-border-strong sm:hidden">
+                      ·
+                    </span>
+                  </div>
                 </motion.div>
               </div>
             </motion.section>
