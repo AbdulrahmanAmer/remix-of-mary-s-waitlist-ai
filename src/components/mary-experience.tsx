@@ -875,7 +875,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                       key={
                         listeningPhase === "hearing" || listeningPhase === "finishing"
                           ? listeningPhase
-                          : handsFree
+                          : micMuted
+
                             ? "hf"
                             : "idle"
                       }
