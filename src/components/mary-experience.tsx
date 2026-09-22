@@ -128,6 +128,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const speakRef = useRef<SpeakHandle | null>(null);
   const recorderRef = useRef<Recorder | null>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const interimRef = useRef("");
   const typingSaidRef = useRef(0);
   const nudgeRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
