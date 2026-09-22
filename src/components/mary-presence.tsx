@@ -131,20 +131,37 @@ export const MaryPresence = memo(function MaryPresence({
     let width = 0;
     let boxHeight = 0;
     let small = false;
+    /** Frame-cost relief: drops detail when the device cannot keep up. */
+    let lite = false;
+    /** Gradients are rebuilt only when their shape actually changes. */
+    const gradients = new Map<string, CanvasGradient>();
+    const q = (n: number, step: number) => Math.round(n / step) * step;
+    const cachedGradient = (key: string, make: () => CanvasGradient) => {
+      let g = gradients.get(key);
+      if (!g) {
+        g = make();
+        if (gradients.size > 240) gradients.clear();
+        gradients.set(key, g);
+      }
+      return g;
+    };
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       width = Math.max(1, rect.width);
       boxHeight = Math.max(1, rect.height);
       small = width < 360;
-      // Supersample: soft glows need >= 2x pixels or they step, whatever the screen
-      // reports. Browser zoom changes the effective ratio, so recompute it too.
+      gradients.clear();
+      // Supersample enough that soft glows do not step, but never so far that
+      // painting competes with her voice for the device. Browser zoom changes
+      // the effective ratio, so recompute it too.
       const zoom = window.visualViewport?.scale ?? 1;
       const raw = (window.devicePixelRatio || 1) * (zoom > 1 ? zoom : 1);
-      const dpr = small ? 2.5 : Math.min(4, Math.max(3, raw));
+      const dpr = Math.min(2, Math.max(1.5, raw));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(boxHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
+
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
