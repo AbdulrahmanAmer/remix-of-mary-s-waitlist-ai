@@ -298,6 +298,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   /** Bumped to ask the browser for the microphone all over again. */
   const [micAttempt, setMicAttempt] = useState(0);
   const [echoHint, setEchoHint] = useState(false);
+  /** Her voice had to be pushed to the speakers — the phone may be on silent. */
+  const [silentHint, setSilentHint] = useState(false);
   const [result, setResult] = useState<ConversationResult | null>(null);
   /** This visit's row in the browser store and in the sheet. */
   const entryIdRef = useRef<string>("session");
