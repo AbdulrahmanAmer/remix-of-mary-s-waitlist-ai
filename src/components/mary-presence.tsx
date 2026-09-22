@@ -160,11 +160,11 @@ export const MaryPresence = memo(function MaryPresence({
 
         if (i > 0) {
           const front = ((prevD + depth) / 2 + 1) / 2;
-          const a = (0.08 + front * front * 0.6) * cur.glow * (0.75 + lv * 0.4);
-          const w = ring.weight * (0.45 + front * 0.85) * (radius / 70);
+          const a = Math.min(1, (0.1 + front * front * 0.95) * cur.glow * (0.8 + lv * 0.4));
+          const w = ring.weight * (0.45 + front * 0.9) * (radius / 70);
           ctx.lineCap = "round";
           // soft bloom pass
-          ctx.strokeStyle = withAlpha(color, a * 0.24);
+          ctx.strokeStyle = withAlpha(color, a * 0.2);
           ctx.lineWidth = w * 3.6;
           ctx.beginPath();
           ctx.moveTo(prevX, prevY);
