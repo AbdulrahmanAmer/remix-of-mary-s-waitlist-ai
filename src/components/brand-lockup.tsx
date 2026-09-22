@@ -9,6 +9,7 @@ export function BrandLockup({
   wiping = false,
   hidden = false,
   revealDelay = 0,
+  slideIn = false,
 }: {
   compact?: boolean;
   centered?: boolean;
@@ -17,6 +18,8 @@ export function BrandLockup({
   /** Hidden while an overlay clone of the mark is in flight. */
   hidden?: boolean;
   revealDelay?: number;
+  /** Arrives from the side rather than simply wiping in place. */
+  slideIn?: boolean;
 }) {
   const reduced = useReducedMotion();
 
@@ -27,9 +30,11 @@ export function BrandLockup({
       className={`flex min-w-0 items-center gap-3 ${centered ? "flex-col sm:flex-row" : ""}`}
     >
       <motion.div
-        initial={reduced ? false : { clipPath: "inset(0 100% 0 0)", opacity: 0 }}
-        animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1 }}
-        transition={{ duration: 0.7, ease: EASE, delay: revealDelay }}
+        initial={
+          reduced ? false : { clipPath: "inset(0 100% 0 0)", opacity: 0, x: slideIn ? -56 : 0 }
+        }
+        animate={{ clipPath: "inset(0 0% 0 0)", opacity: 1, x: 0 }}
+        transition={{ duration: slideIn ? 0.6 : 0.7, ease: EASE, delay: revealDelay }}
         className="shrink-0"
       >
         <img
