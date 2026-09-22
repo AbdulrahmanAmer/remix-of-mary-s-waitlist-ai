@@ -1286,6 +1286,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       Math.max(baseThreshold, echo.expectedEcho * 1.7 + baseThreshold),
     );
 
+    // A hold can never outlive the sentence it was waiting for. If she has been
+    // quiet for a cut-in this long with nothing closing it, close it here.
+    if (holding && now - holdingSince > 4000) {
+      flush();
+      return;
+    }
+
     // ---- she is paused: was that really you? ----
     // Her voice takes a moment to drain out of the room after the pause, so
     // the first stretch is ignored; after that, a mic that stays loud with
