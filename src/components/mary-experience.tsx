@@ -498,7 +498,7 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -14, filter: "blur(4px)" }}
               transition={STAGE_IN}
-              className="flex flex-1 flex-col items-center justify-center py-10 text-center sm:py-14"
+              className="no-scrollbar flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto py-4 text-center"
             >
               <div className="mx-auto flex max-w-3xl flex-col items-center">
                 <motion.p
