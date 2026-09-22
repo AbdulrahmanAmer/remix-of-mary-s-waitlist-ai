@@ -239,6 +239,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       const id = uid();
       if (opts.record !== false) commitLines([...linesRef.current, { id, role: "mary", text }]);
       setReveal({ id, count: 0 });
+      // Your answer is in; the line is open again while she talks.
+      setListeningPhase((phase) =>
+        phase === "finishing" ? (micMutedRef.current ? "paused" : "listening") : phase,
+      );
 
       // Rough spoken length, used only as a floor while the audio stream fills.
       const approx = Math.max(1.4, words * 0.42);
