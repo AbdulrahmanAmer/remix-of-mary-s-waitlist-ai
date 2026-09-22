@@ -279,7 +279,11 @@ export function transcriptConfirmsInterrupt(text: string, assistantLines: string
   if (isEchoOfAssistant(clean, assistantLines)) return false;
   if (isInterruptCommand(clean)) return true;
   if (isBackchannel(clean)) return false;
-  return tokens(clean).length >= 2;
+  const all = tokens(clean);
+  const content = contentTokens(all);
+  // Two real words, or three words with at least one real one — a stray
+  // fragment like "come for" never cuts her off on its own.
+  return content.length >= 2 || (all.length >= 3 && content.length >= 1);
 }
 
 /**
@@ -310,9 +314,12 @@ export class EchoTracker {
     if (playback > 0.02) this.lastPlaybackAt = now;
 
     // Learn how much of her voice the mic hears, slowly upward, quickly downward.
+    // A sudden jump far above the known coupling is a person, not the room —
+    // that is never learned as echo.
     if (lagged > 0.06) {
       const instant = Math.min(2.5, mic / lagged);
-      const alpha = instant > this.coupling ? 0.03 : 0.12;
+      const plausible = instant <= this.coupling * 2 + 0.15;
+      const alpha = instant > this.coupling ? (plausible ? 0.03 : 0) : 0.12;
       this.coupling += alpha * (instant - this.coupling);
       if (this.coupling > this.peakCoupling) this.peakCoupling = this.coupling;
     }
