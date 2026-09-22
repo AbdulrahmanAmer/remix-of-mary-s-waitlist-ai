@@ -346,7 +346,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     recognitionRef.current = null;
 
     try {
-      const spoken = await transcribe(await recorder.stop());
+      // Live recognition has already heard the words as they were spoken, so
+      // there is nothing left to wait for. Only fall back to uploading the
+      // audio when the browser gave us nothing.
+      const live = interimRef.current.trim();
+      let spoken = live;
+      if (live) {
+        recorder.cancel();
+      } else {
+        spoken = await transcribe(await recorder.stop());
+      }
+      interimRef.current = "";
       setInterim("");
       if (spoken) {
         await sendUser(spoken);
