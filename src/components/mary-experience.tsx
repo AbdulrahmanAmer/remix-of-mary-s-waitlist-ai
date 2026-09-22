@@ -7,6 +7,7 @@ import { BrandLockup } from "./brand-lockup";
 import { MaryPresence, type PresenceState } from "./mary-presence";
 import { ProgressConstellation } from "./progress-constellation";
 import { Button } from "@/components/ui/button";
+import lockupAsset from "@/assets/omnisuite-lockup.png.asset.json";
 import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
