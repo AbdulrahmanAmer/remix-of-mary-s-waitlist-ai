@@ -1149,6 +1149,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     capturePeak = 0;
     cleanPeak = 0;
     lastSpeechAt = now;
+    lastRealSpeechAt = now;
   };
 
   function beginCandidate(fromWords: boolean) {
