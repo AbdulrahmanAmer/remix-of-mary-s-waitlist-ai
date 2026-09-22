@@ -1256,14 +1256,14 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   function beginCandidate(fromWords: boolean) {
     if (pending || holding || muted) return;
     const now = performance.now();
-    pending = { at: now, frames: 0, loud: 0, words: fromWords };
+    pending = { at: now, frames: 0, loud: 0, words: fromWords, voice: 0 };
     startCapture(now, true);
     trace({ type: "candidate", fromWords });
     options.onInterruptCandidate?.();
     // onInterruptCandidate pauses MARY synchronously. Start a fresh recognition
     // session, so none of her pre-pause transcript can be delivered as the user.
-    recognitionReopenAt = now + monitor.outputLatencyMs + 180;
-    window.setTimeout(reopenRecognition, monitor.outputLatencyMs + 190);
+    recognitionReopenAt = now + monitor.outputLatencyMs + TIMINGS.cutInSettleMs;
+    window.setTimeout(reopenRecognition, monitor.outputLatencyMs + TIMINGS.cutInSettleMs + 10);
   }
 
   const confirmInterrupt = () => {
@@ -1276,6 +1276,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   };
 
   const cancelInterrupt = () => {
+    // Only her own voice coming back through the room should teach the echo
+    // model. A cough or a chair scrape is not echo, and letting it raise the
+    // bar every time is how a call slowly goes deaf to quiet talkers.
+    const wasEchoLike = (pending?.voice ?? 0) < VOICE_KEEP;
     pending = null;
     capturing = false;
     chunks = [];
@@ -1285,8 +1289,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     committed = "";
     interim = "";
     emitInterim();
-    tracker.learnFalseInterrupt();
-    trace({ type: "cancelled", coupling: tracker.peakCoupling });
+    if (wasEchoLike) tracker.learnFalseInterrupt();
+    trace({ type: "cancelled", coupling: tracker.peakCoupling, echoLike: wasEchoLike });
     options.onInterruptCancelled?.(false);
   };
 
