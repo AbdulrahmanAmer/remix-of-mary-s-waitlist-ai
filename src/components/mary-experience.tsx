@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
+import { ArrowRight, Mic, MicOff, Send, Volume2, VolumeX } from "lucide-react";
 
 import { AuroraBackground } from "./aurora-background";
 import { BrandLockup } from "./brand-lockup";
@@ -13,10 +13,10 @@ import { streamMaryTurn } from "@/lib/mary-stream";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
   speak,
-  startRecording,
+  startMicSession,
   transcribe,
   unlockAudio,
-  type Recorder,
+  type MicSession,
   type SpeakHandle,
 } from "@/lib/audio-engine";
 
@@ -115,31 +115,29 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const [collected, setCollected] = useState<Collected>({});
   const [presence, setPresenceState] = useState<PresenceState>("idle");
   const [level, setLevel] = useState(0);
-  const [reveal, setReveal] = useState(0);
+  const [reveal, setReveal] = useState<{ id: string; count: number }>({ id: "", count: 0 });
   const [interim, setInterim] = useState("");
   const [draft, setDraft] = useState("");
-  const [recording, setRecording] = useState(false);
-  const [handsFree, setHandsFree] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
+  const [micLive, setMicLive] = useState(false);
   const [listeningPhase, setListeningPhase] = useState<ListeningPhase>("idle");
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [result, setResult] = useState<{ position: number; message: string } | null>(null);
 
   const speakRef = useRef<SpeakHandle | null>(null);
-  const recorderRef = useRef<Recorder | null>(null);
-  const recognitionRef = useRef<{ stop: () => void } | null>(null);
-  const interimRef = useRef("");
+  const sessionRef = useRef<MicSession | null>(null);
   const typingSaidRef = useRef(0);
   const nudgeRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
   const busyRef = useRef(false);
   const interruptRef = useRef(false);
-  const handsFreeRef = useRef(false);
-  const completingRef = useRef(false);
+  const micMutedRef = useRef(false);
   const sessionFinishedRef = useRef(false);
-  const startListeningRef = useRef<() => Promise<void>>(async () => {});
-  const armBargeInRef = useRef<() => Promise<void>>(async () => {});
-  const finishListeningRef = useRef<() => Promise<void>>(async () => {});
+  /** One queue for the whole call, so utterances are answered in the order they were said. */
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+  const handleUtteranceRef = useRef<(u: { text: string; audio: Blob | null }) => void>(() => {});
+
   const mutedRef = useRef(false);
   const collectedRef = useRef<Collected>({});
   const linesRef = useRef<Line[]>([]);
@@ -149,17 +147,14 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     mutedRef.current = muted;
   }, [muted]);
   useEffect(() => {
+    micMutedRef.current = micMuted;
+  }, [micMuted]);
+  useEffect(() => {
     collectedRef.current = collected;
   }, [collected]);
   useEffect(() => {
     linesRef.current = lines;
   }, [lines]);
-
-  const setHandsFreeMode = useCallback((active: boolean) => {
-    handsFreeRef.current = active;
-    setHandsFree(active);
-    if (!active) setListeningPhase("paused");
-  }, []);
 
   const stopSpeaking = useCallback(() => {
     speakRef.current?.stop();
@@ -169,8 +164,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const say = useCallback(
     (text: string, opts: { record?: boolean } = { record: true }) => {
       const words = text.split(/\s+/).filter(Boolean).length;
-      if (opts.record !== false) setLines((prev) => [...prev, { id: uid(), role: "mary", text }]);
-      setReveal(0);
+      const id = uid();
+      if (opts.record !== false) setLines((prev) => [...prev, { id, role: "mary", text }]);
+      setReveal({ id, count: 0 });
 
       // Rough spoken length, used only as a floor while the audio stream fills.
       const approx = Math.max(1.4, words * 0.42);
@@ -181,7 +177,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         let raf = 0;
         const animateWords = () => {
           const progress = Math.min(1, (performance.now() - start) / duration);
-          setReveal(Math.ceil(progress * words));
+          setReveal({ id, count: Math.ceil(progress * words) });
           if (progress < 1) raf = requestAnimationFrame(animateWords);
         };
         raf = requestAnimationFrame(animateWords);
@@ -189,7 +185,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         return new Promise<void>((resolve) => {
           window.setTimeout(() => {
             cancelAnimationFrame(raf);
-            setReveal(words);
+            setReveal({ id, count: words });
             setPresenceState("idle");
             resolve();
           }, duration);
@@ -198,13 +194,16 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
       stopSpeaking();
       setPresenceState("speaking");
+      // Her own voice in the room must not read as an interruption.
+      sessionRef.current?.setEchoGuard(true);
       const handle = speak(text, {
         onLevel: setLevel,
         approxDurationSec: approx,
         // Words land in step with the voice that is actually playing.
-        onProgress: (progress) => setReveal(Math.ceil(progress * words)),
+        onProgress: (progress) => setReveal({ id, count: Math.ceil(progress * words) }),
         onEnd: () => {
-          setReveal(words);
+          setReveal({ id, count: words });
+          sessionRef.current?.setEchoGuard(false);
           setPresenceState((current) => (current === "speaking" ? "idle" : current));
         },
       });
@@ -216,8 +215,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
   const finalize = useCallback(async (finalCollected: Collected) => {
     sessionFinishedRef.current = true;
-    handsFreeRef.current = false;
-    setHandsFree(false);
+    sessionRef.current?.setMuted(true);
+
     const transcript = linesRef.current
       .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
       .join("\n");
@@ -291,9 +290,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
 
-        // The mic stays open through her turn, so you can talk over her.
-        void armBargeInRef.current();
-
         if (firstBeat) await firstBeat;
         else await say(turn.say);
 
@@ -311,77 +307,65 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       } finally {
         busyRef.current = false;
         lastActivityRef.current = Date.now();
+        setListeningPhase(micMutedRef.current ? "paused" : "listening");
         inputRef.current?.focus();
-        if (handsFreeRef.current && !sessionFinishedRef.current) {
-          window.setTimeout(() => void startListeningRef.current(), 120);
-        }
       }
     },
     [finalize, say],
   );
 
   const sendUser = useCallback(
-    async (text: string) => {
+    (text: string) => {
       const clean = text.trim();
-      if (!clean) return;
+      if (!clean) return chainRef.current;
       // Talking (or typing) over her ends her turn immediately.
       interruptRef.current = true;
       stopSpeaking();
-      // If MARY is mid-turn, wait for her to finish rather than dropping the message.
-      while (busyRef.current) {
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
-        if (sessionFinishedRef.current) return;
-      }
-      stopSpeaking();
-      interimRef.current = "";
-      setInterim("");
-      setDraft("");
-      const next = [...linesRef.current, { id: uid(), role: "user" as const, text: clean }];
-      setLines(next);
-      linesRef.current = next;
-      await runTurn(next);
+      // One queue: anything said while she is mid-turn is answered next, in order.
+      const run = chainRef.current
+        .then(async () => {
+          if (sessionFinishedRef.current) return;
+          stopSpeaking();
+          setInterim("");
+          setDraft("");
+          const next = [...linesRef.current, { id: uid(), role: "user" as const, text: clean }];
+          setLines(next);
+          linesRef.current = next;
+          await runTurn(next);
+        })
+        .catch(() => {});
+      chainRef.current = run;
+      return run;
     },
     [runTurn, stopSpeaking],
   );
 
-  const finishListening = useCallback(async () => {
-    if (completingRef.current) return;
-    const recorder = recorderRef.current;
-    if (!recorder) return;
-    completingRef.current = true;
-    recorderRef.current = null;
-    setRecording(false);
-    setListeningPhase("finishing");
-    setPresenceState("thinking");
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-
-    try {
-      // Live recognition has already heard the words as they were spoken, so
-      // there is nothing left to wait for. Only fall back to uploading the
-      // audio when the browser gave us nothing.
-      const live = interimRef.current.trim();
-      let spoken = live;
-      if (live) {
-        recorder.cancel();
-      } else {
-        spoken = await transcribe(await recorder.stop());
+  /** A complete utterance came off the open line. */
+  const handleUtterance = useCallback(
+    async ({ text, audio }: { text: string; audio: Blob | null }) => {
+      if (sessionFinishedRef.current || micMutedRef.current) return;
+      let spoken = text.trim();
+      if (!spoken && audio) {
+        setListeningPhase("finishing");
+        setPresenceState("thinking");
+        try {
+          spoken = (await transcribe(audio)).trim();
+        } catch {
+          spoken = "";
+        }
       }
-      interimRef.current = "";
       setInterim("");
-      if (spoken) {
-        await sendUser(spoken);
-      } else if (handsFreeRef.current && !sessionFinishedRef.current) {
-        setPresenceState("idle");
+      if (!spoken) {
         setListeningPhase("listening");
-        window.setTimeout(() => void startListeningRef.current(), 350);
+        setPresenceState((current) => (current === "hearing" ? "idle" : current));
+        return;
       }
-    } finally {
-      completingRef.current = false;
-    }
-  }, [sendUser]);
+      void sendUser(spoken);
+    },
+    [sendUser],
+  );
 
-  finishListeningRef.current = finishListening;
+  handleUtteranceRef.current = (utterance) => void handleUtterance(utterance);
 
   const enterLive = useCallback(async () => {
     setStage("live");
@@ -434,160 +418,77 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     }, 2800);
   }, [enterLive, reduced]);
 
-  const startInterim = useCallback(() => {
-    const Ctor =
-      (window as unknown as { SpeechRecognition?: new () => never }).SpeechRecognition ??
-      (window as unknown as { webkitSpeechRecognition?: new () => never }).webkitSpeechRecognition;
-    if (!Ctor) return;
-    try {
-      const recognition = new Ctor() as unknown as {
-        continuous: boolean;
-        interimResults: boolean;
-        lang: string;
-        onresult: (event: {
-          results: { [key: number]: { 0: { transcript: string } }; length: number };
-        }) => void;
-        start: () => void;
-        stop: () => void;
-      };
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-      recognition.onresult = (event) => {
-        let text = "";
-        for (let i = 0; i < event.results.length; i++) text += event.results[i]![0].transcript;
-        interimRef.current = text.trim();
-        setInterim(text.trim());
-      };
-      recognition.start();
-      recognitionRef.current = recognition;
-    } catch {
-      // Interim captions are optional.
+  // The line opens itself the moment the conversation starts and stays open,
+  // exactly like a phone call. Nothing is torn down between turns.
+  useEffect(() => {
+    if (stage !== "live") return;
+    let cancelled = false;
+    let session: MicSession | null = null;
+
+    void (async () => {
+      try {
+        session = await startMicSession({
+          onLevel: setLevel,
+          onInterim: (text) => setInterim(text),
+          onSpeechStart: () => {
+            lastActivityRef.current = Date.now();
+            // The first word from you stops her mid-sentence.
+            interruptRef.current = true;
+            speakRef.current?.stop();
+            speakRef.current = null;
+            setListeningPhase("hearing");
+            setPresenceState("hearing");
+          },
+          onUtterance: (utterance) => handleUtteranceRef.current(utterance),
+        });
+        if (cancelled) {
+          session.close();
+          return;
+        }
+        sessionRef.current = session;
+        session.setMuted(micMutedRef.current);
+        setMicLive(true);
+        setMicError(null);
+        setListeningPhase(micMutedRef.current ? "paused" : "listening");
+      } catch {
+        setMicLive(false);
+        setMicError("Microphone access is off. You can keep the conversation going by typing.");
+        inputRef.current?.focus();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      sessionRef.current = null;
+      setMicLive(false);
+      session?.close();
+    };
+  }, [stage]);
+
+  /** Mute keeps the call open but stops her hearing you. */
+  const toggleMicMute = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    const next = !micMutedRef.current;
+    micMutedRef.current = next;
+    setMicMuted(next);
+    sessionRef.current?.setMuted(next);
+    setInterim("");
+    setLevel(0);
+    if (next) {
+      setListeningPhase("paused");
+      setPresenceState((current) =>
+        current === "hearing" || current === "listening" ? "idle" : current,
+      );
+    } else {
+      setListeningPhase("listening");
     }
   }, []);
-
-  const startListening = useCallback(async () => {
-    if (
-      !handsFreeRef.current ||
-      busyRef.current ||
-      sessionFinishedRef.current ||
-      recorderRef.current ||
-      completingRef.current
-    ) {
-      return;
-    }
-
-    stopSpeaking();
-    try {
-      const recorder = await startRecording({
-        onLevel: setLevel,
-        onSpeechStart: () => {
-          setListeningPhase("hearing");
-          setPresenceState("hearing");
-        },
-        onSilence: () => void finishListeningRef.current(),
-        onMaxDuration: () => void finishListeningRef.current(),
-      });
-      if (!handsFreeRef.current || sessionFinishedRef.current) {
-        recorder.cancel();
-        return;
-      }
-      recorderRef.current = recorder;
-      setRecording(true);
-      setMicError(null);
-      setListeningPhase("listening");
-      setPresenceState("listening");
-      startInterim();
-    } catch {
-      setHandsFreeMode(false);
-      setMicError("Microphone access is off. You can keep the conversation going by typing.");
-      inputRef.current?.focus();
-    }
-  }, [setHandsFreeMode, startInterim, stopSpeaking]);
-
-  startListeningRef.current = startListening;
-
-  /** Listens while MARY is talking: the first real word from you stops her. */
-  const armBargeIn = useCallback(async () => {
-    if (
-      !handsFreeRef.current ||
-      recorderRef.current ||
-      sessionFinishedRef.current ||
-      completingRef.current
-    ) {
-      return;
-    }
-    try {
-      let interrupted = false;
-      const recorder = await startRecording({
-        // Her own voice through the speakers must not count as an interruption.
-        thresholdScale: 2.4,
-        onLevel: (value) => {
-          if (interrupted) setLevel(value);
-        },
-        onSpeechStart: () => {
-          interrupted = true;
-          stopSpeaking();
-          setRecording(true);
-          setListeningPhase("hearing");
-          setPresenceState("hearing");
-        },
-        onSilence: () => {
-          if (interrupted) void finishListeningRef.current();
-        },
-        onMaxDuration: () => {
-          if (interrupted) void finishListeningRef.current();
-        },
-      });
-      if (!handsFreeRef.current || sessionFinishedRef.current || recorderRef.current) {
-        recorder.cancel();
-        return;
-      }
-      recorderRef.current = recorder;
-      startInterim();
-    } catch {
-      // Barge-in is a bonus; the conversation works without it.
-    }
-  }, [startInterim, stopSpeaking]);
-
-  armBargeInRef.current = armBargeIn;
-
-  const toggleMic = useCallback(async () => {
-    lastActivityRef.current = Date.now();
-    if (handsFreeRef.current) {
-      setHandsFreeMode(false);
-      setRecording(false);
-      setPresenceState("idle");
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
-      const recorder = recorderRef.current;
-      recorderRef.current = null;
-      recorder?.cancel();
-      interimRef.current = "";
-      setInterim("");
-      return;
-    }
-
-    setHandsFreeMode(true);
-    await startListening();
-  }, [setHandsFreeMode, startListening]);
 
   const onDraftChange = useCallback(
     (value: string) => {
       const wasEmpty = draft.length === 0;
       setDraft(value);
       lastActivityRef.current = Date.now();
-      if (wasEmpty && value && recorderRef.current) {
-        recorderRef.current.cancel();
-        recorderRef.current = null;
-        recognitionRef.current?.stop();
-        recognitionRef.current = null;
-        setRecording(false);
-        interimRef.current = "";
-        setInterim("");
-        setListeningPhase("paused");
-        setPresenceState("idle");
-      }
       if (
         wasEmpty &&
         value &&
@@ -607,7 +508,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   useEffect(() => {
     if (stage !== "live") return;
     const timer = window.setInterval(() => {
-      if (busyRef.current || recording || handsFree || draft.length > 0) return;
+      // She only nudges when she genuinely cannot hear you.
+      if (busyRef.current || !micMutedRef.current || draft.length > 0) return;
       if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length)
         return;
       lastActivityRef.current = Date.now();
@@ -616,13 +518,12 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       if (line) void say(line);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [draft.length, handsFree, recording, say, stage]);
+  }, [draft.length, micMuted, say, stage]);
 
   useEffect(() => {
     return () => {
       speakRef.current?.stop();
-      recorderRef.current?.cancel();
-      recognitionRef.current?.stop();
+      sessionRef.current?.close();
     };
   }, []);
 
@@ -637,8 +538,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     node.scrollTop = node.scrollHeight;
   }, [lines, interim, stage, viewportHeight]);
 
-  const lastMary = [...lines].reverse().find((line) => line.role === "mary");
-  const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
+  // The centre holds her latest line; everything before it stays in order above.
+  const last = lines[lines.length - 1];
+  const lastMary = last?.role === "mary" ? last : undefined;
+  const history = (lastMary ? lines.slice(0, -1) : lines).slice(-6);
+
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
   const tight = viewportHeight < 620;
@@ -849,7 +753,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                             key={`${lastMary.id}-${index}`}
                             initial={false}
                             animate={
-                              index < reveal
+                              reveal.id !== lastMary.id || index < reveal.count
                                 ? { opacity: 1, y: 0, filter: "blur(0px)" }
                                 : { opacity: 0.22, y: 3, filter: "blur(1.5px)" }
                             }
@@ -897,7 +801,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   animate={
                     reduced
                       ? { scale: 1 }
-                      : recording || presence === "speaking"
+                      : presence === "hearing" || presence === "speaking"
                         ? { scale: pulseScale }
                         : { scale: 1 }
                   }
@@ -905,17 +809,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   className="surface-floating mx-auto flex w-full max-w-xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
-                    onClick={toggleMic}
+                    onClick={toggleMicMute}
                     whileTap={reduced ? {} : { scale: 0.94 }}
                     whileHover={reduced ? {} : { scale: 1.04 }}
                     transition={SPRING}
-                    aria-label={
-                      handsFree ? "Pause hands-free listening" : "Start hands-free listening"
-                    }
+                    aria-label={micMuted ? "Unmute your microphone" : "Mute your microphone"}
                     size="icon"
-                    className={`surface-raised relative size-11 shrink-0 rounded-full ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
+                    className={`surface-raised relative size-11 shrink-0 rounded-full ${micMuted ? "" : "bg-primary text-primary-foreground"}`}
                   >
-                    {handsFree ? <Square className="fill-current" /> : <Mic />}
+                    {micMuted ? <MicOff /> : <Mic />}
                   </MotionButton>
                   <textarea
                     ref={inputRef}
@@ -933,8 +835,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                         ? "I can hear you…"
                         : listeningPhase === "finishing"
                           ? "Finishing your answer…"
-                          : handsFree
-                            ? "Listening — or type your answer"
+                          : micMuted
+                            ? "Muted — type your answer"
                             : "Speak or type your answer"
                     }
                     className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
@@ -966,9 +868,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                       key={
                         listeningPhase === "hearing" || listeningPhase === "finishing"
                           ? listeningPhase
-                          : handsFree
-                            ? "hf"
-                            : "idle"
+                          : micMuted
+                            ? "muted"
+                            : "live"
                       }
                       initial={reduced ? false : { opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -979,9 +881,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                         ? "Keep speaking — MARY replies when you finish."
                         : listeningPhase === "finishing"
                           ? "Got it. MARY is preparing her reply."
-                          : handsFree
-                            ? "Hands-free is on. Speak naturally; no second tap needed."
-                            : "Tap the microphone once for hands-free conversation, or type anytime."}
+                          : micMuted
+                            ? "Your microphone is muted. Unmute to keep talking, or type."
+                            : "MARY is listening. Just talk — she answers when you pause."}
                     </motion.p>
                   </AnimatePresence>
                 </div>
