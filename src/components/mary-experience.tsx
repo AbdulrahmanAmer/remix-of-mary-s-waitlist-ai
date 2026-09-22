@@ -616,7 +616,7 @@ export function MaryExperience() {
                 <motion.div
                   layout
                   transition={SPRING}
-                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto"
+                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto pr-7 md:pr-0"
                 >
                   <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
