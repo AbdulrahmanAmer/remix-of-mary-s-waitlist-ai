@@ -1002,14 +1002,14 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 filter: "blur(0px)",
               }}
               animate={{
-                x: [flight.from.x, flight.mid.x, flight.mid.x, flight.to.x],
-                y: [flight.from.y, flight.mid.y, flight.mid.y, flight.to.y],
-                width: [flight.from.w, flight.mid.w, flight.mid.w * 1.06, flight.to.w],
+                x: [flight.from.x, flight.mid.x, flight.mid.x, flight.mid.x],
+                y: [flight.from.y, flight.mid.y, flight.mid.y, flight.mid.y - 10],
+                width: [flight.from.w, flight.mid.w, flight.mid.w, flight.mid.w * 1.12],
                 opacity: [1, 1, 1, 0],
-                filter: ["blur(0px)", "blur(0px)", "blur(0px)", "blur(3px)"],
+                filter: ["blur(0px)", "blur(0px)", "blur(0px)", "blur(5px)"],
               }}
               exit={{ opacity: 0, transition: { duration: 0.12 } }}
-              transition={{ duration: 1.05, times: [0, 0.52, 0.72, 1], ease: EASE }}
+              transition={{ duration: 1.02, times: [0, 0.5, 0.78, 1], ease: EASE }}
             />
           )}
         </AnimatePresence>
