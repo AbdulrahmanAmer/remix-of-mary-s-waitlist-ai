@@ -71,6 +71,29 @@ export function isAffirmation(text: string): boolean {
   return !list.some((t) => NEGATION.has(t));
 }
 
+/** "Jon" vs "John": one edit apart, which is what speech recognition does to names. */
+export function nearWord(a: string, b: string): boolean {
+  if (a === b) return true;
+  if (Math.min(a.length, b.length) < 3 || Math.abs(a.length - b.length) > 1) return false;
+  let i = 0;
+  let j = 0;
+  let edits = 0;
+  while (i < a.length && j < b.length) {
+    if (a[i] === b[j]) {
+      i += 1;
+      j += 1;
+      continue;
+    }
+    if (++edits > 1) return false;
+    if (a.length === b.length) {
+      i += 1;
+      j += 1;
+    } else if (a.length > b.length) i += 1;
+    else j += 1;
+  }
+  return edits + (a.length - i) + (b.length - j) <= 1;
+}
+
 function overlap(quote: string, message: string): number {
   const q = tokens(quote);
   if (q.length === 0) return 0;
