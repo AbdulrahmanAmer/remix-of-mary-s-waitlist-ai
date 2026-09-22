@@ -25,6 +25,13 @@ import {
 
 const RATE = 24000;
 
+/** Optional event tap for diagnostics (`window.__maryTrace`). No-op otherwise. */
+function trace(event: Record<string, unknown>) {
+  const hook = (window as unknown as { __maryTrace?: (e: Record<string, unknown>) => void })
+    .__maryTrace;
+  if (hook) hook({ t: Math.round(performance.now()), ...event });
+}
+
 let sharedContext: AudioContext | null = null;
 
 export function getAudioContext(): AudioContext {
@@ -697,12 +704,15 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const now = performance.now();
     pending = { at: now, frames: 0, loud: 0, words: fromWords };
     startCapture(now, true);
+    trace({ type: "candidate", fromWords });
     options.onInterruptCandidate?.();
   }
 
   const confirmInterrupt = () => {
+    const words = pending?.words ?? false;
     pending = null;
     holding = true;
+    trace({ type: "confirmed", words });
     options.onInterruptConfirmed?.();
   };
 
@@ -716,6 +726,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     interim = "";
     emitInterim();
     tracker.learnFalseInterrupt();
+    trace({ type: "cancelled", coupling: tracker.peakCoupling });
     options.onInterruptCancelled?.();
   };
 
@@ -737,6 +748,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       text = stripAssistantEcho(text, lines);
       if (text && isEchoOfAssistant(text, lines)) text = "";
     }
+    trace({ type: "utterance", text, durationMs: Math.round(durationMs), peak, over: utteranceOverAssistant || wasHolding });
     options.onUtterance({
       text,
       audio,
