@@ -69,6 +69,25 @@ export function AudioDiagnostics() {
           good: d.voiceScore < 0 ? undefined : d.voiceScore >= 32,
         },
         {
+          label: "You above the room",
+          value: d.ownVoiceLevel < 0 ? "—" : `${d.nearFieldMarginDb} dB`,
+          good: d.ownVoiceLevel < 0 ? undefined : d.nearFieldMarginDb >= 9,
+        },
+        {
+          label: "Your usual level",
+          value: d.ownVoiceLevel < 0 ? "—" : `${d.ownVoiceLevel}%`,
+        },
+        {
+          label: "Voices around you",
+          value: d.roomVoiceLevel < 0 ? "—" : `${d.roomVoiceLevel}%`,
+        },
+        {
+          label: "Last ten: for her?",
+          value: d.addresseeVerdicts.length
+            ? d.addresseeVerdicts.map((v) => (v === "mary" ? "•" : v === "ambient" ? "·" : "?")).join(" ")
+            : "—",
+        },
+        {
           label: "Live captions",
           value: d.speechRecognition ? "supported" : "not supported",
           good: d.speechRecognition,
