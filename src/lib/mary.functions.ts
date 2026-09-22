@@ -149,6 +149,7 @@ export const maryTurn = createServerFn({ method: "POST" })
 
       return {
         say: out.say.trim(),
+        followUp: out.followUp?.trim() ? out.followUp.trim() : null,
         collected,
         nextField: out.nextField,
         complete: out.complete,
@@ -158,6 +159,7 @@ export const maryTurn = createServerFn({ method: "POST" })
       if (NoObjectGeneratedError.isInstance(error)) {
         return {
           say: "Sorry — I lost my train of thought there. Could you say that once more?",
+          followUp: null,
           collected: data.collected as Collected,
           nextField: "none",
           complete: false,
