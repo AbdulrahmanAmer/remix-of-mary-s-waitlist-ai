@@ -758,7 +758,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                             key={`${lastMary.id}-${index}`}
                             initial={false}
                             animate={
-                              index < reveal
+                              reveal.id !== lastMary.id || index < reveal.count
                                 ? { opacity: 1, y: 0, filter: "blur(0px)" }
                                 : { opacity: 0.22, y: 3, filter: "blur(1.5px)" }
                             }
