@@ -32,40 +32,38 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
   --color-ink: var(--ink);
-  --color-aurora-1: var(--aurora-1);
-  --color-aurora-2: var(--aurora-2);
-  --color-aurora-3: var(--aurora-3);
-  --color-glass: var(--glass);
+  --color-surface: var(--surface);
+  --color-border-strong: var(--border-strong);
+  --color-accent-text: var(--accent-text);
   --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "DM Sans", ui-sans-serif, system-ui, sans-serif;
 }
 
 :root {
   --radius: 0.875rem;
-  --ink: oklch(0.16 0.026 265);
-  --background: oklch(0.14 0.024 266);
-  --foreground: oklch(0.975 0.008 260);
-  --card: oklch(0.2 0.028 266);
-  --card-foreground: oklch(0.975 0.008 260);
-  --popover: oklch(0.2 0.028 266);
-  --popover-foreground: oklch(0.975 0.008 260);
-  --primary: oklch(0.72 0.17 258);
-  --primary-foreground: oklch(0.14 0.024 266);
-  --secondary: oklch(0.26 0.03 266);
-  --secondary-foreground: oklch(0.975 0.008 260);
-  --muted: oklch(0.26 0.03 266);
-  --muted-foreground: oklch(0.72 0.022 262);
-  --accent: oklch(0.78 0.15 195);
-  --accent-foreground: oklch(0.14 0.024 266);
+  --ink: oklch(0.15 0.01 110);
+  --background: oklch(0.985 0.004 95);
+  --foreground: var(--ink);
+  --surface: oklch(0.965 0.005 95);
+  --card: oklch(0.995 0.002 95);
+  --card-foreground: var(--ink);
+  --popover: var(--card);
+  --popover-foreground: var(--ink);
+  --primary: oklch(0.79 0.175 118);
+  --primary-foreground: oklch(0.15 0.01 110);
+  --secondary: oklch(0.62 0.19 268);
+  --secondary-foreground: oklch(0.99 0 0);
+  --muted: var(--surface);
+  --muted-foreground: oklch(0.43 0.015 110);
+  --accent: var(--primary);
+  --accent-foreground: var(--ink);
+  --accent-text: oklch(0.42 0.11 118);
   --destructive: oklch(0.63 0.21 22);
   --destructive-foreground: oklch(0.98 0.005 260);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 14%);
-  --ring: oklch(0.72 0.17 258);
-  --aurora-1: oklch(0.6 0.2 268);
-  --aurora-2: oklch(0.72 0.16 196);
-  --aurora-3: oklch(0.66 0.19 322);
-  --glass: oklch(1 0 0 / 6%);
+  --border: oklch(0.15 0.01 110 / 10%);
+  --border-strong: oklch(0.15 0.01 110 / 19%);
+  --input: oklch(0.15 0.01 110 / 14%);
+  --ring: var(--primary);
 }
 
 .dark {
@@ -78,7 +76,7 @@
   }
 
   html {
-    color-scheme: dark;
+    color-scheme: light;
   }
 
   body {
@@ -93,29 +91,41 @@
   h3,
   .font-display {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: 0;
   }
 }
 
-@utility glass-panel {
-  background-color: var(--glass);
-  backdrop-filter: blur(24px) saturate(140%);
-  border: 1px solid oklch(1 0 0 / 10%);
+@utility eyebrow {
+  color: var(--accent-text);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
 }
 
-@utility text-gradient {
-  background-image: linear-gradient(
-    100deg,
-    oklch(0.99 0.01 260),
-    oklch(0.82 0.13 258) 45%,
-    oklch(0.84 0.12 196)
-  );
-  background-clip: text;
-  color: transparent;
+@utility wordmark {
+  font-family: var(--font-display);
+  font-weight: 700;
 }
 
-@utility grain-overlay {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)' opacity='0.35'/%3E%3C/svg%3E");
+@utility shadow-soft {
+  box-shadow: 0 12px 32px oklch(0.15 0.01 110 / 7%);
+}
+
+@utility shadow-lift {
+  box-shadow: 0 24px 70px oklch(0.15 0.01 110 / 10%);
+}
+
+@utility hairline-grid {
+  background-image:
+    linear-gradient(to right, oklch(0.15 0.01 110 / 4%) 1px, transparent 1px),
+    linear-gradient(to bottom, oklch(0.15 0.01 110 / 4%) 1px, transparent 1px);
+  background-size: 52px 52px;
+  mask-image: linear-gradient(to bottom, black, transparent 78%);
+}
+
+@utility brand-wash {
+  background: linear-gradient(to bottom, oklch(0.79 0.175 118 / 10%), transparent);
 }
 
 @media (prefers-reduced-motion: reduce) {

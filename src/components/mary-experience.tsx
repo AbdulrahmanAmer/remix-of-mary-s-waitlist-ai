@@ -362,8 +362,8 @@ export function MaryExperience() {
                   <MotionButton
                     onClick={begin}
                     size="lg"
-                    whileHover={reduced ? undefined : { y: -2 }}
-                    whileTap={reduced ? undefined : { y: 1 }}
+                    whileHover={reduced ? false : { y: -2 }}
+                    whileTap={reduced ? false : { y: 1 }}
                     className="h-12 rounded-full px-7 shadow-soft"
                   >
                     Talk to MARY <ArrowRight />
@@ -480,7 +480,7 @@ export function MaryExperience() {
                   >
                     <MotionButton
                       onClick={toggleMic}
-                      whileTap={reduced ? undefined : { scale: 0.94 }}
+                      whileTap={reduced ? false : { scale: 0.94 }}
                       aria-label={recording ? "Stop and send" : "Talk to MARY"}
                       size="icon"
                       className={`relative size-11 shrink-0 rounded-lg ${recording ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}`}
