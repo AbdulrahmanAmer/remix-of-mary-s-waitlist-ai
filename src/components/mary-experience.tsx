@@ -1018,6 +1018,12 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   // switch is the usual culprit — say so plainly, once.
   useEffect(() => {
     if (stage !== "live" || silentHint) return;
+    // Only iPhones and iPads have the silent switch this hint is about; on
+    // other browsers the plain route is a normal fallback, not a problem.
+    const apple =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (!apple) return;
     const timer = window.setInterval(() => {
       if (audioDiagnostics().directOutput) setSilentHint(true);
     }, 1000);
