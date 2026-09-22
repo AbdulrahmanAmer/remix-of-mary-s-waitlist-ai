@@ -1,6 +1,13 @@
 # Roadmap
 
+## Now
+- [ ] Phone layout: long user messages render as a proper bubble (no circle), composer locked above the keyboard, nothing slips under the screen, progress rail moves out of the text on narrow screens
+- [ ] MARY learns: after every conversation she writes field notes (what worked, what stalled, objections) that feed her next conversations — kept in the browser and, once connected, in the Google Sheet
+- [ ] Google Sheet: Apps Script receiver (Waitlist + Experience + Activity tabs), lead upsert by session, real waitlist position, partial rows for people who leave mid-conversation
+- [ ] Closing: she confirms and says goodbye properly for sign-up, callback and decline; the end screen is personal, shows the confirmed position, what happens next, and the details captured
+
 ## Next
+- [ ] Cut-in confirmation should be echo-aware (compare against the echo model's expected tail, not only the room floor) and require words when speaker coupling is high
 - [ ] Move the microphone graph from ScriptProcessorNode to an AudioWorklet
 - [ ] Scripted /api/turn conversations for the edge cases (ambiguous "a shop", one-word "consulting", guess-correction) as a repeatable check
 

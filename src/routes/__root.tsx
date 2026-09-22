@@ -76,7 +76,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      {
+        name: "viewport",
+        // resizes-content: the layout shrinks with the on-screen keyboard, so the
+        // composer stays above it. viewport-fit: safe-area insets are real.
+        content:
+          "width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content",
+      },
       { name: "author", content: "Omnikom" },
       { name: "theme-color", content: "#f8f7f2" },
     ],

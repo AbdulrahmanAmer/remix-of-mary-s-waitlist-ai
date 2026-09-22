@@ -63,6 +63,26 @@ export type MaryTurn = {
   rejected: string[];
 };
 
+/** A field note from an earlier conversation, as the browser sends it along. */
+export const ClientLessonSchema = z.object({
+  category: z.enum([
+    "opening",
+    "name",
+    "discovery",
+    "objection",
+    "reveal",
+    "contact",
+    "callback",
+    "close",
+    "pacing",
+    "industry",
+  ]),
+  lesson: z.string().max(240),
+  industry: z.string().max(60).nullable().default(null),
+  confidence: z.number().min(1).max(5).default(3),
+  at: z.string().max(40).default(""),
+});
+
 export const TurnInput = z.object({
   messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
   collected: z.record(z.string(), z.string()).default({}),
@@ -76,6 +96,8 @@ export const TurnInput = z.object({
       rejected: z.array(z.string()).optional(),
     })
     .default({ revealed: false, lanesDone: false }),
+  /** Lessons kept in this browser; merged on the server with the pooled ones. */
+  experience: z.array(ClientLessonSchema).max(24).optional(),
 });
 
 export type TurnInputData = z.infer<typeof TurnInput>;
@@ -93,13 +115,15 @@ export const maryTurn = createServerFn({ method: "POST" })
 
     const { SYSTEM, TurnSchema, buildPrompt, finishTurn, gatewayConfig } =
       await import("./mary-prompt.server");
+    const { experienceForTurn } = await import("./mary-experience.server");
     const lovable = createOpenAI(gatewayConfig(key));
+    const experience = await experienceForTurn(data.experience, data.collected["industry"]);
 
     try {
       const result = streamText({
         model: lovable.responses("openai/gpt-6-astra"),
         system: SYSTEM,
-        prompt: buildPrompt(data.messages, data.collected, data.flags),
+        prompt: buildPrompt(data.messages, data.collected, data.flags, experience),
         output: Output.object({ schema: TurnSchema }),
         providerOptions: {
           openai: { forceReasoning: true, reasoningEffort: "low", store: false },

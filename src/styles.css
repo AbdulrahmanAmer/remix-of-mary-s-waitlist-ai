@@ -169,6 +169,25 @@
   }
 }
 
+/* Older lines dissolve at the top of the thread instead of being sliced by
+   the scroller's edge. */
+@utility trail-fade {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 2.25rem,
+    black calc(100% - 0.5rem),
+    black 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    black 2.25rem,
+    black calc(100% - 0.5rem),
+    black 100%
+  );
+}
+
 /* Crafted 2.5D control surfaces: raised paper with a light top edge,
    a grounded shadow that presses in on click, and a sheen on hover. */
 @utility surface-raised {
@@ -490,7 +509,6 @@
   animation: mary-boot-glow-out 0.8s ease-out both;
   animation-delay: 0s;
 }
-
 
 @keyframes mary-boot-out {
   from {

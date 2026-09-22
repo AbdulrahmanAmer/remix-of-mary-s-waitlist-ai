@@ -9,6 +9,7 @@ import {
   finishTurn,
   gatewayConfig,
 } from "@/lib/mary-prompt.server";
+import { experienceForTurn } from "@/lib/mary-experience.server";
 import { TurnInput } from "@/lib/mary.functions";
 
 /**
@@ -34,11 +35,15 @@ export const Route = createFileRoute("/api/turn")({
           return new Response("Invalid body", { status: 400 });
         }
 
+        // What she has learned so far rides into the prompt — bounded by a
+        // short budget so a slow sheet can never delay her reply.
+        const experience = await experienceForTurn(data.experience, data.collected["industry"]);
+
         const lovable = createOpenAI(gatewayConfig(key));
         const result = streamText({
           model: lovable.responses("openai/gpt-6-astra"),
           system: SYSTEM,
-          prompt: buildPrompt(data.messages, data.collected, data.flags),
+          prompt: buildPrompt(data.messages, data.collected, data.flags, experience),
           output: Output.object({ schema: TurnSchema }),
           providerOptions: {
             openai: { forceReasoning: true, reasoningEffort: "low", store: false },
