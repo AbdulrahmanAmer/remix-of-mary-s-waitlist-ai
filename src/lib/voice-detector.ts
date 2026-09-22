@@ -148,3 +148,76 @@ export const VOICE_ONSET = 0.5;
 export const VOICE_KEEP = 0.32;
 /** Cutting in over her needs to look clearly like a person, not a clatter. */
 export const VOICE_INTERRUPT = 0.58;
+
+/**
+ * Near-field model: the person on the microphone against the voices around them.
+ *
+ * Voice shape alone cannot do this — everyone in a conference hall has a human
+ * voice. What separates the person holding the device is distance: their mouth
+ * is centimetres from the microphone and everybody else is metres away, which
+ * on a single omnidirectional microphone is worth many dB. So the model keeps
+ * two levels: how loud this person is when they really speak to her, and how
+ * loud the voice-shaped sound that never becomes a turn is. Speech has to sit
+ * near the first and clearly above the second.
+ */
+export class NearFieldModel {
+  /** Typical peak of confirmed, addressed-to-her speech. */
+  private own = 0;
+  /** Typical peak of voice-shaped sound that never became a turn. */
+  private ambient = 0;
+  private confirmations = 0;
+
+  reset() {
+    this.own = 0;
+    this.ambient = 0;
+    this.confirmations = 0;
+  }
+
+  /** True once enough real turns have been seen to judge by. */
+  get trained() {
+    return this.confirmations >= 2 && this.own > 0.01;
+  }
+
+  get ownLevel() {
+    return this.own;
+  }
+
+  get ambientLevel() {
+    return this.ambient;
+  }
+
+  /** A turn that really was this person: their level is now known better. */
+  learnOwn(peak: number) {
+    if (peak <= 0.005) return;
+    this.confirmations += 1;
+    // Rises quickly (a new, louder speaker is believed at once) and falls
+    // slowly, so one quiet sentence cannot drag the bar down into the room.
+    this.own = this.own === 0 ? peak : peak > this.own ? this.own * 0.6 + peak * 0.4 : this.own * 0.93 + peak * 0.07;
+  }
+
+  /** Voice-shaped sound that turned out not to be them. */
+  learnAmbient(peak: number) {
+    if (peak <= 0.002) return;
+    this.ambient = this.ambient === 0 ? peak : this.ambient * 0.9 + peak * 0.1;
+  }
+
+  /** How far this frame sits above the room's own voices, in dB. */
+  marginDb(peak: number) {
+    const base = Math.max(this.ambient, 0.004);
+    return 20 * Math.log10((peak + 1e-6) / base);
+  }
+
+  /**
+   * Could this frame be the person on the microphone?
+   *
+   * @param marginDb How far above the room's voices a frame must sit.
+   */
+  isNearField(peak: number, marginDb: number) {
+    if (this.ambient > 0 && this.marginDb(peak) < marginDb) return false;
+    // Until she has heard them properly, only distance from the room is known.
+    if (!this.trained) return true;
+    // A person does not suddenly become eight times quieter; anything that far
+    // below their known level is somebody else in the room.
+    return peak >= this.own * 0.3;
+  }
+}
