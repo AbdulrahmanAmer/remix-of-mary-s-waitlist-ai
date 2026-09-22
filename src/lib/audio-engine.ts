@@ -104,6 +104,16 @@ let primedStream: MediaStream | null = null;
 let voiceReading: VoiceReading | null = null;
 /** What the microphone actually agreed to do (echo cancellation and friends). */
 let micProcessing = "";
+/** The person on the mic against the voices around them, for the sound check. */
+let nearFieldSnapshot: { own: number; ambient: number; marginDb: number } | null = null;
+/** The last few verdicts on who a stretch of speech was for. */
+const addresseeLog: string[] = [];
+
+/** Recorded by the experience so the sound check can show what she decided. */
+export function noteAddresseeVerdict(verdict: string) {
+  addresseeLog.push(verdict);
+  if (addresseeLog.length > 10) addresseeLog.shift();
+}
 
 /** Thrown when the device/browser simply cannot do live audio at all. */
 export class AudioUnsupportedError extends Error {}
