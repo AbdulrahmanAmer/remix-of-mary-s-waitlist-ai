@@ -1169,6 +1169,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const words = pending?.words ?? false;
     pending = null;
     holding = true;
+    holdingSince = performance.now();
     trace({ type: "confirmed", words });
     options.onInterruptConfirmed?.();
   };
