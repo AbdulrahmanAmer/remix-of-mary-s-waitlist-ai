@@ -532,7 +532,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.12 }}
-                  className="mt-5 text-balance text-5xl font-semibold leading-[0.98] text-ink sm:text-7xl lg:text-8xl"
+                  className={`text-balance font-semibold leading-[0.98] text-ink ${compact ? "mt-3 text-4xl sm:text-5xl" : "mt-5 text-5xl sm:text-6xl lg:text-7xl"}`}
                 >
                   Meet <span className="text-muted-foreground">MARY.</span>
                 </motion.h1>
