@@ -1,3 +1,4 @@
+import { Check } from "lucide-react";
 import { motion } from "motion/react";
 import { WAITLIST_FIELDS, type Collected } from "@/lib/mary.functions";
 
@@ -11,38 +12,39 @@ const LABELS: Record<string, string> = {
 };
 
 export function ProgressConstellation({ collected }: { collected: Collected }) {
+  const completed = WAITLIST_FIELDS.filter((field) => collected[field]).length;
+
   return (
-    <div className="flex flex-wrap items-center justify-center gap-2">
-      {WAITLIST_FIELDS.map((field, i) => {
-        const value = collected[field];
-        const filled = Boolean(value);
-        return (
-          <motion.div
-            key={field}
-            layout
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05, type: "spring", stiffness: 260, damping: 24 }}
-            className={`flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs transition-colors ${
-              filled
-                ? "border-white/25 bg-white/10 text-white"
-                : "border-white/10 bg-white/[0.03] text-white/40"
-            }`}
-            title={value ?? undefined}
-          >
-            <motion.span
-              className="size-1.5 rounded-full"
-              style={{
-                backgroundColor: filled ? "var(--aurora-2)" : "oklch(1 0 0 / 0.25)",
-              }}
-              animate={filled ? { scale: [1, 1.7, 1] } : {}}
-              transition={{ duration: 0.6 }}
-            />
-            <span className="font-medium">{LABELS[field]}</span>
-            {filled && <span className="max-w-[9rem] truncate text-white/55">{value}</span>}
-          </motion.div>
-        );
-      })}
+    <div className="w-full" aria-label={`${completed} of ${WAITLIST_FIELDS.length} details captured`}>
+      <div className="mb-3 flex items-center justify-between text-xs">
+        <span className="font-semibold text-ink">Your details</span>
+        <span className="text-muted-foreground">{completed}/{WAITLIST_FIELDS.length}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
+        {WAITLIST_FIELDS.map((field, i) => {
+          const value = collected[field];
+          return (
+            <motion.div
+              key={field}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: i * 0.035, duration: 0.3 }}
+              className={`min-w-0 rounded-lg border px-3 py-2.5 ${
+                value ? "border-primary/40 bg-primary/8" : "border-border bg-surface"
+              }`}
+              title={value ?? undefined}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`grid size-4 place-items-center rounded-full ${value ? "bg-primary text-primary-foreground" : "border border-border-strong"}`}>
+                  {value && <Check className="size-2.5" />}
+                </span>
+                <span className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{LABELS[field]}</span>
+              </div>
+              <p className="mt-1.5 truncate text-xs font-medium text-ink">{value || "Not captured"}</p>
+            </motion.div>
+          );
+        })}
+      </div>
     </div>
   );
 }

@@ -3,9 +3,9 @@ import { ClientOnly } from "@tanstack/react-router";
 import { MaryExperience } from "@/components/mary-experience";
 import { AuroraBackground } from "@/components/aurora-background";
 
-const title = "Join the OmniSuite Waitlist — Talk to MARY";
+const title = "Join the OmniSuite Waitlist — Talk to MARY by Omnikom";
 const description =
-  "MARY, the AI Revenue Concierge behind OmniSuite, will sign you up for early access in a live voice conversation. Speak or type — she takes it from there.";
+  "MARY, the AI Revenue Concierge behind OmniSuite, a product by Omnikom, will sign you up for early access by voice or text.";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -28,7 +28,9 @@ function Index() {
         <div className="relative min-h-screen">
           <AuroraBackground />
           <div className="relative z-10 grid min-h-screen place-items-center">
-            <p className="text-sm tracking-[0.3em] text-white/40 uppercase">Waking MARY</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+              Waking MARY
+            </p>
           </div>
         </div>
       }

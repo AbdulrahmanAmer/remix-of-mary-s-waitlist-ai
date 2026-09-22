@@ -1,111 +1,83 @@
-import { motion } from "motion/react";
+import { memo } from "react";
+import { motion, useReducedMotion } from "motion/react";
 
 export type OrbState = "idle" | "listening" | "thinking" | "speaking" | "success";
 
-const RING_COUNT = 5;
+const STATE_LABEL: Record<OrbState, string> = {
+  idle: "Ready",
+  listening: "Listening",
+  thinking: "Thinking",
+  speaking: "Speaking",
+  success: "Complete",
+};
 
-export function MaryOrb({
+export const MaryOrb = memo(function MaryOrb({
   state,
   level,
-  size = 260,
+  size = 184,
 }: {
   state: OrbState;
   level: number;
   size?: number;
 }) {
-  const energy = state === "idle" ? 0.12 : Math.max(0.1, level);
-  const hueRing =
-    state === "listening"
-      ? "var(--aurora-2)"
-      : state === "success"
-        ? "var(--aurora-3)"
-        : "var(--primary)";
+  const reduced = useReducedMotion();
+  const active = state === "listening" || state === "speaking";
+  const energy = active ? Math.max(0.08, level) : 0;
+  const coreScale = state === "success" ? 1.08 : 1 + energy * 0.18;
 
   return (
-    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
-      {/* audio-reactive halo */}
+    <div
+      className="relative grid shrink-0 place-items-center"
+      style={{ width: size, height: size }}
+      role="img"
+      aria-label={`MARY is ${STATE_LABEL[state].toLowerCase()}`}
+    >
       <motion.div
-        className="absolute rounded-full blur-3xl"
-        style={{ width: size, height: size, backgroundColor: hueRing }}
-        animate={{
-          opacity: 0.25 + energy * 0.45,
-          scale: 0.85 + energy * 0.5,
-        }}
-        transition={{ type: "spring", stiffness: 160, damping: 18 }}
+        className="absolute inset-2 rounded-full border border-primary/25 bg-primary/5"
+        animate={
+          reduced
+            ? false
+            : state === "idle"
+              ? { scale: [0.98, 1.02, 0.98], opacity: [0.45, 0.72, 0.45] }
+              : { scale: 1 + energy * 0.16, opacity: 0.5 + energy * 0.35 }
+        }
+        transition={
+          state === "idle"
+            ? { duration: 4.8, repeat: Infinity, ease: "easeInOut" }
+            : { type: "spring", stiffness: 220, damping: 24 }
+        }
       />
 
-      {Array.from({ length: RING_COUNT }).map((_, i) => {
-        const delay = i * 0.42;
-        const inset = i * 7;
-        return (
-          <motion.div
-            key={i}
-            className="absolute rounded-full border"
-            style={{
-              width: size - inset * 2,
-              height: size - inset * 2,
-              borderColor: hueRing,
-              opacity: 0.16 + i * 0.04,
-            }}
-            animate={{
-              scale: [1, 1.06 + energy * 0.16, 1],
-              rotate: [0, i % 2 === 0 ? 12 : -12, 0],
-            }}
-            transition={{
-              duration: 6 - i * 0.5,
-              repeat: Infinity,
-              ease: "easeInOut",
-              delay,
-            }}
+      <div className="absolute inset-6 rounded-full border border-border-strong bg-card shadow-soft" />
+
+      <motion.div
+        className="relative grid size-[48%] place-items-center rounded-full bg-ink text-background shadow-lift"
+        animate={reduced ? false : { scale: coreScale }}
+        transition={{ type: "spring", stiffness: 240, damping: 22 }}
+      >
+        <span className="text-2xl font-bold">M</span>
+        {state === "thinking" && !reduced && (
+          <motion.span
+            className="absolute -inset-2 rounded-full border-2 border-primary border-r-transparent"
+            animate={{ rotate: 360 }}
+            transition={{ duration: 1.1, repeat: Infinity, ease: "linear" }}
           />
-        );
-      })}
-
-      {/* core */}
-      <motion.div
-        className="relative grid place-items-center rounded-full"
-        style={{
-          width: size * 0.52,
-          height: size * 0.52,
-          background:
-            "conic-gradient(from 210deg, var(--aurora-1), var(--aurora-2), var(--aurora-3), var(--aurora-1))",
-          boxShadow: "0 0 80px -10px var(--primary)",
-        }}
-        animate={{
-          scale: state === "thinking" ? [1, 0.94, 1] : 1 + energy * 0.16,
-          rotate: 360,
-        }}
-        transition={{
-          scale:
-            state === "thinking"
-              ? { duration: 1.1, repeat: Infinity, ease: "easeInOut" }
-              : { type: "spring", stiffness: 220, damping: 16 },
-          rotate: { duration: 22, repeat: Infinity, ease: "linear" },
-        }}
-      >
-        <div
-          className="absolute inset-[3px] rounded-full backdrop-blur-xl"
-          style={{ backgroundColor: "oklch(0.15 0.025 266 / 0.72)" }}
-        />
-        <span className="font-display relative text-2xl font-semibold tracking-[0.35em] text-white/90">
-          M
-        </span>
+        )}
       </motion.div>
 
-      {/* orbiting particle */}
-      <motion.div
-        className="absolute"
-        style={{ width: size, height: size }}
-        animate={{ rotate: 360 }}
-        transition={{ duration: 14, repeat: Infinity, ease: "linear" }}
-      >
+      {state === "success" && !reduced && (
         <motion.span
-          className="absolute left-1/2 top-0 block size-2 -translate-x-1/2 rounded-full"
-          style={{ backgroundColor: "var(--aurora-2)" }}
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 2.4, repeat: Infinity }}
+          className="absolute inset-0 rounded-full border-2 border-primary"
+          initial={{ opacity: 0.8, scale: 0.65 }}
+          animate={{ opacity: 0, scale: 1.16 }}
+          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
         />
-      </motion.div>
+      )}
+
+      <div className="absolute bottom-1 inline-flex items-center gap-2 rounded-full border border-border bg-card px-3 py-1 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground shadow-soft">
+        <span className={`size-1.5 rounded-full ${active ? "bg-primary" : "bg-border-strong"}`} />
+        {STATE_LABEL[state]}
+      </div>
     </div>
   );
-}
+});
