@@ -77,8 +77,8 @@
 
   html {
     color-scheme: light;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
+    overflow-x: hidden;
   }
 
   body {
@@ -86,9 +86,17 @@
     color: var(--color-foreground);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
-    height: 100%;
-    overflow: hidden;
+    min-height: 100%;
+    /* One screen when it fits, scrollable (without a visible bar) when zoom or a
+       very short window means it genuinely cannot. */
+    overflow-x: hidden;
     overscroll-behavior: none;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  body::-webkit-scrollbar {
+    display: none;
   }
 
   h1,

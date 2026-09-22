@@ -47,18 +47,29 @@ const STAGE_IN = { duration: 0.6, ease: EASE } as const;
 const SOFT = { duration: 0.42, ease: EASE } as const;
 const SPRING = { type: "spring", stiffness: 210, damping: 26, mass: 0.9 } as const;
 
-// Tracks the live viewport height so the single-screen layout can shrink
-// instead of spilling over on short windows.
-function useViewportHeight(): number {
+// Measures the stage element itself rather than the window, so browser zoom
+// (which changes the CSS-pixel space without changing window.innerHeight)
+// scales the composition just like a resize does.
+function useStageHeight(ref: React.RefObject<HTMLElement | null>): number {
   const [height, setHeight] = useState(() =>
     typeof window === "undefined" ? 900 : window.innerHeight,
   );
   useEffect(() => {
-    const update = () => setHeight(window.innerHeight);
+    const node = ref.current;
+    if (!node) return;
+    const update = () => {
+      const measured = node.clientHeight || node.getBoundingClientRect().height;
+      if (measured > 0) setHeight(measured);
+    };
     update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, [ref]);
   return height;
 }
 
@@ -87,7 +98,8 @@ function uid() {
 
 export function MaryExperience() {
   const reduced = useReducedMotion();
-  const viewportHeight = useViewportHeight();
+  const shellRef = useRef<HTMLElement | null>(null);
+  const viewportHeight = useStageHeight(shellRef);
   const trailRef = useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
@@ -508,15 +520,22 @@ export function MaryExperience() {
   const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
-  // The presence now sizes itself from its box including halo + ground shadow,
+  const tight = viewportHeight < 620;
+  // The presence sizes itself from its box including halo + ground shadow,
   // so it gets a taller stage and still never touches the edges.
-  const landingOrb = Math.max(140, Math.min(260, Math.round(viewportHeight * 0.26)));
-  const liveOrb = Math.max(110, Math.min(180, Math.round(viewportHeight * 0.19)));
+  const landingOrb = Math.max(
+    tight ? 104 : 140,
+    Math.min(260, Math.round(viewportHeight * (tight ? 0.22 : 0.26))),
+  );
+  const liveOrb = Math.max(
+    tight ? 88 : 110,
+    Math.min(180, Math.round(viewportHeight * (tight ? 0.16 : 0.19))),
+  );
 
   return (
-    <main className="relative h-dvh overflow-hidden">
+    <main ref={shellRef} className="no-scrollbar relative min-h-dvh overflow-y-auto">
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
-      <div className="relative z-10 mx-auto flex h-dvh min-h-0 w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
+      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
         <motion.header
           layout
           transition={SPRING}
@@ -553,7 +572,7 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -14, filter: "blur(4px)" }}
               transition={STAGE_IN}
-              className="no-scrollbar flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto py-4 text-center"
+              className="flex flex-1 flex-col items-center justify-center py-4 text-center"
             >
               <div className="mx-auto flex max-w-3xl flex-col items-center">
                 <motion.p
@@ -862,7 +881,7 @@ export function MaryExperience() {
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={STAGE_IN}
-              className="no-scrollbar mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center overflow-y-auto py-4 text-center"
+              className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-4 text-center"
             >
               <div>
                 <motion.div
