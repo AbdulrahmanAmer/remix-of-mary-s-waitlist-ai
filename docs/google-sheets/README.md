@@ -52,7 +52,7 @@ Quick checks:
 - Open `<your web app URL>?action=ping` in a browser — you should see
   `{"ok":true,"version":...,"leads":0,...}`. An HTML page instead of JSON means
   *Who has access* isn't set to *Anyone*.
-- In the app, press **Ctrl/Cmd + Shift + W** — the owner view shows whether
+- In the app, press **Ctrl/Cmd + Shift + O** (or tap the "omnikom" wordmark in the footer five times on a phone) — the owner view shows whether
   the sheet is connected and how many rows it has.
 
 ## Changing the script later
