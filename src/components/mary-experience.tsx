@@ -422,160 +422,77 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     }, 2800);
   }, [enterLive, reduced]);
 
-  const startInterim = useCallback(() => {
-    const Ctor =
-      (window as unknown as { SpeechRecognition?: new () => never }).SpeechRecognition ??
-      (window as unknown as { webkitSpeechRecognition?: new () => never }).webkitSpeechRecognition;
-    if (!Ctor) return;
-    try {
-      const recognition = new Ctor() as unknown as {
-        continuous: boolean;
-        interimResults: boolean;
-        lang: string;
-        onresult: (event: {
-          results: { [key: number]: { 0: { transcript: string } }; length: number };
-        }) => void;
-        start: () => void;
-        stop: () => void;
-      };
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-      recognition.onresult = (event) => {
-        let text = "";
-        for (let i = 0; i < event.results.length; i++) text += event.results[i]![0].transcript;
-        interimRef.current = text.trim();
-        setInterim(text.trim());
-      };
-      recognition.start();
-      recognitionRef.current = recognition;
-    } catch {
-      // Interim captions are optional.
+  // The line opens itself the moment the conversation starts and stays open,
+  // exactly like a phone call. Nothing is torn down between turns.
+  useEffect(() => {
+    if (stage !== "live") return;
+    let cancelled = false;
+    let session: MicSession | null = null;
+
+    void (async () => {
+      try {
+        session = await startMicSession({
+          onLevel: setLevel,
+          onInterim: (text) => setInterim(text),
+          onSpeechStart: () => {
+            lastActivityRef.current = Date.now();
+            // The first word from you stops her mid-sentence.
+            interruptRef.current = true;
+            speakRef.current?.stop();
+            speakRef.current = null;
+            setListeningPhase("hearing");
+            setPresenceState("hearing");
+          },
+          onUtterance: (utterance) => handleUtteranceRef.current(utterance),
+        });
+        if (cancelled) {
+          session.close();
+          return;
+        }
+        sessionRef.current = session;
+        session.setMuted(micMutedRef.current);
+        setMicLive(true);
+        setMicError(null);
+        setListeningPhase(micMutedRef.current ? "paused" : "listening");
+      } catch {
+        setMicLive(false);
+        setMicError("Microphone access is off. You can keep the conversation going by typing.");
+        inputRef.current?.focus();
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+      sessionRef.current = null;
+      setMicLive(false);
+      session?.close();
+    };
+  }, [stage]);
+
+  /** Mute keeps the call open but stops her hearing you. */
+  const toggleMicMute = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    const next = !micMutedRef.current;
+    micMutedRef.current = next;
+    setMicMuted(next);
+    sessionRef.current?.setMuted(next);
+    setInterim("");
+    setLevel(0);
+    if (next) {
+      setListeningPhase("paused");
+      setPresenceState((current) =>
+        current === "hearing" || current === "listening" ? "idle" : current,
+      );
+    } else {
+      setListeningPhase("listening");
     }
   }, []);
-
-  const startListening = useCallback(async () => {
-    if (
-      !handsFreeRef.current ||
-      busyRef.current ||
-      sessionFinishedRef.current ||
-      recorderRef.current ||
-      completingRef.current
-    ) {
-      return;
-    }
-
-    stopSpeaking();
-    try {
-      const recorder = await startRecording({
-        onLevel: setLevel,
-        onSpeechStart: () => {
-          setListeningPhase("hearing");
-          setPresenceState("hearing");
-        },
-        onSilence: () => void finishListeningRef.current(),
-        onMaxDuration: () => void finishListeningRef.current(),
-      });
-      if (!handsFreeRef.current || sessionFinishedRef.current) {
-        recorder.cancel();
-        return;
-      }
-      recorderRef.current = recorder;
-      setRecording(true);
-      setMicError(null);
-      setListeningPhase("listening");
-      setPresenceState("listening");
-      startInterim();
-    } catch {
-      setHandsFreeMode(false);
-      setMicError("Microphone access is off. You can keep the conversation going by typing.");
-      inputRef.current?.focus();
-    }
-  }, [setHandsFreeMode, startInterim, stopSpeaking]);
-
-  startListeningRef.current = startListening;
-
-  /** Listens while MARY is talking: the first real word from you stops her. */
-  const armBargeIn = useCallback(async () => {
-    if (
-      !handsFreeRef.current ||
-      recorderRef.current ||
-      sessionFinishedRef.current ||
-      completingRef.current
-    ) {
-      return;
-    }
-    try {
-      let interrupted = false;
-      const recorder = await startRecording({
-        // Her own voice through the speakers must not count as an interruption.
-        thresholdScale: 2.4,
-        onLevel: (value) => {
-          if (interrupted) setLevel(value);
-        },
-        onSpeechStart: () => {
-          interrupted = true;
-          stopSpeaking();
-          setRecording(true);
-          setListeningPhase("hearing");
-          setPresenceState("hearing");
-        },
-        onSilence: () => {
-          if (interrupted) void finishListeningRef.current();
-        },
-        onMaxDuration: () => {
-          if (interrupted) void finishListeningRef.current();
-        },
-      });
-      if (!handsFreeRef.current || sessionFinishedRef.current || recorderRef.current) {
-        recorder.cancel();
-        return;
-      }
-      recorderRef.current = recorder;
-      startInterim();
-    } catch {
-      // Barge-in is a bonus; the conversation works without it.
-    }
-  }, [startInterim, stopSpeaking]);
-
-  armBargeInRef.current = armBargeIn;
-
-  const toggleMic = useCallback(async () => {
-    lastActivityRef.current = Date.now();
-    if (handsFreeRef.current) {
-      setHandsFreeMode(false);
-      setRecording(false);
-      setPresenceState("idle");
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
-      const recorder = recorderRef.current;
-      recorderRef.current = null;
-      recorder?.cancel();
-      interimRef.current = "";
-      setInterim("");
-      return;
-    }
-
-    setHandsFreeMode(true);
-    await startListening();
-  }, [setHandsFreeMode, startListening]);
 
   const onDraftChange = useCallback(
     (value: string) => {
       const wasEmpty = draft.length === 0;
       setDraft(value);
       lastActivityRef.current = Date.now();
-      if (wasEmpty && value && recorderRef.current) {
-        recorderRef.current.cancel();
-        recorderRef.current = null;
-        recognitionRef.current?.stop();
-        recognitionRef.current = null;
-        setRecording(false);
-        interimRef.current = "";
-        setInterim("");
-        setListeningPhase("paused");
-        setPresenceState("idle");
-      }
       if (
         wasEmpty &&
         value &&
@@ -595,7 +512,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   useEffect(() => {
     if (stage !== "live") return;
     const timer = window.setInterval(() => {
-      if (busyRef.current || recording || handsFree || draft.length > 0) return;
+      // She only nudges when she genuinely cannot hear you.
+      if (busyRef.current || !micMutedRef.current || draft.length > 0) return;
       if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length)
         return;
       lastActivityRef.current = Date.now();
@@ -604,15 +522,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       if (line) void say(line);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [draft.length, handsFree, recording, say, stage]);
+  }, [draft.length, micMuted, say, stage]);
 
   useEffect(() => {
     return () => {
       speakRef.current?.stop();
-      recorderRef.current?.cancel();
-      recognitionRef.current?.stop();
+      sessionRef.current?.close();
     };
   }, []);
+
 
   useEffect(() => {
     if (stage === "live") inputRef.current?.focus();
