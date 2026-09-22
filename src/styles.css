@@ -454,6 +454,73 @@
   }
 }
 
+/* Handoff: the boot screen dissolves outward and lifts away so the home page
+   underneath rises into its place instead of being cut to. */
+.mary-boot--out {
+  animation: mary-boot-out 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mary-boot--out .mary-boot-orb {
+  animation: mary-boot-orb-out 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mary-boot--out .mary-boot-word span,
+.mary-boot--out .mary-boot-line,
+.mary-boot--out .mary-boot-caption {
+  animation: mary-boot-text-out 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.mary-boot--out .mary-boot-glow {
+  animation: mary-boot-glow-out 0.72s ease-out both;
+}
+
+@keyframes mary-boot-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes mary-boot-orb-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.85);
+    filter: blur(14px);
+  }
+}
+
+@keyframes mary-boot-text-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-18px);
+    filter: blur(6px);
+  }
+}
+
+@keyframes mary-boot-glow-out {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.5);
+  }
+}
+
+
 @media (prefers-reduced-motion: reduce) {
   .mary-boot,
   .mary-boot-glow,
