@@ -841,8 +841,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                         ? "I can hear you…"
                         : listeningPhase === "finishing"
                           ? "Finishing your answer…"
-                          : handsFree
-                            ? "Listening — or type your answer"
+                          : micMuted
+                            ? "Muted — type your answer"
+
                             : "Speak or type your answer"
                     }
                     className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
