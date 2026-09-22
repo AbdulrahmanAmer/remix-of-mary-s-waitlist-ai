@@ -39,6 +39,30 @@ export function AudioDiagnostics() {
         { label: "Microphone track", value: d.micTrack, good: d.micTrack.startsWith("live") },
         { label: "Microphone device", value: d.micLabel || "—" },
         {
+          label: "Line cleaning",
+          value: d.micProcessing || "—",
+          good: d.micProcessing ? d.micProcessing.startsWith("echo cancel") : undefined,
+        },
+        {
+          label: "Sounds like a voice",
+          value: d.voiceScore < 0 ? "—" : `${d.voiceScore}%`,
+          good: d.voiceScore < 0 ? undefined : d.voiceScore >= 50,
+        },
+        {
+          label: "Voice above the room",
+          value: d.voiceScore < 0 ? "—" : `${d.voiceSnrDb} dB`,
+        },
+        {
+          label: "Room level",
+          value: d.voiceScore < 0 ? "—" : `${d.roomFloorDb} dB`,
+        },
+        {
+          label: "Hearing now",
+          value:
+            d.voiceScore < 0 ? "—" : d.voiceScore >= 50 ? "a person" : d.voiceScore >= 32 ? "maybe" : "room only",
+          good: d.voiceScore < 0 ? undefined : d.voiceScore >= 32,
+        },
+        {
           label: "Live captions",
           value: d.speechRecognition ? "supported" : "not supported",
           good: d.speechRecognition,
