@@ -493,28 +493,21 @@ export function MaryExperience() {
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
               className="mx-auto flex w-full max-w-4xl flex-1 flex-col py-5 lg:py-7"
             >
-              <div className="flex justify-center py-1">
-                <MaryOrb state={presence} level={level} size={128} />
+              <MaryPresence state={presence} level={level} height={128} />
+              <div className="mt-1 flex items-center justify-between gap-4 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                <span className="inline-flex items-center gap-2">
+                  <span
+                    className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
+                  />
+                  {handsFree ? "Hands-free" : PRESENCE_LABEL[presence]}
+                </span>
+                <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
               </div>
               <div className="mt-3">
                 <ProgressConstellation collected={collected} />
               </div>
 
-              <div className="mt-4 flex min-h-[28rem] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-lift">
-                <div className="flex items-center justify-between border-b border-border px-5 py-3">
-                  <div>
-                    <p className="font-semibold text-ink">MARY</p>
-                    <p className="text-xs text-muted-foreground">AI Revenue Concierge</p>
-                  </div>
-                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <span
-                      className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
-                    />
-                    {handsFree ? "Hands-free" : "Ready"}
-                  </span>
-                </div>
-
-                <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
+              <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
                   <div className="mx-auto w-full max-w-3xl space-y-3 overflow-y-auto">
                     <AnimatePresence initial={false}>
                       {history.map((line) => (
