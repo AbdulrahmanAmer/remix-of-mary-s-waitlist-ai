@@ -584,3 +584,44 @@
     animation: mary-boot-out 0.2s linear both;
   }
 }
+
+/* Phone marquee for the pillar tagline: slides left, loops seamlessly (track
+   holds two identical halves, so -50% snaps back invisibly). Desktop keeps a
+   static wrapped row via sm: overrides. */
+@keyframes marquee-slide {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+@media (max-width: 639px) {
+  .marquee-track {
+    animation: marquee-slide 18s linear infinite;
+  }
+
+  .marquee-mask {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 12%,
+      black 88%,
+      transparent
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent,
+      black 12%,
+      black 88%,
+      transparent
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marquee-track {
+    animation: none;
+  }
+}
