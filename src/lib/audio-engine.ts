@@ -889,6 +889,8 @@ export type MicSessionOptions = {
   onInterim?: (text: string) => void;
   /** A complete utterance. */
   onUtterance: (utterance: Utterance) => void;
+  /** Voice-shaped sound that was somebody else in the room, not the person here. */
+  onAmbient?: (info: { marginDb: number; peak: number }) => void;
   /** Sound over her speech that might be you — she should pause right now. */
   onInterruptCandidate?: () => void;
   /** It really is you — she should stay quiet until your words have been handled. */
