@@ -57,10 +57,10 @@ class TimeStretcher {
   private readonly synthHop = 512;
   private readonly analysisHop: number;
   private readonly window: Float32Array;
-  private input = new Float32Array(0);
+  private input: Float32Array<ArrayBuffer> = new Float32Array(0);
   private readPos = 0;
-  private acc = new Float32Array(0);
-  private accWin = new Float32Array(0);
+  private acc: Float32Array<ArrayBuffer> = new Float32Array(0);
+  private accWin: Float32Array<ArrayBuffer> = new Float32Array(0);
   private emitted = 0;
   private synthPos = 0;
 
@@ -79,7 +79,7 @@ class TimeStretcher {
     this.accWin = nextWin;
   }
 
-  push(chunk: Float32Array): Float32Array {
+  push(chunk: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {
     const merged = new Float32Array(this.input.length - this.readPos + chunk.length);
     merged.set(this.input.subarray(this.readPos));
     merged.set(chunk, this.input.length - this.readPos);
@@ -103,7 +103,7 @@ class TimeStretcher {
     return this.take(safe);
   }
 
-  private take(count: number) {
+  private take(count: number): Float32Array<ArrayBuffer> {
     const out = new Float32Array(count);
     for (let i = 0; i < count; i++) {
       const w = this.accWin[i]!;
@@ -115,7 +115,7 @@ class TimeStretcher {
     return out;
   }
 
-  flush(): Float32Array {
+  flush(): Float32Array<ArrayBuffer> {
     const remaining = this.synthPos - this.emitted;
     return remaining > 0 ? this.take(remaining) : new Float32Array(0);
   }
