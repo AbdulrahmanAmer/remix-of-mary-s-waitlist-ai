@@ -23,7 +23,7 @@ type Line = { id: string; role: "user" | "mary"; text: string };
 type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 type Point = { x: number; y: number; w: number };
 /** Screen-space path the OmniSuite mark travels during the intro. */
-type Flight = { from: Point; mid: Point };
+type Flight = { from: Point; mid: Point; to: Point };
 
 const MotionButton = motion.create(Button);
 
@@ -388,8 +388,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       if (!mark) return;
       const r = mark.getBoundingClientRect();
       // Cap the growth at the mark's native width so it stays razor sharp.
-      const grown = Math.min(r.width * 2.7, Math.min(320, window.innerWidth * 0.62));
+      const grown = Math.min(r.width * 3.1, Math.min(380, window.innerWidth * 0.7));
       const grownH = (grown / r.width) * r.height;
+      // Resting place: the header's left edge, at the compact mark height.
+      const header = headerRef.current?.getBoundingClientRect();
+      const restW = r.width * (28 / r.height);
       setFlight({
         from: { x: r.left, y: r.top, w: r.width },
         mid: {
@@ -397,12 +400,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           y: window.innerHeight / 2 - grownH / 2,
           w: grown,
         },
+        to: {
+          x: header?.left ?? r.left,
+          y: (header?.top ?? r.top) + Math.max(0, ((header?.height ?? 48) - 28) / 2),
+          w: restW,
+        },
       });
     }, 420);
 
     window.setTimeout(() => {
       void enterLive();
-    }, 1380);
+    }, 1320);
   }, [enterLive, reduced]);
 
   const startInterim = useCallback(() => {
@@ -596,7 +604,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               wiping={stage === "intro"}
               hidden={stage === "intro" && flight !== null}
               revealDelay={stage === "landing" ? introDelay : 0}
-              slideIn={stage === "live"}
+              slideIn={false}
             />
           </div>
           <AnimatePresence>
@@ -627,7 +635,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               key="landing"
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -90, filter: "blur(12px)" }}
+              exit={{ opacity: 0, y: -16, scale: 0.92, filter: "blur(14px)" }}
               transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-4 text-center"
             >
@@ -1006,14 +1014,14 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 filter: "blur(0px)",
               }}
               animate={{
-                x: [flight.from.x, flight.mid.x, flight.mid.x, flight.mid.x],
-                y: [flight.from.y, flight.mid.y, flight.mid.y, flight.mid.y - 10],
-                width: [flight.from.w, flight.mid.w, flight.mid.w, flight.mid.w * 1.12],
-                opacity: [1, 1, 1, 0],
-                filter: ["blur(0px)", "blur(0px)", "blur(0px)", "blur(5px)"],
+                x: [flight.from.x, flight.mid.x, flight.mid.x, flight.to.x],
+                y: [flight.from.y, flight.mid.y, flight.mid.y, flight.to.y],
+                width: [flight.from.w, flight.mid.w, flight.mid.w, flight.to.w],
+                opacity: 1,
+                filter: ["blur(0px)", "blur(0px)", "blur(0px)", "blur(0px)"],
               }}
-              exit={{ opacity: 0, transition: { duration: 0.12 } }}
-              transition={{ duration: 1.02, times: [0, 0.5, 0.78, 1], ease: EASE }}
+              exit={{ opacity: 0, transition: { duration: 0.14 } }}
+              transition={{ duration: 1.12, times: [0, 0.46, 0.66, 1], ease: EASE }}
             />
           )}
         </AnimatePresence>
