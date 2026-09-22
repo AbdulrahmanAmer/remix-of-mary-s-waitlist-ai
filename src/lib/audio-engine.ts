@@ -29,8 +29,6 @@ function base64ToBytes(base64: string) {
 }
 
 export type SpeakHandle = {
-
-export type SpeakHandle = {
   stop: () => void;
   done: Promise<void>;
 };
