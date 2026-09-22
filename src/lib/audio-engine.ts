@@ -268,6 +268,7 @@ export function speak(
           }
         }
       }
+      if (stretcher && !stopped) schedule(stretcher.flush());
       const tail = Math.max(0, playhead - ctx.currentTime) * 1000 + 120;
       await new Promise((r) => setTimeout(r, tail));
       finish();
