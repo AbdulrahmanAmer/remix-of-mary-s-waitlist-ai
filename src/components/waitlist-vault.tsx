@@ -2,12 +2,7 @@ import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
 import { Button } from "@/components/ui/button";
-import {
-  clearEntries,
-  downloadCsv,
-  loadEntries,
-  type WaitlistEntry,
-} from "@/lib/waitlist-store";
+import { clearEntries, downloadCsv, loadEntries, type WaitlistEntry } from "@/lib/waitlist-store";
 
 /**
  * Owner-only view of everything collected on this device.
@@ -103,8 +98,9 @@ export function WaitlistVault() {
                     )}
                   </div>
                   <p className="mt-1 text-muted-foreground">
-                    {[entry.business, entry.industry, entry.operations].filter(Boolean).join(" · ") ||
-                      "No business details yet"}
+                    {[entry.business, entry.industry, entry.operations]
+                      .filter(Boolean)
+                      .join(" · ") || "No business details yet"}
                   </p>
                   <p className="mt-1 text-[0.7rem] uppercase tracking-[0.12em] text-muted-foreground">
                     {new Date(entry.updatedAt).toLocaleString()} · #{entry.position}
