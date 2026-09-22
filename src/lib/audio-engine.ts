@@ -204,27 +204,63 @@ export function speak(
   return { stop, done };
 }
 
-export type Recorder = {
-  stop: () => Promise<Blob>;
-  cancel: () => void;
+/**
+ * A single always-open microphone line for the whole conversation.
+ * One getUserMedia, one audio graph, one speech-recognition stream. Utterances
+ * are cut out of the continuous stream by silence, so nothing is torn down and
+ * rebuilt between turns and no words are lost at the seams.
+ */
+export type MicSession = {
+  /** Silences capture without releasing the device (no permission re-prompt). */
+  setMuted: (muted: boolean) => void;
+  /** While MARY speaks, raise the bar so only a real interruption counts. */
+  setEchoGuard: (guarding: boolean) => void;
+  close: () => void;
 };
 
-export type RecordingOptions = {
+export type MicSessionOptions = {
   onLevel?: (level: number) => void;
+  /** Fires the moment you start talking — used to cut MARY off mid-sentence. */
   onSpeechStart?: () => void;
-  onSilence?: () => void;
-  onMaxDuration?: () => void;
+  /** Live caption of the utterance in progress. */
+  onInterim?: (text: string) => void;
+  /** A complete utterance: live caption text plus its audio as a fallback. */
+  onUtterance: (utterance: { text: string; audio: Blob | null }) => void;
   silenceMs?: number;
-  maxDurationMs?: number;
-  /** Raises the speech threshold — used while MARY is talking so only a real
-   *  interruption counts, not her own voice leaking through the speakers. */
-  thresholdScale?: number;
+  maxUtteranceMs?: number;
 };
 
-/** Captures mic PCM, detects a completed utterance, and returns a 16k mono WAV blob. */
-export async function startRecording(options: RecordingOptions = {}): Promise<Recorder> {
+type Recognition = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  onresult: ((event: RecognitionEvent) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start: () => void;
+  stop: () => void;
+  abort: () => void;
+};
+
+type RecognitionEvent = {
+  resultIndex: number;
+  results: {
+    length: number;
+    [key: number]: { isFinal: boolean; 0: { transcript: string } };
+  };
+};
+
+function recognitionCtor(): (new () => Recognition) | null {
+  const w = window as unknown as {
+    SpeechRecognition?: new () => Recognition;
+    webkitSpeechRecognition?: new () => Recognition;
+  };
+  return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
+}
+
+export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {
   const stream = await navigator.mediaDevices.getUserMedia({
-    audio: { echoCancellation: true, noiseSuppression: true },
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
   const ctx = new AudioContext();
   const source = ctx.createMediaStreamSource(stream);
@@ -234,27 +270,118 @@ export async function startRecording(options: RecordingOptions = {}): Promise<Re
   source.connect(analyser);
 
   const processor = ctx.createScriptProcessor(4096, 1, 1);
-  const chunks: Float32Array[] = [];
+  let chunks: Float32Array[] = [];
+  let capturing = false;
   processor.onaudioprocess = (event) => {
+    if (!capturing) return;
     chunks.push(new Float32Array(event.inputBuffer.getChannelData(0)));
   };
   source.connect(processor);
   processor.connect(ctx.destination);
 
+  // ---- one recognition stream, owned by the session ----
+  // Only results from `resultIndex` onward belong to the current utterance, so
+  // the previous sentence can never be re-sent glued to this one.
+  let committed = "";
+  let interim = "";
+  let recognition: Recognition | null = null;
+  let recognitionRunning = false;
+  let alive = true;
+
+  const startRecognition = () => {
+    if (recognition || !alive) return;
+    const Ctor = recognitionCtor();
+    if (!Ctor) return;
+    try {
+      const instance = new Ctor();
+      instance.continuous = true;
+      instance.interimResults = true;
+      instance.lang = "en-US";
+      instance.onresult = (event) => {
+        let live = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const result = event.results[i];
+          if (!result) continue;
+          const text = result[0].transcript;
+          if (result.isFinal) committed = `${committed} ${text}`.trim();
+          else live += text;
+        }
+        interim = live.trim();
+        options.onInterim?.(`${committed} ${interim}`.trim());
+      };
+      instance.onend = () => {
+        recognitionRunning = false;
+        // Browsers end the stream on their own schedule; bring it straight back
+        // so the line never goes deaf mid-conversation.
+        if (alive && !muted) {
+          try {
+            instance.start();
+            recognitionRunning = true;
+          } catch {
+            /* already starting */
+          }
+        }
+      };
+      instance.onerror = () => {
+        recognitionRunning = false;
+      };
+      instance.start();
+      recognitionRunning = true;
+      recognition = instance;
+    } catch {
+      recognition = null;
+    }
+  };
+
+  const stopRecognition = () => {
+    const instance = recognition;
+    recognition = null;
+    recognitionRunning = false;
+    if (!instance) return;
+    instance.onresult = null;
+    instance.onend = null;
+    instance.onerror = null;
+    try {
+      instance.abort();
+    } catch {
+      /* already stopped */
+    }
+  };
+
+  const takeText = () => {
+    const text = `${committed} ${interim}`.trim();
+    committed = "";
+    interim = "";
+    return text;
+  };
+
+  // ---- voice activity detection over the live stream ----
   const data = new Uint8Array(analyser.frequencyBinCount);
-  const startedAt = performance.now();
-  const calibrationMs = 550;
-  const silenceMs = options.silenceMs ?? 1050;
-  const maxDurationMs = options.maxDurationMs ?? 45000;
+  const silenceMs = options.silenceMs ?? 900;
+  const maxUtteranceMs = options.maxUtteranceMs ?? 45000;
+  const openedAt = performance.now();
+  const calibrationMs = 500;
   let noiseFloor = 0.008;
+  let muted = false;
+  let echoGuard = false;
   let speechCandidateAt = 0;
   let lastSpeechAt = 0;
-  let speechDetected = false;
-  let completionFired = false;
-  let active = true;
+  let utteranceStartedAt = 0;
   let raf = 0;
+
+  const flush = () => {
+    const audio = chunks.length ? encodeWav(chunks, ctx.sampleRate) : null;
+    chunks = [];
+    capturing = false;
+    speechCandidateAt = 0;
+    utteranceStartedAt = 0;
+    const text = takeText();
+    options.onUtterance({ text, audio });
+  };
+
   const tick = () => {
-    if (!active) return;
+    if (!alive) return;
+    raf = requestAnimationFrame(tick);
     analyser.getByteTimeDomainData(data);
     let peak = 0;
     for (let i = 0; i < data.length; i++) {
@@ -262,69 +389,78 @@ export async function startRecording(options: RecordingOptions = {}): Promise<Re
       if (v > peak) peak = v;
     }
     const now = performance.now();
-    const elapsed = now - startedAt;
+    if (muted) {
+      options.onLevel?.(0);
+      return;
+    }
     options.onLevel?.(Math.min(1, peak * 1.8));
 
-    if (elapsed < calibrationMs) {
+    if (now - openedAt < calibrationMs) {
       noiseFloor = noiseFloor * 0.88 + peak * 0.12;
-    } else if (!completionFired) {
-      const scale = options.thresholdScale ?? 1;
-      const threshold = Math.min(0.3, Math.max(0.025, noiseFloor * 2.8 + 0.008) * scale);
-      if (peak >= threshold) {
-        if (!speechCandidateAt) speechCandidateAt = now;
-        lastSpeechAt = now;
-        if (!speechDetected && now - speechCandidateAt >= 140) {
-          speechDetected = true;
-          options.onSpeechStart?.();
-        }
-      } else {
-        if (!speechDetected) {
-          speechCandidateAt = 0;
-          noiseFloor = noiseFloor * 0.985 + peak * 0.015;
-        } else if (now - lastSpeechAt >= silenceMs) {
-          completionFired = true;
-          options.onSilence?.();
-        }
-      }
-
-      if (elapsed >= maxDurationMs) {
-        completionFired = true;
-        options.onMaxDuration?.();
-      }
+      return;
     }
-    if (active) raf = requestAnimationFrame(tick);
+
+    const scale = echoGuard ? 2.4 : 1;
+    const threshold = Math.min(0.3, Math.max(0.025, noiseFloor * 2.8 + 0.008) * scale);
+
+    if (peak >= threshold) {
+      if (!speechCandidateAt) speechCandidateAt = now;
+      lastSpeechAt = now;
+      if (!capturing && now - speechCandidateAt >= 140) {
+        capturing = true;
+        utteranceStartedAt = now;
+        chunks = [];
+        options.onSpeechStart?.();
+      }
+    } else if (!capturing) {
+      speechCandidateAt = 0;
+      noiseFloor = noiseFloor * 0.985 + peak * 0.015;
+    } else if (now - lastSpeechAt >= silenceMs) {
+      flush();
+    }
+
+    if (capturing && now - utteranceStartedAt >= maxUtteranceMs) flush();
   };
+
   raf = requestAnimationFrame(tick);
-
-  const teardown = () => {
-    if (!active) return;
-    active = false;
-    cancelAnimationFrame(raf);
-    options.onLevel?.(0);
-    processor.onaudioprocess = null;
-    try {
-      processor.disconnect();
-      analyser.disconnect();
-      source.disconnect();
-    } catch {
-      /* noop */
-    }
-    stream.getTracks().forEach((t) => t.stop());
-  };
+  startRecognition();
 
   return {
-    cancel: () => {
-      teardown();
-      void ctx.close().catch(() => {});
+    setMuted: (next: boolean) => {
+      if (muted === next) return;
+      muted = next;
+      capturing = false;
+      chunks = [];
+      speechCandidateAt = 0;
+      committed = "";
+      interim = "";
+      options.onLevel?.(0);
+      if (next) stopRecognition();
+      else startRecognition();
     },
-    stop: async () => {
-      teardown();
-      const rate = ctx.sampleRate;
-      await ctx.close().catch(() => {});
-      return encodeWav(chunks, rate);
+    setEchoGuard: (guarding: boolean) => {
+      echoGuard = guarding;
+      if (!recognitionRunning && !muted) startRecognition();
+    },
+    close: () => {
+      if (!alive) return;
+      alive = false;
+      cancelAnimationFrame(raf);
+      stopRecognition();
+      processor.onaudioprocess = null;
+      try {
+        processor.disconnect();
+        analyser.disconnect();
+        source.disconnect();
+      } catch {
+        /* noop */
+      }
+      stream.getTracks().forEach((track) => track.stop());
+      void ctx.close().catch(() => {});
     },
   };
 }
+
 
 function encodeWav(chunks: Float32Array[], sampleRate: number, target = 16000) {
   let total = 0;
