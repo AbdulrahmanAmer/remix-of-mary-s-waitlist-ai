@@ -97,6 +97,7 @@ export function speak(
     stopped = true;
     cancelAnimationFrame(raf);
     opts.onLevel?.(0);
+    opts.onProgress?.(1);
     opts.onEnd?.();
     try {
       analyser.disconnect();
