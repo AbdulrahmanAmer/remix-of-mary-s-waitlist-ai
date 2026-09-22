@@ -52,8 +52,6 @@ export function speak(
   const sources = new Set<AudioBufferSourceNode>();
   const controller = new AbortController();
 
-  const stretcher = Math.abs(MARY_STRETCH - 1) > 0.001 ? new TimeStretcher(MARY_STRETCH) : null;
-
   let playhead = 0;
   let pending = new Uint8Array(0);
   let stopped = false;
@@ -109,12 +107,11 @@ export function speak(
     audioBuffer.copyToChannel(floats, 0);
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
-    source.playbackRate.value = MARY_PITCH_RATIO;
     source.connect(analyser);
     if (playhead === 0) playhead = ctx.currentTime + 0.08;
     else playhead = Math.max(playhead, ctx.currentTime);
     source.start(playhead);
-    playhead += audioBuffer.duration / MARY_PITCH_RATIO;
+    playhead += audioBuffer.duration;
     sources.add(source);
     source.onended = () => sources.delete(source);
     if (!firstAudioFired) {
