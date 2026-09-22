@@ -56,9 +56,14 @@ export function buildPrompt(
         : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false."
       : "COLLECT — the welcome already happened. Do NOT mention the waitlist offer or first access again. React to what they just said, sell the point that fits their own situation when there is an opening, and ask only for what is genuinely still missing.";
 
+  const missing = WAITLIST_FIELDS.filter((f) => !collected[f]);
+  const gate = missing.length
+    ? `\n\nStill missing: ${missing.join(", ")}. You may NOT close and complete must stay false until every one of these is captured, even if they ask you to finish now — in that case say you just need the last detail and ask for it.`
+    : "";
+
   return `Current phase: ${phase}\n\nAlready captured:\n${known || "(nothing yet)"}\n\nConversation so far:\n${
     history || "(the conversation is just starting)"
-  }\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" asks the one next thing (or null). Neither beat may repeat anything you already said.`;
+  }${gate}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" asks the one next thing (or null). Neither beat may repeat anything you already said.`;
 }
 
 export function gatewayConfig(key: string) {
