@@ -5,20 +5,24 @@ The page should behave like an app, not a document: it fills the window exactly,
 ## What changes
 
 **No page scrolling at all**
+
 - The experience is locked to exactly one screen height. Today two stacked full-height wrappers make the page slightly taller than the window, which is what makes the outer scrollbar appear.
 - The window itself can no longer scroll on this page.
 - On short windows (like the current preview height) the landing headline, spacing and orb size step down so everything — logo, headline, supporting line, orb, button, proof row — still fits without cropping.
 
 **No visible scrollbar inside the conversation**
+
 - The conversation trail still scrolls when there are many turns, but the scrollbar itself is hidden, so nothing appears "out of nowhere" at the edge.
 - The trail keeps growing upward from the composer and always shows the latest turn.
 
 **The details rail overlays, never collides**
+
 - The rail stays pinned to the right edge, floating over the stage as an overlay with no layout footprint.
 - The conversation column is given a hard right boundary so no message bubble, MARY line or composer can ever sit beneath the rail — on wide screens the column recentres inside the remaining space, on narrow screens the rail shrinks to dots only and sits clear of the text.
 - The rail fades slightly when MARY's latest line is long, so it never competes with the reading area.
 
 **Organised vertical rhythm in the live view**
+
 - Orb, status line, conversation trail and composer are laid out as fixed bands within the single screen: the orb and status take a set share at the top, the composer is anchored at the bottom, and the trail absorbs whatever space is left. Nothing pushes anything else off-screen as messages come in.
 - The orb height adapts to the available space rather than being a fixed number.
 
