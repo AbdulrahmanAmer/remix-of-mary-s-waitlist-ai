@@ -1,9 +1,12 @@
+import type { ClientLesson } from "./experience-store";
 import { maryTurn, type Collected, type MaryTurn, type TurnFlags } from "./mary.functions";
 
 export type TurnRequest = {
   messages: { role: "user" | "assistant"; content: string }[];
   collected: Collected;
   flags: TurnFlags;
+  /** Field notes kept in this browser. */
+  experience?: ClientLesson[];
 };
 
 /**
@@ -19,6 +22,7 @@ export async function streamMaryTurn(
     messages: input.messages,
     collected: input.collected as Record<string, string>,
     flags: input.flags,
+    experience: input.experience,
   };
 
   const response = await fetch("/api/turn", {

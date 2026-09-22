@@ -73,6 +73,8 @@ export function buildPrompt(
   messages: TurnMessage[],
   collected: Record<string, string>,
   flags: TurnFlags,
+  /** Field notes she wrote after earlier conversations — see mary-experience.server. */
+  experience = "",
 ) {
   const history = messages
     .map((m) => `${m.role === "user" ? "Person" : "MARY"}: ${m.content}`)
@@ -100,12 +102,15 @@ export function buildPrompt(
   const wasCutOff = Boolean(lastAssistant && lastAssistant.includes(CUT_OFF_MARK));
   const callback = Boolean(flags.callback);
 
+  const callbackHasBoth = Boolean(collected["name"] && collected["phone"]);
   const phase = callback
-    ? "CALLBACK — they asked to be called back. The sales sequence is over: do not pitch, do not run discovery. You need only their name and a number, one ask per turn, skipping anything you already have. Promise nothing about timing — say the request goes straight to the team. Set callbackRequested true every turn from here."
+    ? callbackHasBoth
+      ? 'CALLBACK, FINAL TURN — you now have their name and a number. Do not ask for anything else. "say" confirms plainly, using their name, that the request is with the team and they will be reached on that number — no day, no time window. "followUp" is a short warm goodbye, or null. Set callbackRequested true and phase CALLBACK. Nothing after this.'
+      : "CALLBACK — they asked to be called back. The sales sequence is over: do not pitch, do not run discovery. You need only their name and a number, one ask per turn, skipping anything you already have. Promise nothing about timing — say the request goes straight to the team. Set callbackRequested true every turn from here. If they give you both in one message, confirm and say goodbye in that same turn."
     : !history
       ? "WELCOME — the very first thing you say. Greet them like a person first (a short hello on its own), then say who you are in one plain line, then what OmniSuite is in one plain line. Three short beats maximum, no stacking. No personal question at all this turn — end with something easy to respond to, not an intake question. Vary the wording; never use the same opener twice."
       : !discoveryDone
-        ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question. If you still do not have their name and the conversation has warmth, ask for it lightly and naturally ('Sorry — I got ahead of myself. Who am I speaking with?'). If they have no business at all, say so is fine, mark declined and wind down warmly instead of continuing the ladder."
+        ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question. If you still do not have their name and the conversation has warmth, ask for it lightly and naturally ('Sorry — I got ahead of myself. Who am I speaking with?'). If they have no business at all, or they clearly want to go, switch to EXIT: one warm line, no pitch, set declined true and phase EXIT."
         : !revealed
           ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn. Set revealed true."
           : !lanesDone
@@ -113,7 +118,7 @@ export function buildPrompt(
             : !allCaptured
               ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
               : wrapAsked
-                ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the exact closing line and set complete true."
+                ? 'CLOSE — they\'ve answered your wrap question. "say" is one sentence: answer whatever they asked, or a short personal send-off using their name ("Perfect, Leo — you\'re in."). "followUp" is exactly: "Thanks for signing up — we\'ll be in touch as soon as OmniSuite launches, a product by Omnikom." Set complete true. Nothing after it. If instead they asked for a callback or want to leave, honour that first.'
                 : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false and set wrapAsked true on the turn where you ask it.";
 
   const missing = requiredFields.filter((f) => !collected[f]);
@@ -146,7 +151,7 @@ export function buildPrompt(
 
   return `Current phase: ${phase}\n\nReveal already delivered: ${revealed ? "yes" : "no"}\nLanes already explained: ${lanesDone ? "yes" : "no"}\n\nAlready captured (do not change these unless the person just corrected them):\n${known || "(nothing yet)"}\n\nConversation so far:\n${
     history || "(the conversation is just starting)"
-  }${gate}${cutOff}${rejectedNote}${modeNote}${intentRule}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move (or null). Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
+  }${gate}${cutOff}${rejectedNote}${modeNote}${intentRule}${experience}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move (or null). Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
 }
 
 /**
@@ -203,6 +208,13 @@ export function finishTurn(
   const allCaptured = required.every((f) => collected[f]);
 
   const callbackRequested = Boolean(input.flags.callback) || out.callbackRequested;
+  // A decline only ends the conversation when the model is unambiguous about
+  // it: they are leaving or refusing, or she has moved to the EXIT phase. A
+  // stray flag on an ordinary answer must never hang up on someone.
+  const declined =
+    out.declined &&
+    !callbackRequested &&
+    (out.phase === "EXIT" || out.intent === "leaving" || out.intent === "refusing");
 
   return {
     say: out.say.trim(),
@@ -211,7 +223,7 @@ export function finishTurn(
     nextField: out.nextField,
     // A callback conversation never "completes" the waitlist sign-up.
     complete: out.complete && allCaptured && !callbackRequested,
-    declined: out.declined,
+    declined,
     callbackRequested,
     intent: out.intent,
     mode: out.mode,

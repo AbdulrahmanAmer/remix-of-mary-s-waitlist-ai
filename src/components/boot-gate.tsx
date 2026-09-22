@@ -21,9 +21,7 @@ function bootPaintedAt() {
 export function BootGate() {
   const [phase, setPhase] = useState<"booting" | "leaving" | "gone">("booting");
   const [elapsed] = useState(() =>
-    typeof performance !== "undefined"
-      ? Math.max(0, performance.now() - bootPaintedAt())
-      : 0,
+    typeof performance !== "undefined" ? Math.max(0, performance.now() - bootPaintedAt()) : 0,
   );
 
   useEffect(() => {
@@ -32,7 +30,6 @@ export function BootGate() {
     const leave = window.setTimeout(() => setPhase("leaving"), remaining);
     return () => window.clearTimeout(leave);
   }, []);
-
 
   useEffect(() => {
     if (phase !== "leaving") return;

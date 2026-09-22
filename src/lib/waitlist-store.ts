@@ -108,6 +108,16 @@ export function sessionId(): string {
   }
 }
 
+/** Forget this visit's id, so the next conversation starts a fresh row. */
+export function newSession(): void {
+  if (!hasStorage()) return;
+  try {
+    window.sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 /** Deterministic, computed on the spot — the closing line never waits. */
 export function positionFor(seed: string): number {
   let hash = 0;

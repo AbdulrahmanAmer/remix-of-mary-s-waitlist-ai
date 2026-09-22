@@ -379,6 +379,66 @@ export function speak(
     }
   };
 
+  // ---- stall guard ----
+  // If the output clock stops moving (context suspended by the OS, a phone
+  // call, a backgrounded tab, no audio device at all) nothing above would ever
+  // finish and the conversation would hang on "MARY is speaking". This runs
+  // on a timer rather than a frame so it also works when frames are paused:
+  // nudge the context awake, then walk the remaining words on the wall clock.
+  let lastPlayed = -1;
+  let lastAdvanceAt = performance.now();
+  let stalledFallback = false;
+  const STALL_MS = 2500;
+  const stallTimer = window.setInterval(() => {
+    if (stopped) {
+      window.clearInterval(stallTimer);
+      return;
+    }
+    if (paused) {
+      lastAdvanceAt = performance.now();
+      return;
+    }
+    const now = performance.now();
+    const current = played();
+    if (current > lastPlayed + RATE * 0.05) {
+      lastPlayed = current;
+      lastAdvanceAt = now;
+      return;
+    }
+    // Waiting on the network — for the first bytes, or for more of them with
+    // everything received already played — is not an output stall.
+    if (!streamDone && (!firstAudioFired || (cursor >= total && active.length === 0))) {
+      lastAdvanceAt = now;
+      return;
+    }
+    if (now - lastAdvanceAt < STALL_MS || stalledFallback) return;
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
+    if (now - lastAdvanceAt < STALL_MS * 1.6) return;
+
+    stalledFallback = true;
+    trace({ type: "speak-stall", state: ctx.state });
+    window.clearInterval(stallTimer);
+    const remainingSec = Math.max(0.6, (totalEstimate() - current) / RATE);
+    const from = progress;
+    const startedAt = performance.now();
+    const walk = window.setInterval(() => {
+      if (stopped) {
+        window.clearInterval(walk);
+        return;
+      }
+      const fraction = Math.min(1, (performance.now() - startedAt) / (remainingSec * 1000));
+      const next = Math.min(0.995, from + (1 - from) * fraction);
+      if (next > progress) {
+        progress = next;
+        opts.onProgress?.(progress);
+      }
+      if (fraction >= 1) {
+        window.clearInterval(walk);
+        finish();
+      }
+    }, 90);
+  }, 500);
+
   const pause = () => {
     if (paused || stopped || pendingFinish) return;
     const heard = Math.floor(played());

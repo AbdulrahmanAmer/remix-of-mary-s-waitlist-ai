@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiLeadRouteImport } from './routes/api/lead'
+import { Route as ApiReflectRouteImport } from './routes/api/reflect'
 import { Route as ApiSpeechRouteImport } from './routes/api/speech'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiTurnRouteImport } from './routes/api/turn'
@@ -17,6 +19,16 @@ import { Route as ApiTurnRouteImport } from './routes/api/turn'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiLeadRoute = ApiLeadRouteImport.update({
+  id: '/api/lead',
+  path: '/api/lead',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiReflectRoute = ApiReflectRouteImport.update({
+  id: '/api/reflect',
+  path: '/api/reflect',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiSpeechRoute = ApiSpeechRouteImport.update({
@@ -37,12 +49,16 @@ const ApiTurnRoute = ApiTurnRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/lead': typeof ApiLeadRoute
+  '/api/reflect': typeof ApiReflectRoute
   '/api/speech': typeof ApiSpeechRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/turn': typeof ApiTurnRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/lead': typeof ApiLeadRoute
+  '/api/reflect': typeof ApiReflectRoute
   '/api/speech': typeof ApiSpeechRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/turn': typeof ApiTurnRoute
@@ -50,20 +66,43 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/lead': typeof ApiLeadRoute
+  '/api/reflect': typeof ApiReflectRoute
   '/api/speech': typeof ApiSpeechRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/turn': typeof ApiTurnRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/speech' | '/api/transcribe' | '/api/turn'
+  fullPaths:
+    | '/'
+    | '/api/lead'
+    | '/api/reflect'
+    | '/api/speech'
+    | '/api/transcribe'
+    | '/api/turn'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/speech' | '/api/transcribe' | '/api/turn'
-  id: '__root__' | '/' | '/api/speech' | '/api/transcribe' | '/api/turn'
+  to:
+    | '/'
+    | '/api/lead'
+    | '/api/reflect'
+    | '/api/speech'
+    | '/api/transcribe'
+    | '/api/turn'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/lead'
+    | '/api/reflect'
+    | '/api/speech'
+    | '/api/transcribe'
+    | '/api/turn'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiLeadRoute: typeof ApiLeadRoute
+  ApiReflectRoute: typeof ApiReflectRoute
   ApiSpeechRoute: typeof ApiSpeechRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
   ApiTurnRoute: typeof ApiTurnRoute
@@ -76,6 +115,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lead': {
+      id: '/api/lead'
+      path: '/api/lead'
+      fullPath: '/api/lead'
+      preLoaderRoute: typeof ApiLeadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/reflect': {
+      id: '/api/reflect'
+      path: '/api/reflect'
+      fullPath: '/api/reflect'
+      preLoaderRoute: typeof ApiReflectRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/speech': {
@@ -104,6 +157,8 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiLeadRoute: ApiLeadRoute,
+  ApiReflectRoute: ApiReflectRoute,
   ApiSpeechRoute: ApiSpeechRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
   ApiTurnRoute: ApiTurnRoute,

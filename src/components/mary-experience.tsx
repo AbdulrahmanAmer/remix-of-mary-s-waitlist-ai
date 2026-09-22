@@ -16,8 +16,22 @@ import {
   type TurnFlags,
 } from "@/lib/mary.functions";
 import { streamMaryTurn } from "@/lib/mary-stream";
-import { WaitlistVault } from "./waitlist-vault";
-import { loadProgress, saveProgress, sessionId } from "@/lib/waitlist-store";
+import { OWNER_VIEW_EVENT, WaitlistVault } from "./waitlist-vault";
+import {
+  loadProgress,
+  newSession,
+  positionFor,
+  saveProgress,
+  sessionId,
+} from "@/lib/waitlist-store";
+import { addLessons, lessonsForTurn, type StoredLesson } from "@/lib/experience-store";
+import {
+  beaconLead,
+  browserContext,
+  syncLead,
+  type LeadOutcome,
+  type LeadPayload,
+} from "@/lib/lead-sync";
 import {
   speak,
   startMicSession,
@@ -106,11 +120,39 @@ function useStageHeight(ref: React.RefObject<HTMLElement | null>): number {
   return height;
 }
 
-const TYPING_LINES = [
-  "Take your time writing what you have in mind — I'm right here with you.",
-  "No rush at all, I'll wait while you type.",
-];
+/**
+ * On phones the on-screen keyboard shrinks the visual viewport without
+ * shrinking the layout — this follows it so the composer sits right above the
+ * keys and nothing slides under the bottom edge.
+ */
+function useVisualViewport(active: boolean): { height: number; keyboard: boolean } | null {
+  const [state, setState] = useState<{ height: number; keyboard: boolean } | null>(null);
+  useEffect(() => {
+    if (!active || typeof window === "undefined" || !window.visualViewport) {
+      setState(null);
+      return;
+    }
+    const viewport = window.visualViewport;
+    const update = () => {
+      const height = Math.round(viewport.height);
+      const keyboard = window.innerHeight - height > 120;
+      setState({ height, keyboard });
+      // iOS scrolls the page to reveal the focused field; with the shell
+      // already sized to the visible area that scroll only hides the header.
+      if (keyboard && window.scrollY !== 0) window.scrollTo(0, 0);
+    };
+    update();
+    viewport.addEventListener("resize", update);
+    viewport.addEventListener("scroll", update);
+    return () => {
+      viewport.removeEventListener("resize", update);
+      viewport.removeEventListener("scroll", update);
+    };
+  }, [active]);
+  return state;
+}
 
+// Only when she genuinely cannot hear you (muted mic, nothing typed for a while).
 const IDLE_NUDGES = [
   "Whenever you're ready — you can talk to me or type it out.",
   "I'm still here. Say the word, or type it if that's easier.",
@@ -125,8 +167,66 @@ const FIELD_LABELS: Record<string, string> = {
   operations: "Operations",
 };
 
+type ConversationOutcome = "signed_up" | "callback" | "declined";
+
+type ConversationResult = {
+  outcome: ConversationOutcome;
+  /** Confirmed by the sheet, or worked out locally when no sheet is connected. */
+  position: number | null;
+  sync: "pending" | "sheet" | "local" | "failed";
+};
+
 function uid() {
   return Math.random().toString(36).slice(2);
+}
+
+function transcriptOf(lines: Line[]): string {
+  return lines
+    .map(
+      (line) =>
+        `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}${line.interrupted ? " …" : ""}`,
+    )
+    .join("\n");
+}
+
+function fieldsKey(collected: Collected): string {
+  return WAITLIST_FIELDS.map((field) => collected[field] ?? "").join("\u0001");
+}
+
+/** Copy for the end screen — personal, definite, and honest about what happens next. */
+function closingCopy(outcome: ConversationOutcome, firstName: string, phone: string) {
+  const who = firstName ? `, ${firstName}` : "";
+  switch (outcome) {
+    case "callback":
+      return {
+        eyebrow: "Callback requested",
+        title: `We'll call you back${who}.`,
+        body: `Your request is with the Omnikom team${phone ? ` — they'll reach you on ${phone}` : ""}. Nothing else to fill in.`,
+        steps: [
+          "The team receives your request straight away",
+          phone ? `A real person calls you on ${phone}` : "A real person gets in touch",
+          "Everything you told MARY travels with it, so nobody asks twice",
+        ],
+      };
+    case "declined":
+      return {
+        eyebrow: "No pressure",
+        title: `Thanks for the chat${who}.`,
+        body: "No spot reserved, and that's completely fine. If OmniSuite becomes relevant later, MARY will be right here.",
+        steps: [],
+      };
+    default:
+      return {
+        eyebrow: "Early access confirmed",
+        title: `You're on the list${who}.`,
+        body: "Thanks for signing up — we'll be in touch as soon as OmniSuite launches, a product by Omnikom.",
+        steps: [
+          "You hear from us first, the moment early access opens",
+          "Invitations go out in order of position",
+          "MARY already knows your setup — no forms later",
+        ],
+      };
+  }
 }
 
 export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
@@ -152,19 +252,27 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [echoHint, setEchoHint] = useState(false);
-  const [result, setResult] = useState<{
-    position: number;
-    message: string;
-    callback?: boolean;
-  } | null>(null);
-  /** This visit's row in the browser store. */
+  const [result, setResult] = useState<ConversationResult | null>(null);
+  /** This visit's row in the browser store and in the sheet. */
   const entryIdRef = useRef<string>("session");
+  const startedAtRef = useRef(0);
+  /** Whether they spoke, typed, or both — kept for the record. */
+  const sourceRef = useRef<{ voice: boolean; text: boolean }>({ voice: false, text: false });
+  /** What the sheet last received, so nothing is re-sent for no reason. */
+  const syncedRef = useRef<{ lines: number; fields: string; outcome: string }>({
+    lines: 0,
+    fields: "",
+    outcome: "",
+  });
+  /** Their turn count at the last debrief — she does not review the same talk twice. */
+  const reflectedAtRef = useRef(0);
+  const checkpointRef = useRef(0);
+  const viewport = useVisualViewport(stage === "live");
 
   const speakRef = useRef<SpeakHandle | null>(null);
   /** The line currently being voiced, so a cut-off can keep only what was heard. */
   const currentLineRef = useRef<{ id: string; text: string; handle: SpeakHandle } | null>(null);
   const sessionRef = useRef<MicSession | null>(null);
-  const typingSaidRef = useRef(0);
   const nudgeRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
   const busyRef = useRef(false);
@@ -189,6 +297,49 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const linesRef = useRef<Line[]>([]);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
+  /** Focus the text box only where a keyboard is already there — never pop one up on a phone. */
+  const focusComposer = useCallback(() => {
+    const node = inputRef.current;
+    if (!node) return;
+    const desktop =
+      typeof window !== "undefined" &&
+      window.matchMedia?.("(hover: hover) and (pointer: fine)").matches;
+    if (desktop || document.activeElement === node) node.focus({ preventScroll: true });
+  }, []);
+
+  /** The row the sheet receives, built from what is known right now. */
+  const leadPayload = useCallback(
+    (outcome: LeadOutcome, extra: Partial<LeadPayload> = {}): LeadPayload => {
+      const known = collectedRef.current;
+      const current = linesRef.current;
+      const { voice, text } = sourceRef.current;
+      return {
+        sessionId: entryIdRef.current,
+        outcome,
+        name: known.name ?? "",
+        email: known.email ?? "",
+        phone: known.phone ?? "",
+        business: known.business ?? "",
+        industry: known.industry ?? "",
+        operations: known.operations ?? "",
+        callbackRequested: outcome === "callback" || Boolean(flagsRef.current.callback),
+        transcript: transcriptOf(current),
+        turns: current.filter((line) => line.role === "user").length,
+        durationSec: startedAtRef.current
+          ? Math.round((Date.now() - startedAtRef.current) / 1000)
+          : 0,
+        source: voice && text ? "mixed" : voice ? "voice" : text ? "text" : "none",
+        mode: flagsRef.current.mode ?? "",
+        startedAt: startedAtRef.current ? new Date(startedAtRef.current).toISOString() : "",
+        ...browserContext(),
+        localPosition: positionFor(known.email || entryIdRef.current),
+        reflect: false,
+        ...extra,
+      };
+    },
+    [],
+  );
+
   useEffect(() => {
     mutedRef.current = muted;
   }, [muted]);
@@ -197,9 +348,24 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   }, [micMuted]);
   useEffect(() => {
     collectedRef.current = collected;
+    if (Object.keys(collected).length === 0) return;
     // Write through on every confirmed detail: a refresh mid-call loses nothing.
-    if (Object.keys(collected).length > 0) saveProgress(entryIdRef.current, collected);
-  }, [collected]);
+    saveProgress(entryIdRef.current, collected);
+    // And a checkpoint reaches the sheet shortly after, so someone who leaves
+    // mid-conversation still lands as a partial row with what they gave.
+    if (stage !== "live" || sessionFinishedRef.current) return;
+    window.clearTimeout(checkpointRef.current);
+    checkpointRef.current = window.setTimeout(() => {
+      if (sessionFinishedRef.current) return;
+      syncedRef.current = {
+        lines: linesRef.current.length,
+        fields: fieldsKey(collectedRef.current),
+        outcome: "in_progress",
+      };
+      void syncLead(leadPayload("in_progress"));
+    }, 5000);
+    return () => window.clearTimeout(checkpointRef.current);
+  }, [collected, leadPayload, stage]);
 
   // Pick up this visit's row, and anything already known about this person.
   useEffect(() => {
@@ -317,32 +483,120 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     [commitLines, stopSpeaking],
   );
 
-  const finalize = useCallback((finalCollected: Collected, opts: { callback?: boolean } = {}) => {
-    sessionFinishedRef.current = true;
-    sessionRef.current?.setMuted(true);
+  /**
+   * MARY's debrief: what worked, what stalled, what to do differently. The
+   * lessons come back here for this browser and are pooled in the sheet.
+   */
+  const debrief = useCallback(async (payload: LeadPayload) => {
+    if (payload.turns < 2 || payload.turns - reflectedAtRef.current < 2) return;
+    reflectedAtRef.current = payload.turns;
+    try {
+      const response = await fetch("/api/reflect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sessionId: payload.sessionId,
+          transcript: payload.transcript,
+          outcome: payload.outcome,
+          collected: {
+            name: payload.name,
+            email: payload.email,
+            phone: payload.phone,
+            business: payload.business,
+            industry: payload.industry,
+            operations: payload.operations,
+          },
+          mode: payload.mode,
+          turns: payload.turns,
+          durationSec: payload.durationSec,
+        }),
+      });
+      if (!response.ok) return;
+      const body = (await response.json()) as { ok: boolean; lessons?: StoredLesson[] };
+      if (body.ok && body.lessons?.length) addLessons(body.lessons);
+    } catch {
+      // A missed debrief costs nothing but a lesson.
+    }
+  }, []);
 
-    const transcript = linesRef.current
-      .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
-      .join("\n");
-    // Written straight to this browser — no round trip, so the close never waits.
-    const entry = saveProgress(entryIdRef.current, {
-      name: finalCollected.name ?? "",
-      email: finalCollected.email ?? "",
-      phone: finalCollected.phone ?? "",
-      business: finalCollected.business ?? "",
-      industry: finalCollected.industry ?? "",
-      operations: finalCollected.operations ?? "",
-      transcript,
-      complete: !opts.callback,
-      callbackRequested: Boolean(opts.callback),
-    });
-    setResult({
-      position: entry.position,
-      message: opts.callback ? "Callback request saved." : "Saved.",
-      callback: Boolean(opts.callback),
-    });
-    setStage("done");
-    setPresenceState("done");
+  const finalize = useCallback(
+    (finalCollected: Collected, outcome: ConversationOutcome) => {
+      sessionFinishedRef.current = true;
+      sessionRef.current?.setMuted(true);
+      // A pending checkpoint must never land after the final write.
+      window.clearTimeout(checkpointRef.current);
+      collectedRef.current = finalCollected;
+
+      // Written straight to this browser first — the end screen never waits.
+      const entry = saveProgress(entryIdRef.current, {
+        name: finalCollected.name ?? "",
+        email: finalCollected.email ?? "",
+        phone: finalCollected.phone ?? "",
+        business: finalCollected.business ?? "",
+        industry: finalCollected.industry ?? "",
+        operations: finalCollected.operations ?? "",
+        transcript: transcriptOf(linesRef.current),
+        complete: outcome === "signed_up",
+        callbackRequested: outcome === "callback",
+      });
+      setResult({ outcome, position: null, sync: "pending" });
+      setStage("done");
+      setPresenceState("done");
+
+      const payload = leadPayload(outcome);
+      syncedRef.current = {
+        lines: linesRef.current.length,
+        fields: fieldsKey(finalCollected),
+        outcome,
+      };
+      void (async () => {
+        const synced = await syncLead(payload);
+        setResult((current) => {
+          if (!current) return current;
+          if (!synced.configured) {
+            // No sheet yet: the position is worked out on the spot, as before.
+            return { ...current, sync: "local", position: entry.position };
+          }
+          if (synced.saved) {
+            return {
+              ...current,
+              sync: "sheet",
+              position: synced.position ?? (outcome === "signed_up" ? entry.position : null),
+            };
+          }
+          return { ...current, sync: "failed", position: null };
+        });
+        await debrief(payload);
+      })();
+    },
+    [debrief, leadPayload],
+  );
+
+  /** They changed their mind after declining — the call simply picks back up. */
+  const resume = useCallback(() => {
+    sessionFinishedRef.current = false;
+    setResult(null);
+    setPresenceState("idle");
+    setStage("live");
+    lastActivityRef.current = Date.now();
+  }, []);
+
+  /** A clean slate: new visit id, fresh conversation. */
+  const restart = useCallback(() => {
+    speakRef.current?.stop();
+    newSession();
+    window.location.reload();
+  }, []);
+
+  /** Five quick taps on "omnikom" open the owner view where there is no keyboard. */
+  const ownerTapsRef = useRef<number[]>([]);
+  const ownerTap = useCallback(() => {
+    const now = Date.now();
+    ownerTapsRef.current = [...ownerTapsRef.current.filter((t) => now - t < 2000), now];
+    if (ownerTapsRef.current.length >= 5) {
+      ownerTapsRef.current = [];
+      window.dispatchEvent(new Event(OWNER_VIEW_EVENT));
+    }
   }, []);
 
   const runTurn = useCallback(
@@ -369,6 +623,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           messages,
           collected: collectedRef.current,
           flags: flagsRef.current,
+          // What she learned from earlier conversations on this device.
+          experience: lessonsForTurn(collectedRef.current.industry),
         };
 
         // Her first beat starts playing the moment it is written, while the
@@ -439,17 +695,23 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           rejected: turn.rejected,
         };
 
-        // They asked to be called back: the request is saved as soon as there
-        // is a name and a number, and the sales sequence ends there.
-        if (turn.callbackRequested && turn.collected.name && turn.collected.phone) {
-          finalize(turn.collected, { callback: true });
-        } else if (turn.complete) {
-          const required = WAITLIST_FIELDS.filter((field) => field !== "phone");
-          if (required.every((field) => turn.collected[field])) finalize(turn.collected);
-        } else if (turn.declined) {
-          // Nothing to sell here — she lets them go and stops the ladder.
-          sessionFinishedRef.current = true;
-          sessionRef.current?.setMuted(true);
+        // How this conversation ends, if it ends here. Her last words are left
+        // on screen for a breath before the end screen; if they speak in that
+        // breath, the conversation simply carries on.
+        const ending: ConversationOutcome | null =
+          turn.callbackRequested && turn.collected.name && turn.collected.phone
+            ? "callback"
+            : turn.complete &&
+                WAITLIST_FIELDS.filter((field) => field !== "phone").every(
+                  (field) => turn.collected[field],
+                )
+              ? "signed_up"
+              : turn.declined
+                ? "declined"
+                : null;
+        if (ending) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 1300));
+          if (!stale()) finalize(turn.collected, ending);
         }
       } catch {
         if (!stale()) await say("I hit a snag on my side — could you try that once more?");
@@ -459,17 +721,18 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           busyRef.current = false;
           lastActivityRef.current = Date.now();
           setListeningPhase(micMutedRef.current ? "paused" : "listening");
-          inputRef.current?.focus();
+          focusComposer();
         }
       }
     },
-    [finalize, say],
+    [finalize, focusComposer, say],
   );
 
   const sendUser = useCallback(
-    (text: string) => {
+    (text: string, via: "voice" | "text" = "text") => {
       const clean = text.trim();
       if (!clean) return chainRef.current;
+      sourceRef.current[via] = true;
       // Talking (or typing) over her ends her turn immediately — and only the
       // words she actually got out stay in the transcript.
       interruptRef.current = true;
@@ -537,7 +800,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         );
         return;
       }
-      void sendUser(spoken);
+      void sendUser(spoken, "voice");
     },
     [releaseHold, sendUser],
   );
@@ -547,6 +810,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const enterLive = useCallback(async () => {
     setStage("live");
     lastActivityRef.current = Date.now();
+    if (!startedAtRef.current) startedAtRef.current = Date.now();
     // Her welcome sits in the same queue as everything said after it.
     const run = chainRef.current.then(() => runTurn([])).catch(() => {});
     chainRef.current = run;
@@ -699,26 +963,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     }
   }, [releaseHold]);
 
-  const onDraftChange = useCallback(
-    (value: string) => {
-      const wasEmpty = draft.length === 0;
-      setDraft(value);
-      lastActivityRef.current = Date.now();
-      if (
-        wasEmpty &&
-        value &&
-        !busyRef.current &&
-        !speakRef.current &&
-        typingSaidRef.current < TYPING_LINES.length &&
-        stage === "live"
-      ) {
-        const line = TYPING_LINES[typingSaidRef.current];
-        typingSaidRef.current += 1;
-        if (line) void say(line);
-      }
-    },
-    [draft.length, say, stage],
-  );
+  // Typing is quiet time: she waits, exactly like someone watching you write.
+  const onDraftChange = useCallback((value: string) => {
+    setDraft(value);
+    lastActivityRef.current = Date.now();
+  }, []);
 
   useEffect(() => {
     if (stage !== "live") return;
@@ -743,20 +992,60 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   }, []);
 
   useEffect(() => {
-    if (stage === "live") inputRef.current?.focus();
-  }, [stage]);
+    if (stage === "live") focusComposer();
+  }, [focusComposer, stage]);
 
   // Keep the newest turn in view without ever showing a scrollbar.
   useEffect(() => {
     const node = trailRef.current;
     if (!node) return;
     node.scrollTop = node.scrollHeight;
-  }, [lines, interim, stage, viewportHeight]);
+  }, [lines, interim, stage, viewportHeight, reveal.count]);
+
+  // If the tab closes or goes to the background mid-conversation, whatever was
+  // said still reaches the sheet as a partial row — and MARY still debriefs it.
+  useEffect(() => {
+    if (stage !== "live") return;
+    const flush = () => {
+      if (sessionFinishedRef.current) return;
+      const current = linesRef.current;
+      const turns = current.filter((line) => line.role === "user").length;
+      if (turns < 1) return;
+      const fields = fieldsKey(collectedRef.current);
+      const already = syncedRef.current;
+      if (
+        already.outcome === "abandoned" &&
+        already.lines === current.length &&
+        already.fields === fields
+      )
+        return;
+      const reflect = turns >= 2 && turns - reflectedAtRef.current >= 2;
+      if (reflect) reflectedAtRef.current = turns;
+      syncedRef.current = { lines: current.length, fields, outcome: "abandoned" };
+      beaconLead(leadPayload("abandoned", { reflect }));
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
+  }, [leadPayload, stage]);
 
   // The centre holds her latest line; everything before it stays in order above.
   const last = lines[lines.length - 1];
   const lastMary = last?.role === "mary" ? last : undefined;
   const history = (lastMary ? lines.slice(0, -1) : lines).slice(-6);
+
+  // The end screen speaks to the person by name and shows what was kept.
+  const firstName = (collected.name ?? "").trim().split(/\s+/)[0] ?? "";
+  const closing = result ? closingCopy(result.outcome, firstName, collected.phone ?? "") : null;
+  const confirmedFields = WAITLIST_FIELDS.filter(
+    (field) => collected[field] || (field === "phone" && result?.outcome === "signed_up"),
+  ).map((field) => [field, collected[field] ?? ""] as const);
 
   // Once she is actually talking, that is the truth of the moment — whatever
   // the microphone was doing a second ago.
@@ -765,19 +1054,23 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       ? "speaking"
       : listeningPhase === "hearing" || listeningPhase === "finishing"
         ? listeningPhase
-        : micMuted
-          ? "muted"
-          : "live";
+        : presence === "thinking"
+          ? "thinking"
+          : micMuted
+            ? "muted"
+            : "live";
   const statusText =
     statusKey === "hearing"
       ? "Go ahead — I'm listening."
       : statusKey === "finishing"
         ? "Got it. MARY is preparing her reply."
-        : statusKey === "muted"
-          ? "Your microphone is muted. Unmute to keep talking, or type."
-          : statusKey === "speaking"
-            ? "MARY is speaking. Just talk to cut in."
-            : "MARY is listening. Just talk — she answers when you pause.";
+        : statusKey === "thinking"
+          ? "MARY is thinking…"
+          : statusKey === "muted"
+            ? "Your microphone is muted. Unmute to keep talking, or type."
+            : statusKey === "speaking"
+              ? "MARY is speaking. Just talk to cut in."
+              : "MARY is listening. Just talk — she answers when you pause.";
 
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
@@ -793,15 +1086,26 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     Math.min(180, Math.round(viewportHeight * (tight ? 0.16 : 0.19))),
   );
 
+  // The call is one fixed screen: the thread scrolls inside it, and the
+  // composer stays put above the keyboard. Every other stage flows as usual.
+  const locked = stage === "live";
+
   return (
-    <main ref={shellRef} className="no-scrollbar relative min-h-dvh overflow-y-auto">
+    <main
+      ref={shellRef}
+      className={`no-scrollbar relative ${locked ? "h-dvh overflow-hidden" : "min-h-dvh overflow-y-auto"}`}
+      style={locked && viewport ? { height: viewport.height } : undefined}
+    >
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
-      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
+      <WaitlistVault />
+      <div
+        className={`relative z-10 mx-auto flex w-full max-w-5xl flex-col px-5 sm:px-8 ${locked ? "h-full py-3 sm:py-5" : "min-h-dvh py-4 sm:py-5"}`}
+      >
         <motion.header
           ref={headerRef}
           layout
           transition={SPRING}
-          className={`flex min-h-12 items-center gap-4 ${stage === "landing" || stage === "intro" ? "justify-center" : "justify-between"}`}
+          className={`flex min-h-12 shrink-0 items-center gap-4 ${stage === "landing" || stage === "intro" ? "justify-center" : "justify-between"}`}
         >
           <div ref={lockupRef} className="min-w-0">
             <BrandLockup
@@ -818,22 +1122,31 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           </div>
           <AnimatePresence>
             {stage === "live" && (
-              <motion.button
+              <motion.div
+                key="tools"
                 initial={reduced ? false : { opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.94 }}
                 transition={SOFT}
-                type="button"
-                onClick={() => {
-                  setMuted((current) => !current);
-                  if (!muted) stopSpeaking();
-                }}
-                aria-label={muted ? "Turn MARY's voice on" : "Turn MARY's voice off"}
-                className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-ink"
+                className="flex shrink-0 items-center gap-1.5"
               >
-                {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-                <span className="hidden sm:inline">{muted ? "Voice off" : "Voice on"}</span>
-              </motion.button>
+                {/* On narrow screens the progress lives here, out of the text. */}
+                <div className="md:hidden">
+                  <ProgressConstellation collected={collected} variant="row" />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMuted((current) => !current);
+                    if (!muted) stopSpeaking();
+                  }}
+                  aria-label={muted ? "Turn MARY's voice on" : "Turn MARY's voice off"}
+                  className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-ink"
+                >
+                  {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                  <span className="hidden sm:inline">{muted ? "Voice off" : "Voice on"}</span>
+                </button>
+              </motion.div>
             )}
           </AnimatePresence>
         </motion.header>
@@ -935,55 +1248,62 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
               transition={STAGE_IN}
-              className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col px-6 py-3 sm:px-0 lg:py-5"
+              className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col pt-1 sm:px-0 lg:py-4"
             >
-              <MaryPresence state={presence} level={level} height={liveOrb} />
+              <div className="shrink-0">
+                <MaryPresence state={presence} level={level} height={liveOrb} />
+              </div>
 
+              {/* The only thing that scrolls. The inner column is pushed to the
+                  bottom with min-h-full + justify-end (not on the scroller
+                  itself), so the top of a long thread is always reachable. */}
               <div
                 ref={trailRef}
-                className="no-scrollbar mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-y-auto"
+                className="no-scrollbar trail-fade relative mt-3 min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
               >
-                <motion.div
-                  layout
-                  transition={SPRING}
-                  className="no-scrollbar mx-auto w-full max-w-xl space-y-2.5"
-                >
+                <div className="mx-auto flex min-h-full w-full max-w-xl flex-col justify-end space-y-2.5 px-0.5 pt-6">
                   <AnimatePresence initial={false} mode="popLayout">
-                    {history.map((line, index) => (
-                      <motion.div
-                        key={line.id}
-                        layout
-                        initial={reduced ? false : { opacity: 0, y: 12, scale: 0.98 }}
-                        animate={{
-                          opacity: 0.3 + (index / Math.max(1, history.length)) * 0.5,
-                          y: 0,
-                          scale: 1,
-                        }}
-                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
-                        transition={SOFT}
-                        className={line.role === "user" ? "flex justify-end" : "flex justify-start"}
-                      >
-                        <div
-                          className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/85 text-background" : "text-muted-foreground"}`}
+                    {history.map((line, index) => {
+                      // Their latest words stay fully legible while she thinks.
+                      const newest = line.id === last?.id;
+                      return (
+                        <motion.div
+                          key={line.id}
+                          layout="position"
+                          initial={reduced ? false : { opacity: 0, y: 12, scale: 0.98 }}
+                          animate={{
+                            opacity: newest ? 1 : 0.3 + (index / Math.max(1, history.length)) * 0.5,
+                            y: 0,
+                            scale: 1,
+                          }}
+                          exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                          transition={SOFT}
+                          className={
+                            line.role === "user" ? "flex justify-end" : "flex justify-start"
+                          }
                         >
-                          {line.text}
-                          {line.interrupted && <span aria-label="cut off">…</span>}
-                        </div>
-                      </motion.div>
-                    ))}
+                          <div
+                            className={
+                              line.role === "user"
+                                ? "max-w-[85%] whitespace-pre-line break-words rounded-[1.35rem] rounded-br-[0.45rem] bg-ink/85 px-4 py-2 text-left text-[0.86rem] leading-relaxed text-background"
+                                : "max-w-[88%] break-words text-[0.84rem] leading-relaxed text-muted-foreground"
+                            }
+                          >
+                            {line.text}
+                            {line.interrupted && <span aria-label="cut off">…</span>}
+                          </div>
+                        </motion.div>
+                      );
+                    })}
                   </AnimatePresence>
 
                   {lastMary && (
-                    <motion.div
-                      layout
-                      transition={SPRING}
-                      className="mx-auto max-w-xl pt-2 text-center"
-                    >
+                    <div className="mx-auto max-w-xl pt-2 text-center">
                       <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
                         MARY
                       </p>
                       <p
-                        className={`text-pretty leading-relaxed text-ink ${compact ? "text-lg" : "text-xl sm:text-2xl"}`}
+                        className={`text-pretty break-words leading-relaxed text-ink ${compact ? "text-lg" : "text-xl sm:text-2xl"}`}
                       >
                         {lastMary.text.split(/\s+/).map((word, index) => (
                           <motion.span
@@ -1006,25 +1326,34 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                           </span>
                         )}
                       </p>
-                    </motion.div>
+                    </div>
                   )}
+
+                  {/* Live caption: a bubble forming on your side as you speak. */}
                   <AnimatePresence>
                     {interim && (
-                      <motion.p
+                      <motion.div
+                        key="interim"
                         initial={reduced ? false : { opacity: 0, y: 6 }}
                         animate={{ opacity: 1, y: 0 }}
                         exit={{ opacity: 0 }}
                         transition={SOFT}
-                        className="text-right text-sm italic text-muted-foreground"
+                        className="flex justify-end"
                       >
-                        {interim}
-                      </motion.p>
+                        <p className="max-w-[85%] break-words rounded-[1.35rem] rounded-br-[0.45rem] bg-ink/10 px-4 py-2 text-left text-[0.86rem] leading-relaxed text-ink/70">
+                          {interim}
+                        </p>
+                      </motion.div>
                     )}
                   </AnimatePresence>
-                </motion.div>
+                </div>
               </div>
 
-              <div className="pt-3">
+              {/* Composer: pinned below the thread, above the keyboard and the home indicator. */}
+              <div
+                className="shrink-0 pt-3"
+                style={{ paddingBottom: "max(0.25rem, env(safe-area-inset-bottom))" }}
+              >
                 <AnimatePresence>
                   {micError && (
                     <motion.p
@@ -1039,16 +1368,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   )}
                 </AnimatePresence>
                 <motion.div
-                  layout
                   animate={
                     reduced
                       ? { scale: 1 }
-                      : presence === "hearing" || presence === "speaking"
+                      : presence === "hearing"
                         ? { scale: pulseScale }
                         : { scale: 1 }
                   }
                   transition={SPRING}
-                  className="surface-floating mx-auto flex w-full max-w-xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
+                  className="surface-floating mx-auto flex w-full max-w-xl items-end gap-1 rounded-[1.6rem] bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
                     onClick={toggleMicMute}
@@ -1068,10 +1396,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                     onKeyDown={(event) => {
                       if (event.key === "Enter" && !event.shiftKey) {
                         event.preventDefault();
-                        void sendUser(draft);
+                        void sendUser(draft, "text");
                       }
                     }}
                     rows={1}
+                    enterKeyHint="send"
                     placeholder={
                       listeningPhase === "hearing"
                         ? "I can hear you…"
@@ -1081,7 +1410,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                             ? "Muted — type your answer"
                             : "Speak or type your answer"
                     }
-                    className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
+                    className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground sm:text-sm"
                   />
                   <AnimatePresence initial={false}>
                     {draft.trim() && (
@@ -1092,7 +1421,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                         transition={SPRING}
                       >
                         <Button
-                          onClick={() => void sendUser(draft)}
+                          onClick={() => void sendUser(draft, "text")}
                           size="icon"
                           variant="ghost"
                           aria-label="Send"
@@ -1135,7 +1464,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             </motion.section>
           )}
 
-          {stage === "done" && (
+          {stage === "done" && result && closing && (
             <motion.section
               key="done"
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
@@ -1143,7 +1472,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               transition={STAGE_IN}
               className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-4 text-center"
             >
-              <div>
+              <div className="flex flex-col items-center">
                 <motion.div
                   initial={reduced ? false : { opacity: 0, scale: 0.92 }}
                   animate={{ opacity: 1, scale: 1 }}
@@ -1158,7 +1487,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   transition={{ ...SOFT, delay: 0.14 }}
                   className={`eyebrow ${compact ? "mt-3" : "mt-7"}`}
                 >
-                  Early access confirmed
+                  {closing.eyebrow}
                 </motion.p>
                 <motion.h1
                   initial={reduced ? false : { opacity: 0, y: 12 }}
@@ -1166,7 +1495,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   transition={{ ...SOFT, delay: 0.2 }}
                   className={`mt-3 text-balance font-semibold leading-tight text-ink ${compact ? "text-4xl" : "text-5xl"}`}
                 >
-                  You’re on the waitlist.
+                  {closing.title}
                 </motion.h1>
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 12 }}
@@ -1174,52 +1503,153 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   transition={{ ...SOFT, delay: 0.26 }}
                   className="mx-auto mt-4 max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground"
                 >
-                  Thanks for signing up — we’ll be in touch as soon as OmniSuite launches, a product
-                  by Omnikom.
+                  {closing.body}
                 </motion.p>
-                {result && result.position > 0 && (
-                  <motion.p
+
+                {result.outcome === "signed_up" && (
+                  <motion.div
                     initial={reduced ? false : { opacity: 0 }}
                     animate={{ opacity: 1 }}
                     transition={{ ...SOFT, delay: 0.34 }}
-                    className="mt-5 font-semibold text-accent-text"
+                    className="mt-5 flex min-h-9 items-center justify-center"
                   >
-                    Early access position #{result.position}
-                  </motion.p>
+                    <AnimatePresence mode="wait" initial={false}>
+                      {result.sync === "pending" ? (
+                        <motion.span
+                          key="pending"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0, filter: "blur(4px)" }}
+                          transition={SOFT}
+                          className="inline-flex items-center gap-2 text-sm text-muted-foreground"
+                        >
+                          <span className="size-1.5 animate-pulse rounded-full bg-primary" />
+                          Securing your place…
+                        </motion.span>
+                      ) : result.position ? (
+                        <motion.span
+                          key="position"
+                          initial={{ opacity: 0, scale: 0.92, filter: "blur(4px)" }}
+                          animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+                          transition={SPRING}
+                          className="inline-flex items-center gap-2 rounded-full bg-primary/15 px-4 py-1.5 text-sm font-semibold text-accent-text"
+                        >
+                          Early access position #{result.position}
+                        </motion.span>
+                      ) : (
+                        <motion.span
+                          key="saved"
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          transition={SOFT}
+                          className="text-sm text-muted-foreground"
+                        >
+                          Your details are saved — your position comes with the confirmation.
+                        </motion.span>
+                      )}
+                    </AnimatePresence>
+                  </motion.div>
+                )}
+
+                {result.outcome === "declined" && (
+                  <motion.div
+                    initial={reduced ? false : { opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ ...SOFT, delay: 0.34 }}
+                    className="mt-7 flex flex-wrap items-center justify-center gap-3"
+                  >
+                    <MotionButton
+                      onClick={resume}
+                      size="lg"
+                      whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
+                      whileTap={reduced ? {} : { scale: 0.98 }}
+                      className="surface-raised h-12 rounded-full bg-primary px-6 text-primary-foreground"
+                    >
+                      Keep talking to MARY <ArrowRight />
+                    </MotionButton>
+                    <Button
+                      onClick={restart}
+                      variant="ghost"
+                      className="h-12 rounded-full px-5 text-muted-foreground hover:text-ink"
+                    >
+                      Start over
+                    </Button>
+                  </motion.div>
                 )}
               </div>
 
-              <div className={`w-full text-left ${compact ? "mt-6" : "mt-10"}`}>
-                <p className="text-center text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  Details confirmed
-                </p>
-                <dl className={`grid sm:grid-cols-2 ${compact ? "mt-3 gap-4" : "mt-6 gap-6"}`}>
-                  {WAITLIST_FIELDS.map((field, index) => (
-                    <motion.div
-                      key={field}
-                      initial={reduced ? false : { opacity: 0, y: 10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ ...SOFT, delay: 0.38 + index * 0.06 }}
-                      className={field === "operations" ? "sm:col-span-2" : ""}
-                    >
-                      <dt className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                        {FIELD_LABELS[field]}
-                      </dt>
-                      <dd className="mt-1 text-sm font-medium text-ink">
-                        {collected[field] || "—"}
-                      </dd>
-                    </motion.div>
-                  ))}
-                </dl>
-                {result && (
-                  <p className="mt-8 text-center text-xs text-muted-foreground">{result.message}</p>
-                )}
-              </div>
+              {result.outcome !== "declined" && (
+                <div
+                  className={`grid w-full gap-x-10 gap-y-8 text-left sm:grid-cols-[1.05fr_1fr] ${compact ? "mt-7" : "mt-11"}`}
+                >
+                  <div>
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      What happens next
+                    </p>
+                    <ol className="mt-4 space-y-3.5">
+                      {closing.steps.map((step, index) => (
+                        <motion.li
+                          key={step}
+                          initial={reduced ? false : { opacity: 0, x: -8 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ ...SOFT, delay: 0.4 + index * 0.08 }}
+                          className="flex items-start gap-3 text-sm leading-relaxed text-ink"
+                        >
+                          <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary/20 text-[0.65rem] font-semibold text-accent-text">
+                            {index + 1}
+                          </span>
+                          <span>{step}</span>
+                        </motion.li>
+                      ))}
+                    </ol>
+                  </div>
+                  <div>
+                    <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      {result.outcome === "callback"
+                        ? "What the team receives"
+                        : "Details confirmed"}
+                    </p>
+                    <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4">
+                      {confirmedFields.map(([field, value], index) => (
+                        <motion.div
+                          key={field}
+                          initial={reduced ? false : { opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ ...SOFT, delay: 0.44 + index * 0.06 }}
+                          className={field === "operations" ? "col-span-2" : ""}
+                        >
+                          <dt className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                            {FIELD_LABELS[field]}
+                          </dt>
+                          <dd
+                            className={`mt-0.5 break-words text-sm font-medium ${value ? "text-ink" : "text-muted-foreground"}`}
+                          >
+                            {value || "Skipped"}
+                          </dd>
+                        </motion.div>
+                      ))}
+                    </dl>
+                  </div>
+                </div>
+              )}
+
+              {result.outcome !== "declined" && (
+                <motion.button
+                  type="button"
+                  onClick={restart}
+                  initial={reduced ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ ...SOFT, delay: 0.9 }}
+                  className={`text-xs text-muted-foreground transition-colors hover:text-ink ${compact ? "mt-7" : "mt-10"}`}
+                >
+                  Start another conversation
+                </motion.button>
+              )}
             </motion.section>
           )}
         </AnimatePresence>
 
-        {stage === "live" && <ProgressConstellation collected={collected} />}
+        {stage === "live" && <ProgressConstellation collected={collected} variant="rail" />}
 
         {/* The mark itself, flying: centre stage, a bloom, then a pop into the corner. */}
         <AnimatePresence>
@@ -1250,10 +1680,20 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           )}
         </AnimatePresence>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 py-4 text-[0.68rem] text-muted-foreground">
+        {/* During the call on a phone every pixel goes to the conversation. */}
+        <footer
+          className={`${locked ? "hidden sm:flex" : "flex"} shrink-0 flex-wrap items-center justify-between gap-2 py-4 text-[0.68rem] text-muted-foreground`}
+        >
           <span>OmniSuite · AI-native revenue infrastructure</span>
           <span>
-            A product by <span className="wordmark text-ink">omnikom</span>
+            A product by{" "}
+            <span
+              className="wordmark cursor-default select-none text-ink"
+              onClick={ownerTap}
+              aria-hidden="true"
+            >
+              omnikom
+            </span>
           </span>
         </footer>
       </div>
