@@ -831,7 +831,7 @@ export function MaryExperience() {
                   transition={SPRING}
                   className="mx-auto w-full max-w-md"
                 >
-                  <MaryPresence state="done" level={0} height={200} />
+                  <MaryPresence state="done" level={0} height={landingOrb} />
                 </motion.div>
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}
