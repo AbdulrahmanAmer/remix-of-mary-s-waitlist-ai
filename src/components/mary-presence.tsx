@@ -377,9 +377,12 @@ export const MaryPresence = memo(function MaryPresence({
       cur.thick = lerp(cur.thick, target.thick, k);
 
       const voiced = current === "speaking" || current === "listening" || current === "hearing";
-      const targetLevel = voiced ? Math.min(1, Math.max(0, levelRef.current)) : 0;
-      const rate = targetLevel > lv ? dt / 0.1 : dt / 0.32;
-      lv += (targetLevel - lv) * Math.min(1, rate);
+      const reading = voiced ? Math.min(1, Math.max(0, levelRef.current)) : 0;
+      // Ease the incoming reading first, so a late or dropped frame shows up as
+      // a soft swell rather than a visible jump.
+      smoothed += (reading - smoothed) * Math.min(1, dt / 0.06);
+      const rate = smoothed > lv ? dt / 0.1 : dt / 0.32;
+      lv += (smoothed - lv) * Math.min(1, rate);
 
       sweep += dt * cur.swirl;
 
@@ -388,9 +391,16 @@ export const MaryPresence = memo(function MaryPresence({
       lastDone = isDone;
       if (bloom > 0) bloom = Math.max(0, bloom - dt * 0.9);
 
+      const startedAt = performance.now();
       draw(true);
+      // Watch what a frame actually costs on this device and shed detail before
+      // the painting can ever be what makes her stutter.
+      cost += (performance.now() - startedAt - cost) * 0.1;
+      if (!lite && cost > 9) lite = true;
+      else if (lite && cost < 4) lite = false;
       raf = requestAnimationFrame(frame);
     };
+
 
     if (reduced) {
       draw(false);
