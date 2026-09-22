@@ -24,7 +24,7 @@ export const Route = createFileRoute("/")({
 function Index() {
   return (
     <ClientOnly fallback={<MaryBoot />}>
-      <MaryExperience />
+      <BootGate />
     </ClientOnly>
   );
 }
