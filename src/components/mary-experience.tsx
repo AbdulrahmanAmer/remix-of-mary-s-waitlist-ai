@@ -458,7 +458,7 @@ export function MaryExperience() {
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -14, filter: "blur(4px)" }}
-              transition={{ ...STAGE_IN, exit: STAGE_OUT }}
+              transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-10 text-center sm:py-14"
             >
               <div className="mx-auto flex max-w-3xl flex-col items-center">
@@ -538,7 +538,7 @@ export function MaryExperience() {
               initial={reduced ? false : { opacity: 0, y: 16, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
-              transition={{ ...STAGE_IN, exit: STAGE_OUT }}
+              transition={STAGE_IN}
               className="mx-auto flex w-full max-w-4xl flex-1 flex-col py-5 lg:py-7"
             >
               <MaryPresence state={presence} level={level} height={128} />
@@ -655,7 +655,7 @@ export function MaryExperience() {
                   layout
                   animate={
                     reduced
-                      ? undefined
+                      ? { scale: 1 }
                       : recording || presence === "speaking"
                         ? { scale: pulseScale }
                         : { scale: 1 }
