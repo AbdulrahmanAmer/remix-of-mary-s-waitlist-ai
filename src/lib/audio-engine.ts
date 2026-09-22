@@ -666,6 +666,39 @@ function micFailureFrom(error: unknown): MicFailure {
   return "unknown";
 }
 
+/**
+ * True inside an app's built-in browser (Instagram, Facebook, LinkedIn, X,
+ * WhatsApp, TikTok). Those often strip the microphone entirely, and the fix is
+ * "open this in your real browser", not "check your settings".
+ */
+export function isInAppBrowser(): boolean {
+  if (typeof navigator === "undefined") return false;
+  const ua = navigator.userAgent || "";
+  return /FBAN|FBAV|FB_IAB|Instagram|LinkedInApp|Line\/|Twitter|MicroMessenger|TikTok|Snapchat|Pinterest|WhatsApp|GSA\//i.test(
+    ua,
+  );
+}
+
+/** What the browser already knows about the microphone, before we ask for it. */
+export async function micPermissionState(): Promise<"granted" | "denied" | "prompt" | "unknown"> {
+  try {
+    const query = (
+      navigator as unknown as {
+        permissions?: { query?: (d: { name: string }) => Promise<{ state: string }> };
+      }
+    ).permissions?.query;
+    if (!query) return "unknown";
+    const status = await query.call(
+      (navigator as unknown as { permissions: unknown }).permissions,
+      { name: "microphone" },
+    );
+    const state = status.state;
+    return state === "granted" || state === "denied" || state === "prompt" ? state : "unknown";
+  } catch {
+    return "unknown";
+  }
+}
+
 export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {
   // A page served over plain http (or an in-app browser that strips the API)
   // has no microphone at all — say so plainly instead of blaming permissions.
