@@ -121,12 +121,16 @@ export function getAudioContext(): AudioContext {
 }
 
 // ---------------------------------------------------------------------------
-// Output sink — her voice leaves through a loopback peer connection and out of
-// an <audio> element. That is the one route browsers treat as "sound of the
-// far end", so their echo canceller subtracts it from the microphone. Where
-// that route cannot be built (no WebRTC, a browser that refuses the local
-// negotiation), the same element plays her voice directly instead: being heard
+// Output — her voice leaves through a loopback peer connection and out of an
+// <audio> element. That is the one route browsers treat as "sound of the far
+// end", so their echo canceller subtracts it from the microphone. Where that
+// route cannot be built, or proves inaudible (iPhone silent switch, earpiece
+// routing), the same audio goes straight to the speakers instead: being heard
 // matters more than the canceller's help, and the local echo model covers it.
+//
+// The two legs are exclusive. Everything she says enters one hub, and exactly
+// one of `callGain` (→ call route → element) or `directGain` (→ speakers) is
+// open at any moment — never both, or the person hears every line twice.
 // ---------------------------------------------------------------------------
 type Sink = {
   node: MediaStreamAudioDestinationNode;
@@ -134,51 +138,83 @@ type Sink = {
   ready: Promise<boolean>;
   /** The browser's call engine is carrying her voice (echo cancellation helps). */
   ok: boolean;
+  /** Replaced by a rebuild: any late callback must do nothing. */
+  stale: boolean;
+  /** Tears down the peer connections behind the call route. */
+  release: () => void;
 };
 let sink: Sink | null = null;
-let degraded = false;
-/** Direct-to-speaker path, silent until the call route proves inaudible. */
-let directGain: GainNode | null = null;
-/** Everything she says passes through here before it splits to both routes. */
+/** Everything she says passes through here; built once per audio context. */
 let hub: GainNode | null = null;
+/** hub → callGain → sink node → browser call engine → <audio> element. */
+let callGain: GainNode | null = null;
+/** hub → directGain → speakers. Open only when the call route is not heard. */
+let directGain: GainNode | null = null;
 let directOn = false;
 /** performance.now() of the last frame where the element clock actually moved. */
 let lastElementProgressAt = 0;
+/** The element was just pointed at a stream; its clock needs a moment to start. */
+let elementSettleUntil = 0;
+/** One output watcher for the whole page, however many lines are spoken. */
+let watching = false;
+/** The line being voiced right now. She has one voice: a new line ends it. */
+let currentHandle: SpeakHandle | null = null;
 
-/** True when her voice is playing without the browser's echo canceller. */
-export function echoCancellationDegraded(): boolean {
-  return degraded;
+function ensureBus(ctx: AudioContext) {
+  if (!hub || !callGain || !directGain) {
+    hub = ctx.createGain();
+    callGain = ctx.createGain();
+    directGain = ctx.createGain();
+    callGain.gain.value = 1;
+    directGain.gain.value = 0;
+    hub.connect(callGain);
+    hub.connect(directGain);
+    directGain.connect(ctx.destination);
+    directOn = false;
+  }
+  return { hub, callGain, directGain };
+}
+
+/** Opens exactly one leg. A short ramp keeps the switch from clicking. */
+function setRoute(direct: boolean) {
+  if (!callGain || !directGain || !sharedContext) return;
+  const at = sharedContext.currentTime;
+  try {
+    directGain.gain.setTargetAtTime(direct ? 1 : 0, at, 0.01);
+    callGain.gain.setTargetAtTime(direct ? 0 : 1, at, 0.01);
+  } catch {
+    directGain.gain.value = direct ? 1 : 0;
+    callGain.gain.value = direct ? 0 : 1;
+  }
+  directOn = direct;
 }
 
 /**
  * iPhone Safari mutes and mis-routes the "phone call" audio path (silent
- * switch, earpiece). If the element clock stops moving while a line is
- * playing, her voice also goes straight to the speakers: being heard beats
- * the browser's echo canceller, and the local echo model covers the rest.
+ * switch, earpiece). When the element is provably not making sound while she
+ * is, her voice moves to the speakers — and leaves the call route, so the
+ * same words are never heard down two paths at once.
  */
 function enableDirectOutput() {
-  if (directOn || !directGain) return;
-  directOn = true;
-  degraded = true;
-  try {
-    directGain.gain.value = 1;
-  } catch {
-    /* ignore */
-  }
+  if (directOn) return;
+  setRoute(true);
   trace({ type: "directOutput" });
 }
 
-/** True once her voice had to be pushed straight to the speakers. */
-export function directOutputEngaged(): boolean {
-  return directOn;
-}
-
 /** Sends a stream out and back through the browser's call engine. */
-async function loopback(stream: MediaStream): Promise<MediaStream> {
+async function loopback(stream: MediaStream): Promise<{ stream: MediaStream; close: () => void }> {
   const Ctor = window.RTCPeerConnection;
   if (!Ctor) throw new Error("no webrtc");
   const from = new Ctor();
   const to = new Ctor();
+  const close = () => {
+    try {
+      from.close();
+      to.close();
+    } catch {
+      /* already closed */
+    }
+  };
   const received = new MediaStream();
   const connected = new Promise<MediaStream>((resolve, reject) => {
     const timer = window.setTimeout(() => reject(new Error("loopback timeout")), 3000);
@@ -194,57 +230,82 @@ async function loopback(stream: MediaStream): Promise<MediaStream> {
   to.onicecandidate = (e) => {
     if (e.candidate) void from.addIceCandidate(e.candidate);
   };
-  for (const track of stream.getAudioTracks()) from.addTrack(track, stream);
-  const offer = await from.createOffer();
-  await from.setLocalDescription(offer);
-  await to.setRemoteDescription(offer);
-  const answer = await to.createAnswer();
-  await to.setLocalDescription(answer);
-  await from.setRemoteDescription(answer);
-  return connected;
+  try {
+    for (const track of stream.getAudioTracks()) from.addTrack(track, stream);
+    const offer = await from.createOffer();
+    await from.setLocalDescription(offer);
+    await to.setRemoteDescription(offer);
+    const answer = await to.createAnswer();
+    await to.setLocalDescription(answer);
+    await from.setRemoteDescription(answer);
+    return { stream: await connected, close };
+  } catch (error) {
+    close();
+    throw error;
+  }
+}
+
+/** Points the element at a stream and gives its clock a moment before it is judged. */
+function attach(element: HTMLAudioElement, stream: MediaStream, settleMs: number) {
+  element.srcObject = stream;
+  elementSettleUntil = performance.now() + settleMs;
+  return element.play().catch(() => {});
 }
 
 function ensureSink(ctx: AudioContext): Sink {
-  if (sink) return sink;
+  if (sink && !sink.stale) return sink;
+  const bus = ensureBus(ctx);
   const node = ctx.createMediaStreamDestination();
-  // The silent fallback path to the real speakers, opened only if the call
-  // route turns out to make no sound (iPhone silent switch, earpiece routing).
-  hub = ctx.createGain();
-  directGain = ctx.createGain();
-  directGain.gain.value = 0;
-  hub.connect(node);
-  hub.connect(directGain);
-  directGain.connect(ctx.destination);
-  directOn = false;
+  bus.callGain.connect(node);
+  // A fresh route starts on the call leg; the watcher decides if it is heard.
+  setRoute(false);
   const element = document.createElement("audio");
   element.setAttribute("playsinline", "");
   element.autoplay = true;
   element.style.display = "none";
+  document.body.appendChild(element);
+  let closeLoopback: (() => void) | null = null;
+  const created: Sink = {
+    node,
+    element,
+    ok: false,
+    stale: false,
+    ready: Promise.resolve(false),
+    release: () => {
+      created.stale = true;
+      closeLoopback?.();
+      try {
+        element.pause();
+        element.srcObject = null;
+        element.remove();
+        bus.callGain.disconnect(node);
+      } catch {
+        /* already gone */
+      }
+      if (sink === created) sink = null;
+    },
+  };
   // Start the element on the direct stream immediately. iPhone Safari only
   // grants playback on the tick of the tap, so the element has to be playing
   // before the loopback negotiation's first await — swapping its source later
   // keeps that permission.
-  element.srcObject = node.stream;
-  document.body.appendChild(element);
-  const primed = element
-    .play()
-    .then(() => true)
-    .catch(() => false);
-  const created: Sink = { node, element, ok: false, ready: Promise.resolve(false) };
+  const primed = attach(element, node.stream, 1500).then(() => !element.paused);
   created.ready = loopback(node.stream)
-    .then(async (out) => {
-      element.srcObject = out;
-      await element.play().catch(() => {});
+    .then(async (route) => {
+      if (created.stale) {
+        route.close();
+        return false;
+      }
+      closeLoopback = route.close;
+      await attach(element, route.stream, 2000);
       created.ok = true;
-      degraded = false;
       trace({ type: "sinkReady" });
       return true;
     })
     .catch(async () => {
+      if (created.stale) return false;
       created.ok = false;
-      degraded = true;
-      element.srcObject = node.stream;
-      await element.play().catch(() => {});
+      await attach(element, node.stream, 1500);
       trace({ type: "sinkDegraded" });
       return primed;
     });
@@ -263,46 +324,49 @@ export async function unlockAudio() {
     if (current.ok) return;
     // Degraded but audible is a valid outcome; only a dead element is retried.
     if (!current.element.paused) return;
-    current.element.remove();
-    if (sink === current) sink = null;
+    current.release();
   }
 }
 
+/** Where a line's audio goes. The hub outlives any rebuild of the route behind it. */
 function outputNode(ctx: AudioContext): AudioNode {
   const s = ensureSink(ctx);
   if (s.element.paused) s.element.play().catch(() => {});
-  return hub ?? s.node;
+  return ensureBus(ctx).hub;
 }
 
 /**
- * Watches the element's own clock while a line plays. If it never moves the
- * element is not really making sound (blocked autoplay, silent switch, a
- * routing the phone refuses), so the speakers take over.
+ * Watches the element's own clock while she is audibly producing sound. If it
+ * does not move for over a second in that state the element is not really
+ * playing (blocked autoplay, silent switch, a routing the phone refuses), so
+ * the speakers take over. Waiting on the network, a paused line, or a route
+ * that was just rebuilt is never mistaken for a dead element.
  */
 function watchOutput() {
-  const s = sink;
-  if (!s) return;
+  if (watching) return;
+  watching = true;
   let last = -1;
-  let stuckFrames = 0;
-  lastElementProgressAt = performance.now();
+  let stuckSince = 0;
   const check = () => {
-    if (!sink || sink !== s) return;
-    if (!monitor.active || monitor.paused) {
+    window.setTimeout(check, 250);
+    const s = sink;
+    const now = performance.now();
+    const producing = monitor.active && !monitor.paused && now - monitor.lastSoundAt < 400;
+    if (!s || s.stale || directOn || !producing || now < elementSettleUntil) {
       last = -1;
-      stuckFrames = 0;
-      window.setTimeout(check, 250);
+      stuckSince = 0;
       return;
     }
-    const now = s.element.currentTime;
-    if (s.element.paused || now === last) {
-      stuckFrames += 1;
-      if (stuckFrames >= 3) enableDirectOutput();
+    const time = s.element.currentTime;
+    if (s.element.paused) s.element.play().catch(() => {});
+    if (s.element.paused || time === last) {
+      if (!stuckSince) stuckSince = now;
+      else if (now - stuckSince >= 1200) enableDirectOutput();
     } else {
-      stuckFrames = 0;
-      lastElementProgressAt = performance.now();
+      stuckSince = 0;
+      lastElementProgressAt = now;
     }
-    last = now;
-    if (!directOn) window.setTimeout(check, 250);
+    last = time;
   };
   window.setTimeout(check, 250);
 }
@@ -317,7 +381,7 @@ export function audioDiagnostics() {
     elementPaused: sink ? sink.element.paused : true,
     elementTime: sink ? Math.round(sink.element.currentTime * 100) / 100 : 0,
     directOutput: directOn,
-    echoCancellationDegraded: degraded,
+    echoCancellationDegraded: directOn || !(sink?.ok ?? false),
     speaking: monitor.active && !monitor.paused,
     lastOutputMovedMsAgo: lastElementProgressAt
       ? Math.round(performance.now() - lastElementProgressAt)
@@ -339,9 +403,18 @@ export function audioDiagnostics() {
 
 /** The last thing she said out loud, so it can be played again on demand. */
 let lastSpokenText = "";
-export function replayLastLine(): SpeakHandle | null {
+/**
+ * Plays her last line again — only when she is not already in the middle of
+ * one. A line in flight is left alone: restarting it would start a second
+ * copy and the conversation's next beat would then cut that copy off.
+ * `viaSpeakers` is for the "can't hear her" case: it moves her voice off the
+ * call route for good (taking effect mid-line if she is talking), so it should
+ * only follow a person saying they hear nothing.
+ */
+export function replayLastLine(opts: { viaSpeakers?: boolean } = {}): SpeakHandle | null {
+  if (opts.viaSpeakers) enableDirectOutput();
+  if (currentHandle) return currentHandle;
   if (!lastSpokenText) return null;
-  enableDirectOutput();
   return speak(lastSpokenText);
 }
 
@@ -369,10 +442,6 @@ const monitor: PlaybackMonitor = {
   lastSoundAt: 0,
 };
 let monitorToken = 0;
-
-export function getPlaybackMonitor(): Readonly<PlaybackMonitor> {
-  return monitor;
-}
 
 function base64ToBytes(base64: string) {
   const binary = atob(base64);
@@ -407,6 +476,12 @@ export function speak(
     onEnd?: () => void;
   } = {},
 ): SpeakHandle {
+  // She has one voice. Whatever was still playing — a line the app lost track
+  // of, a replay tapped mid-sentence — ends before the next one starts, so two
+  // copies of her can never be heard at once.
+  currentHandle?.stop();
+  currentHandle = null;
+
   const ctx = getAudioContext();
   const gain = ctx.createGain();
   const analyser = ctx.createAnalyser();
@@ -531,6 +606,7 @@ export function speak(
       monitor.paused = false;
       monitor.level = 0;
     }
+    if (currentHandle === handle) currentHandle = null;
     opts.onLevel?.(0);
     opts.onProgress?.(1);
     opts.onEnd?.();
@@ -715,6 +791,21 @@ export function speak(
       if (!res.ok || !res.body) throw new Error(`speech ${res.status}`);
 
       const reader = res.body.pipeThrough(new TextDecoderStream()).getReader();
+      const handleEvent = (part: string) => {
+        for (const line of part.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          const payloadText = line.slice(5).trim();
+          if (!payloadText || payloadText === "[DONE]") continue;
+          try {
+            const payload = JSON.parse(payloadText) as { type?: string; audio?: string };
+            if (payload.type === "speech.audio.delta" && payload.audio) {
+              enqueue(base64ToBytes(payload.audio), pending);
+            }
+          } catch {
+            /* ignore malformed frame */
+          }
+        }
+      };
       let bufferText = "";
       while (true) {
         const { value, done: streamEnded } = await reader.read();
@@ -722,22 +813,11 @@ export function speak(
         bufferText += value;
         const parts = bufferText.split("\n\n");
         bufferText = parts.pop() ?? "";
-        for (const part of parts) {
-          for (const line of part.split("\n")) {
-            if (!line.startsWith("data:")) continue;
-            const payloadText = line.slice(5).trim();
-            if (!payloadText || payloadText === "[DONE]") continue;
-            try {
-              const payload = JSON.parse(payloadText) as { type?: string; audio?: string };
-              if (payload.type === "speech.audio.delta" && payload.audio) {
-                enqueue(base64ToBytes(payload.audio), pending);
-              }
-            } catch {
-              /* ignore malformed frame */
-            }
-          }
-        }
+        for (const part of parts) handleEvent(part);
       }
+      // A stream that closes without a trailing blank line still carries its
+      // last frame; the end of a sentence must not be dropped.
+      if (bufferText.trim()) handleEvent(bufferText);
       streamDone = true;
       if (total === 0) finish();
       else schedule();
@@ -750,7 +830,7 @@ export function speak(
     }
   })();
 
-  return {
+  const handle: SpeakHandle = {
     stop,
     pause,
     resume,
@@ -758,6 +838,8 @@ export function speak(
     spokenFraction: () => frozenFraction ?? Math.min(1, played() / totalEstimate()),
     done,
   };
+  currentHandle = handle;
+  return handle;
 }
 
 // ---------------------------------------------------------------------------
@@ -800,8 +882,6 @@ export type MicSessionOptions = {
   onInterruptCancelled?: (heldFirst: boolean) => void;
   /** How loudly the microphone hears her (0 = headphones, ~0.3+ = laptop speakers). */
   onEchoCoupling?: (coupling: number) => void;
-  /** Frame-by-frame read of how much the microphone sounds like a person. */
-  onVoice?: (reading: VoiceReading) => void;
   /** The microphone went away mid-call: headset unplugged, another app took it. */
   onLost?: (reason: MicFailure) => void;
   silenceMs?: number;
@@ -1419,7 +1499,6 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     voiceReading = voice;
     // The meter follows the voice, not the room: a fan no longer lights her up.
     options.onLevel?.(Math.min(1, peak * 1.8 * (0.25 + 0.75 * voice.score)));
-    options.onVoice?.(voice);
 
     if (now - openedAt < calibrationMs) {
       noiseFloor = noiseFloor * 0.88 + peak * 0.12;

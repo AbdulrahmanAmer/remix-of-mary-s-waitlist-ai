@@ -57,6 +57,8 @@ export async function streamMaryTurn(
   let buffer = "";
   let turn: MaryTurn | null = null;
   let failed = false;
+  /** The beat already handed to her voice; a fallback must build on it, not replace it. */
+  let said = "";
 
   const handle = (line: string) => {
     if (!line.trim()) return;
@@ -67,13 +69,33 @@ export async function streamMaryTurn(
       return;
     }
     if (event.type === "say" && event.text) {
-      onSay(event.text);
+      if (!said) {
+        said = event.text;
+        onSay(event.text);
+      }
     } else if (event.type === "turn" && event.turn) {
       turn = event.turn;
     } else if (event.type === "error") {
       failed = true;
     }
   };
+
+  const fallback = (say: string): MaryTurn => ({
+    say,
+    followUp: null,
+    collected: input.collected,
+    nextField: "none",
+    complete: false,
+    declined: false,
+    callbackRequested: false,
+    intent: "answering" as const,
+    mode: "neutral" as const,
+    wrapAsked: false,
+    revealed: input.flags.revealed,
+    lanesDone: input.flags.lanesDone,
+    introDone: input.flags.introDone ?? false,
+    rejected: [],
+  });
 
   try {
     while (true) {
@@ -97,23 +119,12 @@ export async function streamMaryTurn(
   }
 
   if (turn) return turn;
+  // Her first beat is already being spoken. Generating a whole new turn now
+  // would voice a second, unrelated follow-up on top of it — the turn simply
+  // ends on what she said, and the next one picks the thread back up.
+  if (said) return fallback(said);
   if (failed) {
-    return {
-      say: "Sorry — I lost my train of thought there. Could you say that once more?",
-      followUp: null,
-      collected: input.collected,
-      nextField: "none",
-      complete: false,
-      declined: false,
-      callbackRequested: false,
-      intent: "answering" as const,
-      mode: "neutral" as const,
-      wrapAsked: false,
-      revealed: input.flags.revealed,
-      lanesDone: input.flags.lanesDone,
-      introDone: input.flags.introDone ?? false,
-      rejected: [],
-    };
+    return fallback("Sorry — I lost my train of thought there. Could you say that once more?");
   }
   return maryTurn({ data: body });
 }

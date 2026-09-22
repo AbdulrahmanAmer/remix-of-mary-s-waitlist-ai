@@ -2,21 +2,24 @@
 
 ## Now
 - [ ] Connect the Google Sheet: paste `docs/google-sheets/Code.gs` into the sheet's Apps Script, deploy as a web app, then add `SHEETS_WEBAPP_URL` (and optional `SHEETS_WEBAPP_SECRET`) as project secrets — waits on the owner
+- [ ] Real-device pass of the output watcher: confirm on an iPhone (ring switch off/on) and a laptop that her voice never switches to plain speakers while the call route is audible
 
 ## Next
 - [ ] Real waitlist position everywhere: once the sheet answers, retire the on-device estimate on the end screen and in the owner view
 - [ ] Cut-in confirmation should be echo-aware (compare against the echo model's expected tail, not only the room floor) and require words when speaker coupling is high
-- [ ] Move the microphone graph from ScriptProcessorNode to an AudioWorklet
+- [ ] Drop the ScriptProcessorNode fallback once no supported browser still needs it (AudioWorklet is already the primary capture path)
 - [ ] Scripted /api/turn conversations for the edge cases (ambiguous "a shop", one-word "consulting", guess-correction) as a repeatable check
 - [ ] Field-notes quality gate: a repeatable script that replays saved transcripts through /api/reflect and flags notes that leak names or contradict the playbook
 
 ## Done
+- [x] One voice, one path: her audio leaves through exactly one leg (call route or speakers, never both), a new line always ends the previous one at the engine level, a replay tapped mid-sentence no longer starts a second copy, the output watcher only judges while she is audibly producing sound and after a route swap has settled, a rebuilt route retires the old one, the last speech frame of a stream is never dropped, and a turn whose first beat was already spoken never regenerates a second unrelated follow-up
+- [x] Health pass: removed the unused voice callback, unused exports and the stale roadmap entries; typecheck and lint clean; verified in a test browser that at most one of her voices plays at any moment, including during double taps on replay
 - [x] Phone layout: long messages are proper rounded bubbles, the call is locked to the visible screen with the composer above the keyboard and the home indicator, older lines fade at the top of the thread, progress dots move into the header on narrow screens
 - [x] Natural pacing: no more "take your time writing" lines while someone types; "MARY is thinking…" shows while she works; a silent or suspended audio output can no longer freeze a turn mid-line
 - [x] MARY learns: after each conversation she debriefs herself (summary, objections, what worked/stalled, up to 5 PII-free lessons); lessons live in the browser and pool in the sheet's Experience tab, and the best ones ride into every turn as field notes
 - [x] Google Sheet receiver (`docs/google-sheets/Code.gs` + README): Waitlist / Experience / Activity tabs, upsert by session, status that never downgrades, real position handed out once, partial rows for people who leave, secret check, self-test; verified in a simulated spreadsheet
 - [x] Closing: sign-up ends with the exact launch line, callback confirms name + number and says goodbye, decline gets one warm line; the end screen is personal (position, what happens next, details confirmed / what the team receives) — verified for all three on a phone-sized screen
-- [x] Owner view (Ctrl/Cmd+Shift+W): sheet connection status, conversations with transcripts, and MARY's field notes
+- [x] Owner view (Ctrl/Cmd+Shift+O, or five quick taps on "omnikom" in the footer): sheet connection status, conversations with transcripts, MARY's field notes, sound & mic check
 - [x] Remove unsafe direct-speaker fallback; protected WebRTC playback now retries after failure and otherwise stays silent instead of entering the microphone
 - [x] Close the caption watchdog race: no restart can bypass MARY's playback quarantine, and interruption captions reopen only after her measured output tail clears
 - [x] Hard-stop browser live captioning while MARY is audible; reopen a fresh captioning session only after playback pauses or its echo tail clears

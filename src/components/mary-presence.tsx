@@ -389,5 +389,3 @@ export const MaryPresence = memo(function MaryPresence({
     </div>
   );
 });
-
-export { STATE_LABEL as PRESENCE_LABEL };
