@@ -139,6 +139,15 @@ async function loopback(stream: MediaStream): Promise<MediaStream> {
 function ensureSink(ctx: AudioContext): Sink {
   if (sink) return sink;
   const node = ctx.createMediaStreamDestination();
+  // The silent fallback path to the real speakers, opened only if the call
+  // route turns out to make no sound (iPhone silent switch, earpiece routing).
+  hub = ctx.createGain();
+  directGain = ctx.createGain();
+  directGain.gain.value = 0;
+  hub.connect(node);
+  hub.connect(directGain);
+  directGain.connect(ctx.destination);
+  directOn = false;
   const element = document.createElement("audio");
   element.setAttribute("playsinline", "");
   element.autoplay = true;
