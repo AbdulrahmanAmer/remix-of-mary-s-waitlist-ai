@@ -1013,6 +1013,13 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             maybeShowEchoHint();
           },
           onUtterance: (utterance) => handleUtteranceRef.current(utterance),
+          // Voices across the room. She never heard them, and never waits on them.
+          onAmbient: () => {
+            noteAddresseeVerdict("ambient");
+            releaseHold();
+            setInterim("");
+            setListeningPhase(micMutedRef.current ? "paused" : "listening");
+          },
           // Headset unplugged, or another app grabbed the mic mid-call.
           onLost: (reason) => {
             if (cancelled) return;
