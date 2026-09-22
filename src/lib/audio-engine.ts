@@ -854,6 +854,16 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     };
 
     if (speaking) {
+      // She started a line while the person was already mid-sentence: that is
+      // not an interruption to verify, it is her turn to wait. She pauses on
+      // the spot and stays quiet until what they are saying has been handled.
+      if (capturing && !holding) {
+        trace({ type: "yield", durationMs: Math.round(now - utteranceStartedAt) });
+        utteranceOverAssistant = true;
+        options.onInterruptCandidate?.();
+        confirmInterrupt();
+        return;
+      }
       // Her own voice must clear the echo model before it counts as you.
       if (scoreLoud(peak >= echoThreshold) >= 6) {
         speechCandidateAt = 0;
