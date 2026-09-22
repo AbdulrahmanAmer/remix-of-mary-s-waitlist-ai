@@ -1609,9 +1609,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       cancelAnimationFrame(raf);
       window.clearInterval(watchdog);
       stopRecognition();
-      processor.onaudioprocess = null;
+      if (processor) processor.onaudioprocess = null;
+      if (worklet) worklet.port.onmessage = null;
+      voiceReading = null;
       try {
-        processor.disconnect();
+        processor?.disconnect();
+        worklet?.disconnect();
+        captureSink.disconnect();
         analyser.disconnect();
         source.disconnect();
       } catch {
