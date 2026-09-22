@@ -164,6 +164,26 @@ export const MaryPresence = memo(function MaryPresence({
       return { x: Math.cos(a) * d * 0.72, y: Math.sin(a) * d * 0.6 + 0.14, p: i * 1.7 };
     });
 
+    /** Imperceptible noise tile — breaks up any residual gradient banding. */
+    const noise = (() => {
+      const size = 64;
+      const off = document.createElement("canvas");
+      off.width = size;
+      off.height = size;
+      const octx = off.getContext("2d");
+      if (!octx) return null;
+      const img = octx.createImageData(size, size);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.random() < 0.5 ? 0 : 255;
+        img.data[i] = v;
+        img.data[i + 1] = v;
+        img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+      octx.putImageData(img, 0, 0);
+      return ctx.createPattern(off, "repeat");
+    })();
+
     /** Sweeping brightness around the tube — bright at the front, faint behind. */
     const sweepGradient = (cx: number, cy: number, R: number, angle: number, color: string) => {
       const hasConic = typeof ctx.createConicGradient === "function";
