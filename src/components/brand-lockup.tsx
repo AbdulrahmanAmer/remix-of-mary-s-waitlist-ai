@@ -20,7 +20,7 @@ export function BrandLockup({ compact = false, centered = false }: { compact?: b
           className={compact ? "h-7 w-auto" : "h-8 w-auto sm:h-9"}
         />
       </motion.div>
-      <div className={`${centered ? "hidden sm:block" : "hidden sm:block"} h-7 w-px bg-border`} />
+      <div className="hidden h-7 w-px bg-border sm:block" />
       <p className={`${centered ? "block" : "hidden sm:block"} whitespace-nowrap text-xs text-muted-foreground`}>
         A product by <span className="wordmark text-ink">omnikom</span>
       </p>
