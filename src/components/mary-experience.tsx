@@ -257,7 +257,24 @@ export function MaryExperience() {
 
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
+
+        // A human beat before she answers — a quick pause after a short
+        // answer, a slightly longer one after a long or detailed message.
+        const lastUserWords =
+          nextLines
+            .filter((line) => line.role === "user")
+            .at(-1)
+            ?.text.split(/\s+/).filter(Boolean).length ?? 0;
+        const beat =
+          420 + Math.min(650, lastUserWords * 45) + Math.floor(Math.random() * 260);
+        await new Promise<void>((resolve) => window.setTimeout(resolve, beat));
+
         await say(turn.say);
+        if (turn.followUp) {
+          // Second beat: a short breath, then the question lands as its own moment.
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 520));
+          await say(turn.followUp);
+        }
         if (turn.complete || turn.declined) {
           const allDone = WAITLIST_FIELDS.every((field) => turn.collected[field]);
           if (turn.complete && allDone) await finalize(turn.collected);
