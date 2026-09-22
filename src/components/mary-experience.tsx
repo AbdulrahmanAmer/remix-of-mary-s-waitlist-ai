@@ -9,6 +9,7 @@ import { ProgressConstellation } from "./progress-constellation";
 import { Button } from "@/components/ui/button";
 import lockupAsset from "@/assets/omnisuite-lockup.png.asset.json";
 import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
+import { streamMaryTurn } from "@/lib/mary-stream";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
   speak,
@@ -127,14 +128,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const speakRef = useRef<SpeakHandle | null>(null);
   const recorderRef = useRef<Recorder | null>(null);
   const recognitionRef = useRef<{ stop: () => void } | null>(null);
+  const interimRef = useRef("");
   const typingSaidRef = useRef(0);
   const nudgeRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
   const busyRef = useRef(false);
+  const interruptRef = useRef(false);
   const handsFreeRef = useRef(false);
   const completingRef = useRef(false);
   const sessionFinishedRef = useRef(false);
   const startListeningRef = useRef<() => Promise<void>>(async () => {});
+  const armBargeInRef = useRef<() => Promise<void>>(async () => {});
   const finishListeningRef = useRef<() => Promise<void>>(async () => {});
   const mutedRef = useRef(false);
   const collectedRef = useRef<Collected>({});
@@ -240,19 +244,28 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const runTurn = useCallback(
     async (nextLines: Line[]) => {
       busyRef.current = true;
+      interruptRef.current = false;
       setPresenceState("thinking");
       try {
         const messages = nextLines.map((line) => ({
           role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
           content: line.text,
         }));
-        let turn: MaryTurn = await maryTurn({
-          data: { messages, collected: collectedRef.current as Record<string, string> },
-        });
+        const previous = nextLines.filter((line) => line.role === "mary").map((line) => line.text);
+
+        // Her first beat starts playing the moment it is written, while the
+        // rest of the turn is still being generated.
+        let firstBeat: Promise<void> | null = null;
+        let turn: MaryTurn = await streamMaryTurn(
+          { messages, collected: collectedRef.current },
+          (text) => {
+            if (previous.some((prev) => isNearRepeat(prev, text))) return;
+            if (!firstBeat) firstBeat = say(text);
+          },
+        );
 
         // Safety net: if MARY nearly repeats a line she already said, ask for a fresh take once.
-        const previous = nextLines.filter((line) => line.role === "mary").map((line) => line.text);
-        if (previous.some((prev) => isNearRepeat(prev, turn.say)) && !turn.complete) {
+        if (!firstBeat && previous.some((prev) => isNearRepeat(prev, turn.say)) && !turn.complete) {
           try {
             const fresh = await maryTurn({
               data: {
@@ -278,21 +291,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
 
-        // A human beat before she answers — a quick pause after a short
-        // answer, a slightly longer one after a long or detailed message.
-        const lastUserWords =
-          nextLines
-            .filter((line) => line.role === "user")
-            .at(-1)
-            ?.text.split(/\s+/)
-            .filter(Boolean).length ?? 0;
-        const beat = 420 + Math.min(650, lastUserWords * 45) + Math.floor(Math.random() * 260);
-        await new Promise<void>((resolve) => window.setTimeout(resolve, beat));
+        // The mic stays open through her turn, so you can talk over her.
+        void armBargeInRef.current();
 
-        await say(turn.say);
-        if (turn.followUp) {
+        if (firstBeat) await firstBeat;
+        else await say(turn.say);
+
+        if (turn.followUp && !interruptRef.current) {
           // Second beat: a short breath, then the question lands as its own moment.
-          await new Promise<void>((resolve) => window.setTimeout(resolve, 520));
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
           await say(turn.followUp);
         }
         if (turn.complete || turn.declined) {
@@ -306,7 +313,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         lastActivityRef.current = Date.now();
         inputRef.current?.focus();
         if (handsFreeRef.current && !sessionFinishedRef.current) {
-          window.setTimeout(() => void startListeningRef.current(), 180);
+          window.setTimeout(() => void startListeningRef.current(), 120);
         }
       }
     },
@@ -317,12 +324,16 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     async (text: string) => {
       const clean = text.trim();
       if (!clean) return;
+      // Talking (or typing) over her ends her turn immediately.
+      interruptRef.current = true;
+      stopSpeaking();
       // If MARY is mid-turn, wait for her to finish rather than dropping the message.
       while (busyRef.current) {
         await new Promise((resolve) => window.setTimeout(resolve, 120));
         if (sessionFinishedRef.current) return;
       }
       stopSpeaking();
+      interimRef.current = "";
       setInterim("");
       setDraft("");
       const next = [...linesRef.current, { id: uid(), role: "user" as const, text: clean }];
@@ -346,7 +357,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     recognitionRef.current = null;
 
     try {
-      const spoken = await transcribe(await recorder.stop());
+      // Live recognition has already heard the words as they were spoken, so
+      // there is nothing left to wait for. Only fall back to uploading the
+      // audio when the browser gave us nothing.
+      const live = interimRef.current.trim();
+      let spoken = live;
+      if (live) {
+        recorder.cancel();
+      } else {
+        spoken = await transcribe(await recorder.stop());
+      }
+      interimRef.current = "";
       setInterim("");
       if (spoken) {
         await sendUser(spoken);
@@ -435,6 +456,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       recognition.onresult = (event) => {
         let text = "";
         for (let i = 0; i < event.results.length; i++) text += event.results[i]![0].transcript;
+        interimRef.current = text.trim();
         setInterim(text.trim());
       };
       recognition.start();
@@ -485,6 +507,51 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
   startListeningRef.current = startListening;
 
+  /** Listens while MARY is talking: the first real word from you stops her. */
+  const armBargeIn = useCallback(async () => {
+    if (
+      !handsFreeRef.current ||
+      recorderRef.current ||
+      sessionFinishedRef.current ||
+      completingRef.current
+    ) {
+      return;
+    }
+    try {
+      let interrupted = false;
+      const recorder = await startRecording({
+        // Her own voice through the speakers must not count as an interruption.
+        thresholdScale: 2.4,
+        onLevel: (value) => {
+          if (interrupted) setLevel(value);
+        },
+        onSpeechStart: () => {
+          interrupted = true;
+          stopSpeaking();
+          setRecording(true);
+          setListeningPhase("hearing");
+          setPresenceState("hearing");
+        },
+        onSilence: () => {
+          if (interrupted) void finishListeningRef.current();
+        },
+        onMaxDuration: () => {
+          if (interrupted) void finishListeningRef.current();
+        },
+      });
+      if (!handsFreeRef.current || sessionFinishedRef.current || recorderRef.current) {
+        recorder.cancel();
+        return;
+      }
+      recorderRef.current = recorder;
+      startInterim();
+    } catch {
+      // Barge-in is a bonus; the conversation works without it.
+    }
+  }, [startInterim, stopSpeaking]);
+
+  armBargeInRef.current = armBargeIn;
+
   const toggleMic = useCallback(async () => {
     lastActivityRef.current = Date.now();
     if (handsFreeRef.current) {
@@ -496,6 +563,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       const recorder = recorderRef.current;
       recorderRef.current = null;
       recorder?.cancel();
+      interimRef.current = "";
       setInterim("");
       return;
     }
@@ -515,6 +583,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         recognitionRef.current?.stop();
         recognitionRef.current = null;
         setRecording(false);
+        interimRef.current = "";
         setInterim("");
         setListeningPhase("paused");
         setPresenceState("idle");
