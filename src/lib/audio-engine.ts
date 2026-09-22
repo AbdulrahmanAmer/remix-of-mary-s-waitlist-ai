@@ -222,8 +222,10 @@ export async function startRecording(options: RecordingOptions = {}): Promise<Re
   let lastSpeechAt = 0;
   let speechDetected = false;
   let completionFired = false;
+  let active = true;
   let raf = 0;
   const tick = () => {
+    if (!active) return;
     analyser.getByteTimeDomainData(data);
     let peak = 0;
     for (let i = 0; i < data.length; i++) {
@@ -260,11 +262,13 @@ export async function startRecording(options: RecordingOptions = {}): Promise<Re
         options.onMaxDuration?.();
       }
     }
-    raf = requestAnimationFrame(tick);
+    if (active) raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);
 
   const teardown = () => {
+    if (!active) return;
+    active = false;
     cancelAnimationFrame(raf);
     options.onLevel?.(0);
     processor.onaudioprocess = null;
