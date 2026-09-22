@@ -1086,6 +1086,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           : micMuted
             ? "muted"
             : "live";
+  // With no working microphone every prompt has to point at typing instead.
+  const typingOnly = !micLive && !!micError;
   const statusText =
     statusKey === "hearing"
       ? "Go ahead — I'm listening."
@@ -1096,8 +1098,12 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           : statusKey === "muted"
             ? "Your microphone is muted. Unmute to keep talking, or type."
             : statusKey === "speaking"
-              ? "MARY is speaking. Just talk to cut in."
-              : "MARY is listening. Just talk — she answers when you pause.";
+              ? typingOnly
+                ? "MARY is speaking."
+                : "MARY is speaking. Just talk to cut in."
+              : typingOnly
+                ? "Type your reply — MARY is reading."
+                : "MARY is listening. Just talk — she answers when you pause.";
 
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
