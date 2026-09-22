@@ -321,9 +321,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       /** Beats the person heard all the way through this turn. */
       const heard: string[] = [];
       const deliver = async (text: string) => {
-        const line = currentLineRef.current;
         await say(text);
-        if (!interruptRef.current && !(line && line.text !== text)) heard.push(text);
+        // A cut-off flips interruptRef before the line resolves, so anything
+        // that resolves without it was heard all the way through.
+        if (!interruptRef.current) heard.push(text);
       };
       try {
         const messages = toMessages(nextLines);
