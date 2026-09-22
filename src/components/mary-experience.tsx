@@ -910,11 +910,11 @@ export function MaryExperience() {
                 )}
               </div>
 
-              <div className="mt-10 w-full text-left">
+              <div className={`w-full text-left ${compact ? "mt-6" : "mt-10"}`}>
                 <p className="text-center text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   Details confirmed
                 </p>
-                <dl className="mt-6 grid gap-6 sm:grid-cols-2">
+                <dl className={`grid sm:grid-cols-2 ${compact ? "mt-3 gap-4" : "mt-6 gap-6"}`}>
                   {WAITLIST_FIELDS.map((field, index) => (
                     <motion.div
                       key={field}
