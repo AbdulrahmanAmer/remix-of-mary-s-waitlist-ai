@@ -549,9 +549,9 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, scale: 0.94 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ ...SPRING, delay: 0.24 }}
-                  className="mt-6 w-full max-w-md"
+                  className={`w-full max-w-md ${compact ? "mt-2" : "mt-6"}`}
                 >
-                  <MaryPresence state="idle" level={0} height={200} />
+                  <MaryPresence state="idle" level={0} height={landingOrb} />
                 </motion.div>
                 <MotionButton
                   onClick={begin}
