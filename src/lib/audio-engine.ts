@@ -29,17 +29,18 @@ function base64ToBytes(base64: string) {
 }
 
 /**
- * Voice shaping — tuned from measurements of the real Mary's recordings.
+ * Voice shaping — tuned from measurements of the real Mary's own recordings.
  *
- *  measured Mary   : median pitch ~220 Hz, articulation ~4.1 syllables/s
- *  base TTS voice  : median pitch ~210 Hz, articulation ~5.4 syllables/s (matched conditions)
+ *  measured Mary  : median pitch ~220 Hz, articulation ~4.1 syllables/s, ~1.0 s pauses
+ *  base TTS voice : median pitch ~213 Hz, articulation ~5.4 syllables/s (matched conditions)
  *
- * MARY_PITCH_RATIO lifts playback pitch by ~0.8 semitones to land on her median.
- * MARY_PACE_RATIO is the net speaking speed relative to the raw TTS output.
+ * Pitch is already within ~0.6 of a semitone, so only pace is corrected: the audio is
+ * time-stretched (pitch preserved) to land near her slower, more relaxed delivery.
+ * MARY_PITCH_RATIO retunes playback pitch, MARY_PACE_RATIO sets net speaking speed.
  * Set both to 1 to disable shaping entirely.
  */
-const MARY_PITCH_RATIO = 1.048;
-const MARY_PACE_RATIO = 0.9;
+const MARY_PITCH_RATIO = 1.0;
+const MARY_PACE_RATIO = 0.84;
 const MARY_STRETCH = MARY_PITCH_RATIO / MARY_PACE_RATIO;
 
 function hann(n: number) {
@@ -49,16 +50,21 @@ function hann(n: number) {
 }
 
 /**
- * Streaming overlap-add time stretcher. Lengthens audio without changing pitch so
- * the playbackRate pitch lift above does not also speed her up.
+ * Streaming WSOLA time stretcher: changes speaking pace without changing pitch.
+ * Each analysis frame is nudged to the position that best continues the waveform
+ * already written, which keeps voiced speech smooth instead of phasey.
  */
 class TimeStretcher {
   private readonly size = 1024;
   private readonly synthHop = 512;
+  private readonly overlap = 512;
+  private readonly search = 256;
   private readonly analysisHop: number;
   private readonly window: Float32Array;
   private input: Float32Array<ArrayBuffer> = new Float32Array(0);
-  private readPos = 0;
+  private base = 0; // absolute index of input[0]
+  private ideal = 0; // absolute ideal read position of the next frame
+  private prevRead = -1; // absolute read position of the previous frame
   private acc: Float32Array<ArrayBuffer> = new Float32Array(0);
   private accWin: Float32Array<ArrayBuffer> = new Float32Array(0);
   private emitted = 0;
@@ -79,23 +85,57 @@ class TimeStretcher {
     this.accWin = nextWin;
   }
 
-  push(chunk: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {
-    const merged = new Float32Array(this.input.length - this.readPos + chunk.length);
-    merged.set(this.input.subarray(this.readPos));
-    merged.set(chunk, this.input.length - this.readPos);
-    this.input = merged;
-    this.readPos = 0;
+  /** Finds the read offset whose overlap region best matches the natural continuation. */
+  private align(): number {
+    if (this.prevRead < 0) return this.ideal;
+    const tpl = this.prevRead + this.synthHop - this.base;
+    const lo = Math.max(0, this.ideal - this.base - this.search);
+    const hi = this.ideal - this.base + this.search;
+    if (tpl < 0 || tpl + this.overlap > this.input.length) return this.ideal;
+    let bestPos = this.ideal - this.base;
+    let bestScore = -Infinity;
+    for (let p = lo; p <= hi; p += 4) {
+      if (p + this.size > this.input.length) break;
+      let dot = 0;
+      let energy = 1e-9;
+      for (let i = 0; i < this.overlap; i += 2) {
+        const a = this.input[tpl + i]!;
+        const b = this.input[p + i]!;
+        dot += a * b;
+        energy += b * b;
+      }
+      const score = dot / Math.sqrt(energy);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPos = p;
+      }
+    }
+    return bestPos + this.base;
+  }
 
-    while (this.readPos + this.size <= this.input.length) {
+  push(chunk: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {
+    const keepFrom = Math.max(0, Math.min(this.ideal, this.prevRead) - this.search - this.size);
+    const drop = Math.max(0, keepFrom - this.base);
+    const kept = this.input.subarray(Math.min(drop, this.input.length));
+    const merged = new Float32Array(kept.length + chunk.length);
+    merged.set(kept);
+    merged.set(chunk, kept.length);
+    this.input = merged;
+    this.base += drop;
+
+    while (this.ideal - this.base + this.search + this.size <= this.input.length) {
+      const read = this.align();
+      const start = read - this.base;
       const offset = this.synthPos - this.emitted;
       this.grow(offset + this.size);
       for (let i = 0; i < this.size; i++) {
         const w = this.window[i]!;
-        this.acc[offset + i] = this.acc[offset + i]! + this.input[this.readPos + i]! * w;
+        this.acc[offset + i] = this.acc[offset + i]! + (this.input[start + i] ?? 0) * w;
         this.accWin[offset + i] = this.accWin[offset + i]! + w * w;
       }
+      this.prevRead = read;
       this.synthPos += this.synthHop;
-      this.readPos += this.analysisHop;
+      this.ideal += this.analysisHop;
     }
 
     const safe = this.synthPos - (this.size - this.synthHop) - this.emitted;
