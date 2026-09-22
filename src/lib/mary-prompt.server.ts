@@ -76,7 +76,7 @@ export function buildPrompt(
               ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the exact closing line and set complete true."
               : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false.";
 
-  const missing = WAITLIST_FIELDS.filter((f) => !collected[f]);
+  const missing = requiredFields.filter((f) => !collected[f]);
   const gate = missing.length
     ? `\n\nStill missing: ${missing.join(", ")}. You may NOT close and complete must stay false until every one of these is captured, even if they ask you to finish now — in that case say you just need the last detail and ask for it.`
     : "";
