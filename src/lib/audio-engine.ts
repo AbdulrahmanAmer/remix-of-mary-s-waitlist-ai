@@ -91,8 +91,8 @@ class TimeStretcher {
       this.grow(offset + this.size);
       for (let i = 0; i < this.size; i++) {
         const w = this.window[i]!;
-        this.acc[offset + i] += this.input[this.readPos + i]! * w;
-        this.accWin[offset + i] += w * w;
+        this.acc[offset + i] = this.acc[offset + i]! + this.input[this.readPos + i]! * w;
+        this.accWin[offset + i] = this.accWin[offset + i]! + w * w;
       }
       this.synthPos += this.synthHop;
       this.readPos += this.analysisHop;
