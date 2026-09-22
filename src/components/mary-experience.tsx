@@ -292,32 +292,36 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     [commitLines, stopSpeaking],
   );
 
-  const finalize = useCallback(async (finalCollected: Collected) => {
-    sessionFinishedRef.current = true;
-    sessionRef.current?.setMuted(true);
+  const finalize = useCallback(
+    (finalCollected: Collected, opts: { callback?: boolean } = {}) => {
+      sessionFinishedRef.current = true;
+      sessionRef.current?.setMuted(true);
 
-    const transcript = linesRef.current
-      .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
-      .join("\n");
-    try {
-      const response = await submitWaitlist({
-        data: {
-          name: finalCollected.name ?? "",
-          email: finalCollected.email ?? "",
-          phone: finalCollected.phone ?? "",
-          business: finalCollected.business ?? "",
-          industry: finalCollected.industry ?? "",
-          operations: finalCollected.operations ?? "",
-          transcript,
-        },
+      const transcript = linesRef.current
+        .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
+        .join("\n");
+      // Written straight to this browser — no round trip, so the close never waits.
+      const entry = saveProgress(entryIdRef.current, {
+        name: finalCollected.name ?? "",
+        email: finalCollected.email ?? "",
+        phone: finalCollected.phone ?? "",
+        business: finalCollected.business ?? "",
+        industry: finalCollected.industry ?? "",
+        operations: finalCollected.operations ?? "",
+        transcript,
+        complete: !opts.callback,
+        callbackRequested: Boolean(opts.callback),
       });
-      setResult({ position: response.position, message: response.message });
-    } catch {
-      setResult({ position: 0, message: "We captured your details." });
-    }
-    setStage("done");
-    setPresenceState("done");
-  }, []);
+      setResult({
+        position: entry.position,
+        message: opts.callback ? "Callback request saved." : "Saved.",
+        callback: Boolean(opts.callback),
+      });
+      setStage("done");
+      setPresenceState("done");
+    },
+    [],
+  );
 
   const runTurn = useCallback(
     async (nextLines: Line[]) => {
