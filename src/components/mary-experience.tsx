@@ -296,7 +296,12 @@ export function MaryExperience() {
   const sendUser = useCallback(
     async (text: string) => {
       const clean = text.trim();
-      if (!clean || busyRef.current) return;
+      if (!clean) return;
+      // If MARY is mid-turn, wait for her to finish rather than dropping the message.
+      while (busyRef.current) {
+        await new Promise((resolve) => window.setTimeout(resolve, 120));
+        if (sessionFinishedRef.current) return;
+      }
       stopSpeaking();
       setInterim("");
       setDraft("");
