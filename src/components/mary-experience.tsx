@@ -329,6 +329,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const pendingInterruptRef = useRef(false);
   /** The cut-in is real — she stays quiet until the person's words are handled. */
   const holdRef = useRef(false);
+  /** When the hold started, so it can never last longer than a person would wait. */
+  const holdSinceRef = useRef(0);
   const falseInterruptsRef = useRef(0);
   const couplingRef = useRef(0);
   const echoHintShownRef = useRef(false);
@@ -465,6 +467,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   /** She was held for a sound that turned out to be nothing — she carries on. */
   const releaseHold = useCallback(() => {
     holdRef.current = false;
+    holdSinceRef.current = 0;
     pendingInterruptRef.current = false;
     const handle = speakRef.current;
     if (handle?.isPaused()) {
@@ -958,12 +961,18 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           onInterruptConfirmed: () => {
             pendingInterruptRef.current = false;
             holdRef.current = true;
+            holdSinceRef.current = Date.now();
           },
           // Her own voice in the room, or a passing noise: she carries on.
-          onInterruptCancelled: () => {
+          // `heldFirst` means she had already gone quiet for it and nothing
+          // usable came of it — that hold has to be lifted here, or she waits
+          // for a sentence that will never arrive.
+          onInterruptCancelled: (heldFirst) => {
             pendingInterruptRef.current = false;
             falseInterruptsRef.current += 1;
-            if (!holdRef.current) {
+            if (heldFirst) {
+              releaseHold();
+            } else if (!holdRef.current) {
               const handle = speakRef.current;
               if (handle?.isPaused()) handle.resume();
               setPresenceState(handle ? "speaking" : "idle");
@@ -1012,7 +1021,20 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       setMicLive(false);
       session?.close();
     };
-  }, [maybeShowEchoHint, micAttempt, stage]);
+  }, [maybeShowEchoHint, micAttempt, releaseHold, stage]);
+
+  // Last line of defence: whatever went wrong, she never stays frozen waiting
+  // for a sentence. Nobody should have to mute themselves to get her back.
+  useEffect(() => {
+    if (stage !== "live") return;
+    const timer = window.setInterval(() => {
+      if (!holdRef.current || busyRef.current) return;
+      if (Date.now() - holdSinceRef.current < 5000) return;
+      releaseHold();
+      setListeningPhase("listening");
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [releaseHold, stage]);
 
   // If her voice ever had to be forced to the speakers, the phone's ring
   // switch is the usual culprit — say so plainly, once.

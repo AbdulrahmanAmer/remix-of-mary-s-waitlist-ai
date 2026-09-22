@@ -725,8 +725,12 @@ export type MicSessionOptions = {
   onInterruptCandidate?: () => void;
   /** It really is you — she should stay quiet until your words have been handled. */
   onInterruptConfirmed?: () => void;
-  /** It was her own voice in the room or a passing noise — she can carry on. */
-  onInterruptCancelled?: () => void;
+  /**
+   * It was her own voice in the room or a passing noise — she can carry on.
+   * `heldFirst` means she had already decided it was a real cut-in and went
+   * quiet for it; nothing usable came of it, so the hold must be lifted too.
+   */
+  onInterruptCancelled?: (heldFirst: boolean) => void;
   /** How loudly the microphone hears her (0 = headphones, ~0.3+ = laptop speakers). */
   onEchoCoupling?: (coupling: number) => void;
   /** The microphone went away mid-call: headset unplugged, another app took it. */
@@ -953,6 +957,11 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let loudScore = 0;
   let lastEchoThreshold = 0.02;
   let lastSpeechAt = 0;
+  // The last clearly-louder-than-the-room moment. Steady noise keeps
+  // `lastSpeechAt` alive forever; this one only moves for real speech.
+  let lastRealSpeechAt = 0;
+  // When she went quiet for a cut-in, so a hold can never last for ever.
+  let holdingSince = 0;
   let utteranceStartedAt = 0;
   let utteranceOverAssistant = false;
   /** Loudest frame of this utterance recorded while she was NOT audible. */
@@ -1140,6 +1149,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     capturePeak = 0;
     cleanPeak = 0;
     lastSpeechAt = now;
+    lastRealSpeechAt = now;
   };
 
   function beginCandidate(fromWords: boolean) {
@@ -1159,6 +1169,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const words = pending?.words ?? false;
     pending = null;
     holding = true;
+    holdingSince = performance.now();
     trace({ type: "confirmed", words });
     options.onInterruptConfirmed?.();
   };
@@ -1175,7 +1186,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     emitInterim();
     tracker.learnFalseInterrupt();
     trace({ type: "cancelled", coupling: tracker.peakCoupling });
-    options.onInterruptCancelled?.();
+    options.onInterruptCancelled?.(false);
   };
 
   const flush = () => {
@@ -1212,7 +1223,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     });
     if (!text && !audio) {
       utteranceOverAssistant = false;
-      options.onInterruptCancelled?.();
+      options.onInterruptCancelled?.(wasHolding);
       return;
     }
     options.onUtterance({
@@ -1274,6 +1285,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       0.95,
       Math.max(baseThreshold, echo.expectedEcho * 1.7 + baseThreshold),
     );
+
+    // A hold can never outlive the sentence it was waiting for. If she has been
+    // quiet for a cut-in this long with nothing closing it, close it here.
+    if (holding && now - holdingSince > 4000) {
+      flush();
+      return;
+    }
 
     // ---- she is paused: was that really you? ----
     // Her voice takes a moment to drain out of the room after the pause, so
@@ -1342,6 +1360,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     if (peak >= threshold) {
       lastSpeechAt = now;
+      // Clearly above the room, not just over the line: this is what stops a
+      // noisy café from holding a recording open until the 45-second cap.
+      if (peak >= threshold * 1.6) lastRealSpeechAt = now;
       cleanPeak = Math.max(cleanPeak, peak);
       if (scoreLoud(true) >= 7 && !capturing) {
         startCapture(now, false);
@@ -1359,6 +1380,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       // A final result after the last sound is a strong "they're done".
       if (lastFinalAt > lastSpeechAt && liveText) wait = Math.min(wait, 380);
       if (now - lastSpeechAt >= wait) flush();
+      // Steady room noise can keep refreshing the silence clock; nothing that
+      // actually sounds like speech for this long means the turn is over.
+      else if (now - lastRealSpeechAt >= 2500) flush();
     }
 
     if (capturing && now - utteranceStartedAt >= maxUtteranceMs) flush();
