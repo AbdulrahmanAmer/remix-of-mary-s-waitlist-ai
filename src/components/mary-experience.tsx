@@ -682,7 +682,7 @@ export function MaryExperience() {
                     <motion.div
                       layout
                       transition={SPRING}
-                      className="mx-auto max-w-2xl pt-2 text-center"
+                      className="mx-auto max-w-xl pt-2 text-center"
                     >
                       <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
                         MARY

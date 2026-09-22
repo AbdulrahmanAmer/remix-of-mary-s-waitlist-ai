@@ -255,8 +255,8 @@ export const MaryPresence = memo(function MaryPresence({
 
       // Outer halo.
       const haloR = R * (cur.halo + lv * 0.22 + bloom * 0.35);
-      const halo = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, haloR);
-      halo.addColorStop(0, withAlpha(primary, (0.11 + lv * 0.12) * cur.glow));
+      const halo = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, haloR);
+      halo.addColorStop(0, withAlpha(primary, (0.1 + lv * 0.12) * cur.glow));
       halo.addColorStop(0.5, withAlpha(primary, (0.035 + lv * 0.045) * cur.glow));
       halo.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = halo;
@@ -277,8 +277,8 @@ export const MaryPresence = memo(function MaryPresence({
         cy + R * 0.3,
         R * 1.05,
       );
-      inner.addColorStop(0, withAlpha(primary, (0.12 + lv * 0.16) * cur.glow));
-      inner.addColorStop(0.32, withAlpha(primary, 0.035 * cur.glow));
+      inner.addColorStop(0, withAlpha(primary, (0.07 + lv * 0.12) * cur.glow));
+      inner.addColorStop(0.32, withAlpha(primary, 0.02 * cur.glow));
       inner.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
