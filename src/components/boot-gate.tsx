@@ -7,22 +7,32 @@ import { MaryExperience } from "./mary-experience";
 const MIN_BOOT_MS = 2500;
 const EXIT_MS = 800;
 
-// Recorded the first time this module runs on the client — effectively page
-// load. Both the CSS arc and the leave timer read from this single clock, so a
-// fast hydration no longer cuts the sequence short.
-const startedAt = typeof performance !== "undefined" ? performance.now() : 0;
+// The boot screen is already on screen (server-rendered) before the app's
+// JavaScript runs, so the clock must start at the moment it was first painted —
+// not at hydration. Otherwise the hydrated copy restarts the arc from frame
+// zero and the whole sequence appears to play twice.
+function bootPaintedAt() {
+  if (typeof performance === "undefined") return 0;
+  const paint = performance.getEntriesByType?.("paint") ?? [];
+  const fcp = paint.find((entry) => entry.name === "first-contentful-paint");
+  return fcp ? fcp.startTime : 0;
+}
 
 export function BootGate() {
   const [phase, setPhase] = useState<"booting" | "leaving" | "gone">("booting");
   const [elapsed] = useState(() =>
-    typeof performance !== "undefined" ? Math.max(0, performance.now() - startedAt) : 0,
+    typeof performance !== "undefined"
+      ? Math.max(0, performance.now() - bootPaintedAt())
+      : 0,
   );
 
   useEffect(() => {
-    const remaining = Math.max(0, MIN_BOOT_MS - (performance.now() - startedAt));
+    const paintedAt = bootPaintedAt();
+    const remaining = Math.max(0, MIN_BOOT_MS - (performance.now() - paintedAt));
     const leave = window.setTimeout(() => setPhase("leaving"), remaining);
     return () => window.clearTimeout(leave);
   }, []);
+
 
   useEffect(() => {
     if (phase !== "leaving") return;
