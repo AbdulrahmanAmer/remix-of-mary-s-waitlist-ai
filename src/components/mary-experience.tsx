@@ -1607,6 +1607,23 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                       {statusText}
                     </motion.p>
                   </AnimatePresence>
+                  {silentHint && (
+                    <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-accent-text">
+                      <span>
+                        Can&apos;t hear her? Turn the ring switch on the side of your phone on, or
+                        plug in headphones.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void replayLastLine();
+                        }}
+                        className="rounded-full border border-border px-2.5 py-0.5 text-[0.68rem] transition-colors hover:bg-muted"
+                      >
+                        Play sound
+                      </button>
+                    </p>
+                  )}
                   <AnimatePresence>
                     {echoHint && micLive && (
                       <motion.p
