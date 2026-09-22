@@ -135,8 +135,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const interruptRef = useRef(false);
   const micMutedRef = useRef(false);
   const sessionFinishedRef = useRef(false);
-  const pendingRef = useRef<string[]>([]);
-  const drainRef = useRef<() => void>(() => {});
+  /** One queue for the whole call, so utterances are answered in the order they were said. */
+  const chainRef = useRef<Promise<void>>(Promise.resolve());
+  const handleUtteranceRef = useRef<(u: { text: string; audio: Blob | null }) => void>(() => {});
+
   const mutedRef = useRef(false);
   const collectedRef = useRef<Collected>({});
   const linesRef = useRef<Line[]>([]);
