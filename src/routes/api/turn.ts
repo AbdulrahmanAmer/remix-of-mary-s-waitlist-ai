@@ -48,6 +48,8 @@ export const Route = createFileRoute("/api/turn")({
           providerOptions: {
             openai: { forceReasoning: true, reasoningEffort: "low", store: false },
           },
+          // A model that goes quiet must not hold the conversation hostage.
+          abortSignal: AbortSignal.timeout(30000),
         });
 
         const encoder = new TextEncoder();
