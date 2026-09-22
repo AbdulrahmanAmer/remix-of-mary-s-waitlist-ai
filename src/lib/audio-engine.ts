@@ -39,8 +39,8 @@ function base64ToBytes(base64: string) {
  * MARY_PITCH_RATIO retunes playback pitch, MARY_PACE_RATIO sets net speaking speed.
  * Set both to 1 to disable shaping entirely.
  */
-const MARY_PITCH_RATIO = 1.0;
-const MARY_PACE_RATIO = 0.84;
+const MARY_PITCH_RATIO = 1.04;
+const MARY_PACE_RATIO = 0.82;
 const MARY_STRETCH = MARY_PITCH_RATIO / MARY_PACE_RATIO;
 
 function hann(n: number) {
