@@ -366,14 +366,20 @@ export class EchoTracker {
 
     if (playback > 0.02) this.lastPlaybackAt = now;
 
-    // Learn how much of her voice the mic hears, slowly upward, quickly downward.
-    // A sudden jump far above the known coupling is a person, not the room —
-    // that is never learned as echo.
+    // Learn how much of her voice the mic hears. The mic-to-speaker ratio only
+    // equals the true coupling at the moments the loudest part of the window
+    // is the part echoing right now, so the estimate holds its peak and only
+    // sinks slowly between those moments. A sudden jump far above the known
+    // coupling is a person, not the room — that is never learned as echo.
     if (lagged > 0.06) {
       const instant = Math.min(2.5, mic / lagged);
       const plausible = instant <= this.coupling * 2 + 0.15;
-      const alpha = instant > this.coupling ? (plausible ? 0.03 : 0) : 0.12;
-      this.coupling += alpha * (instant - this.coupling);
+      if (plausible && instant > this.coupling) {
+        this.coupling += 0.35 * (instant - this.coupling);
+      } else {
+        // ~8% a second, so a room that got quieter is noticed within a beat or two.
+        this.coupling = Math.max(0.1, this.coupling * 0.9986);
+      }
       if (this.coupling > this.peakCoupling) this.peakCoupling = this.coupling;
     }
 
