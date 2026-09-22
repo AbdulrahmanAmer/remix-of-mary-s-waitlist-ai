@@ -26,6 +26,8 @@ export type TurnFlags = {
   callback?: boolean | undefined;
   /** How they are showing up, carried between turns. */
   mode?: "neutral" | "rushed" | "skeptical" | "guarded" | "warm" | undefined;
+  /** Fields the last turn proposed without evidence, fed back so she asks instead. */
+  rejected?: string[] | undefined;
 };
 
 /** What the person's last message was actually doing, read before the funnel. */
@@ -70,6 +72,7 @@ export const TurnInput = z.object({
       wrapAsked: z.boolean().optional(),
       callback: z.boolean().optional(),
       mode: z.enum(["neutral", "rushed", "skeptical", "guarded", "warm"]).optional(),
+      rejected: z.array(z.string()).optional(),
     })
     .default({ revealed: false, lanesDone: false }),
 });
