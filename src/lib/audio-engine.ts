@@ -1205,6 +1205,11 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       const playback = getAudioContext();
       if (playback.state === "suspended") void playback.resume().catch(() => {});
     }
+    // A dead capture track looks exactly like a very quiet room; it isn't.
+    if (alive && !muted) {
+      const live = stream.getAudioTracks()[0];
+      if (!live || live.readyState === "ended") reportLost("no-device");
+    }
     if (
       alive &&
       !muted &&
@@ -1256,7 +1261,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       } catch {
         /* noop */
       }
-      stream.getTracks().forEach((track) => track.stop());
+      navigator.mediaDevices.removeEventListener?.("devicechange", onDeviceChange);
+      stream.getTracks().forEach((each) => each.stop());
       void ctx.close().catch(() => {});
     },
   };
