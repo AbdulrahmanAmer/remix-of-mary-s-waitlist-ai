@@ -563,7 +563,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, scale: 0.94 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={{ ...SPRING, delay: 0.24 }}
-                  className={`w-full max-w-md ${compact ? "mt-2" : "mt-6"}`}
+                  className={compact ? "mt-1" : "mt-3"}
                 >
                   <MaryPresence state="idle" level={0} height={landingOrb} />
                 </motion.div>
@@ -848,7 +848,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, scale: 0.92 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={SPRING}
-                  className="mx-auto w-full max-w-md"
+                  className="mx-auto"
                 >
                   <MaryPresence state="done" level={0} height={landingOrb} />
                 </motion.div>

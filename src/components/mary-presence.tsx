@@ -73,15 +73,24 @@ const SHELLS: Shell[] = [
   { r: 0.915, w: 0.032, speed: -0.95, phase: 5.6, squash: 0.95, accent: false, alpha: 0.7 },
 ];
 
-/** Soft-tube stroke passes: wide + faint through narrow + bright. */
+/** Soft-tube stroke passes: one wide bloom, one body, one bright core. */
 const PASSES = [
-  { k: 3.4, a: 0.035 },
-  { k: 2.4, a: 0.055 },
-  { k: 1.7, a: 0.09 },
-  { k: 1.15, a: 0.16 },
-  { k: 0.7, a: 0.3 },
-  { k: 0.34, a: 0.55 },
+  { k: 2.8, a: 0.075 },
+  { k: 1.3, a: 0.3 },
+  { k: 0.4, a: 0.88 },
 ];
+
+/** Smooth, eased alpha falloff — many stops so wide glows never step. */
+function falloffStops(peak: number) {
+  const stops: [number, number][] = [];
+  for (let i = 0; i <= 8; i++) {
+    const p = i / 8;
+    const e = (1 - p) * (1 - p) * (1 - p * 0.35);
+    stops.push([p, peak * e]);
+  }
+  stops[stops.length - 1]![1] = 0;
+  return stops;
+}
 
 /**
  * MARY's living presence: a hollow sphere ringed by soft tubes of liquid light
@@ -126,8 +135,10 @@ export const MaryPresence = memo(function MaryPresence({
       const rect = canvas.getBoundingClientRect();
       width = Math.max(1, rect.width);
       boxHeight = Math.max(1, rect.height);
-      small = width < 420;
-      const dpr = Math.min(small ? 2 : 2.25, window.devicePixelRatio || 1);
+      small = width < 360;
+      // Supersample: soft glows need >= 2x pixels or they step, whatever the screen reports.
+      const raw = window.devicePixelRatio || 1;
+      const dpr = small ? 2 : Math.min(3, Math.max(2, raw));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(boxHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -152,6 +163,26 @@ export const MaryPresence = memo(function MaryPresence({
       const d = 0.2 + ((i * 41) % 55) / 100;
       return { x: Math.cos(a) * d * 0.72, y: Math.sin(a) * d * 0.6 + 0.14, p: i * 1.7 };
     });
+
+    /** Imperceptible noise tile — breaks up any residual gradient banding. */
+    const noise = (() => {
+      const size = 64;
+      const off = document.createElement("canvas");
+      off.width = size;
+      off.height = size;
+      const octx = off.getContext("2d");
+      if (!octx) return null;
+      const img = octx.createImageData(size, size);
+      for (let i = 0; i < img.data.length; i += 4) {
+        const v = Math.random() < 0.5 ? 0 : 255;
+        img.data[i] = v;
+        img.data[i + 1] = v;
+        img.data[i + 2] = v;
+        img.data[i + 3] = 255;
+      }
+      octx.putImageData(img, 0, 0);
+      return ctx.createPattern(off, "repeat");
+    })();
 
     /** Sweeping brightness around the tube — bright at the front, faint behind. */
     const sweepGradient = (cx: number, cy: number, R: number, angle: number, color: string) => {
@@ -229,11 +260,11 @@ export const MaryPresence = memo(function MaryPresence({
     const draw = (animated: boolean) => {
       ctx.clearRect(0, 0, width, boxHeight);
 
-      // The canvas overflows its layout box, so the halo and shadow always fit.
-      const R0 = Math.min(boxHeight * 0.5, width * 0.5) / 1.78;
+      // Square box: the sphere is sized so its halo and ground shadow fit inside it.
+      const R0 = (Math.min(boxHeight, width) * 0.5) / 1.85;
       if (R0 <= 0) return;
       const cx = width / 2;
-      const cy = boxHeight / 2 - R0 * 0.05;
+      const cy = boxHeight / 2 - R0 * 0.08;
 
       const breath = animated ? 1 + Math.sin(t * 0.85) * 0.018 + lv * 0.045 + bloom * 0.06 : 1;
       const R = R0 * breath;
@@ -245,8 +276,7 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.scale(1, 0.2);
       ctx.translate(-cx, -gy);
       const shadow = ctx.createRadialGradient(cx, gy, 0, cx, gy, R * 1.05);
-      shadow.addColorStop(0, withAlpha(ink, 0.09));
-      shadow.addColorStop(1, withAlpha(ink, 0));
+      for (const [p, a] of falloffStops(0.1)) shadow.addColorStop(p, withAlpha(ink, a));
       ctx.fillStyle = shadow;
       ctx.beginPath();
       ctx.arc(cx, gy, R * 1.05, 0, Math.PI * 2);
@@ -255,10 +285,9 @@ export const MaryPresence = memo(function MaryPresence({
 
       // Outer halo.
       const haloR = R * (cur.halo + lv * 0.22 + bloom * 0.35);
-      const halo = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, haloR);
-      halo.addColorStop(0, withAlpha(primary, (0.1 + lv * 0.12) * cur.glow));
-      halo.addColorStop(0.5, withAlpha(primary, (0.035 + lv * 0.045) * cur.glow));
-      halo.addColorStop(1, withAlpha(primary, 0));
+      const halo = ctx.createRadialGradient(cx, cy, R * 0.86, cx, cy, haloR);
+      for (const [p, a] of falloffStops((0.12 + lv * 0.13) * cur.glow))
+        halo.addColorStop(p, withAlpha(primary, a));
       ctx.fillStyle = halo;
       ctx.beginPath();
       ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
@@ -277,9 +306,8 @@ export const MaryPresence = memo(function MaryPresence({
         cy + R * 0.3,
         R * 1.05,
       );
-      inner.addColorStop(0, withAlpha(primary, (0.07 + lv * 0.12) * cur.glow));
-      inner.addColorStop(0.32, withAlpha(primary, 0.02 * cur.glow));
-      inner.addColorStop(1, withAlpha(primary, 0));
+      for (const [p, a] of falloffStops((0.045 + lv * 0.1) * cur.glow))
+        inner.addColorStop(p, withAlpha(primary, a));
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
       for (const m of MOTES) {
@@ -313,6 +341,16 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.lineCap = "round";
       ctx.lineWidth = Math.max(0.6, R * 0.014);
       ctx.stroke();
+
+      // Sub-perceptual dither over the glow area — kills residual gradient banding.
+      if (noise) {
+        const d = R * (cur.halo + 0.4);
+        ctx.save();
+        ctx.globalAlpha = 0.012;
+        ctx.fillStyle = noise;
+        ctx.fillRect(cx - d, cy - d, d * 2, d * 2.2);
+        ctx.restore();
+      }
 
       // Completion bloom.
       if (bloom > 0.01) {
@@ -368,12 +406,12 @@ export const MaryPresence = memo(function MaryPresence({
 
   return (
     <div
-      className={`pointer-events-none relative w-full overflow-visible ${className}`}
-      style={{ height }}
+      className={`pointer-events-none relative mx-auto aspect-square ${className}`}
+      style={{ height, width: height }}
       role="img"
       aria-label={`MARY is ${STATE_LABEL[state].toLowerCase()}`}
     >
-      <canvas ref={canvasRef} className="absolute -inset-y-[30%] left-0 w-full" />
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
     </div>
   );
 });
