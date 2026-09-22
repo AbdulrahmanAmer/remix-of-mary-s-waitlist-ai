@@ -653,7 +653,11 @@ function micFailureFrom(error: unknown): MicFailure {
   const name = (error as { name?: string } | null)?.name ?? "";
   if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError")
     return "denied";
-  if (name === "NotFoundError" || name === "OverconstrainedError" || name === "DevicesNotFoundError")
+  if (
+    name === "NotFoundError" ||
+    name === "OverconstrainedError" ||
+    name === "DevicesNotFoundError"
+  )
     return "no-device";
   if (name === "NotReadableError" || name === "AbortError" || name === "TrackStartError")
     return "busy";
@@ -665,7 +669,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   // has no microphone at all — say so plainly instead of blaming permissions.
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
     throw new MicUnavailableError(
-      typeof window !== "undefined" && window.isSecureContext === false ? "insecure" : "unsupported",
+      typeof window !== "undefined" && window.isSecureContext === false
+        ? "insecure"
+        : "unsupported",
     );
   }
 
