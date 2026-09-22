@@ -17,19 +17,6 @@ export const Route = createFileRoute("/api/speech")({
         if (!text) return new Response("Missing text", { status: 400 });
         if (text.length > 1200) text = text.slice(0, 1200);
 
-        /**
-         * Delivery direction derived from measurements of the real Mary's voice:
-         * median pitch ~220 Hz, expressive but controlled (~3.2 semitone spread),
-         * unhurried articulation (~4.1 syllables/s) and ~1.0 s pauses between thoughts.
-         * Timbre is shaped further at playback time in src/lib/audio-engine.ts.
-         */
-        const DELIVERY =
-          "Speak as Mary: a warm, grounded woman with a bright, natural everyday voice. " +
-          "Friendly phone-call manner — unhurried and relaxed, never rushed, never announcer-like. " +
-          "Gentle emphasis on the words that matter, light expressive lift mid-sentence, " +
-          "a soft falling tone at the end, and a short natural breath between thoughts. " +
-          "Read only the line below, exactly as written:";
-
         const upstream = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
           method: "POST",
           headers: {
@@ -44,7 +31,7 @@ export const Route = createFileRoute("/api/speech")({
                 role: "user",
                 parts: [
                   {
-                    text: `${DELIVERY}\n\n${text}`,
+                    text,
                   },
                 ],
               },
