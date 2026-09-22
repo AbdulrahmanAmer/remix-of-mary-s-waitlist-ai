@@ -847,7 +847,6 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     if (speaking) {
       // Her own voice must clear the echo model before it counts as you.
       if (scoreLoud(peak >= echoThreshold) >= 6) {
-        loudScore = 0;
         speechCandidateAt = 0;
         loudScore = 0;
         trace({
