@@ -241,13 +241,14 @@ export function stripAssistantEcho(transcript: string, assistantLines: string[])
     if (strongEnough(start, run, start)) head = Math.max(head, start + run);
   }
 
+  // The tail is searched only in what is left after the head, so the two
+  // never claim the same words.
   let tail = 0;
-  if (head < words.length) {
-    for (let skip = 0; skip <= 2 && skip < norm.length - 1; skip++) {
-      const end = norm.length - 1 - skip;
-      const run = alignedRun(norm, end, assistant, -1);
-      if (strongEnough(end - run + 1, run, skip)) tail = Math.max(tail, skip + run);
-    }
+  const rest = norm.slice(head);
+  for (let skip = 0; skip <= 2 && skip < rest.length - 1; skip++) {
+    const end = rest.length - 1 - skip;
+    const run = alignedRun(rest, end, assistant, -1);
+    if (strongEnough(end - run + 1, run, skip)) tail = Math.max(tail, skip + run);
   }
 
   if (head + tail >= words.length) return "";
