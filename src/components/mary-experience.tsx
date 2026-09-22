@@ -33,8 +33,11 @@ import {
   type LeadPayload,
 } from "@/lib/lead-sync";
 import {
+  audioDiagnostics,
   isInAppBrowser,
   micPermissionState,
+  primeMicPermission,
+  replayLastLine,
   MicUnavailableError,
   speak,
   startMicSession,
