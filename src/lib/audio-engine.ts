@@ -700,8 +700,8 @@ export function speak(
     }
     opts.onLevel?.(paused ? 0 : level);
 
-    schedule();
-
+    // Scheduling and completion run on the pump's own clock above; this frame
+    // loop only reads the level and progress for the screen.
     if (opts.onProgress && firstAudioFired) {
       const next = Math.min(0.995, played() / totalEstimate());
       if (next > progress) {
@@ -709,13 +709,8 @@ export function speak(
         opts.onProgress(progress);
       }
     }
-
-    if (!pendingFinish && streamDone && !paused && cursor >= total && active.length === 0) {
-      // Let the last buffer clear the output device before calling it done.
-      pendingFinish = true;
-      window.setTimeout(finish, Math.min(400, monitor.outputLatencyMs + 40));
-    }
   };
+
 
   // ---- stall guard ----
   // If the output clock stops moving (context suspended by the OS, a phone
