@@ -252,7 +252,10 @@ export function stripAssistantEcho(transcript: string, assistantLines: string[])
   }
 
   if (head + tail >= words.length) return "";
-  return words.slice(head, words.length - tail).join(" ").trim();
+  return words
+    .slice(head, words.length - tail)
+    .join(" ")
+    .trim();
 }
 
 const BACKCHANNELS = new Set([
