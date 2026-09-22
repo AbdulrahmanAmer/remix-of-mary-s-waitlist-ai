@@ -260,11 +260,11 @@ export const MaryPresence = memo(function MaryPresence({
     const draw = (animated: boolean) => {
       ctx.clearRect(0, 0, width, boxHeight);
 
-      // The canvas overflows its layout box, so the halo and shadow always fit.
-      const R0 = Math.min(boxHeight * 0.5, width * 0.5) / 1.78;
+      // Square box: the sphere is sized so its halo and ground shadow fit inside it.
+      const R0 = (Math.min(boxHeight, width) * 0.5) / 1.85;
       if (R0 <= 0) return;
       const cx = width / 2;
-      const cy = boxHeight / 2 - R0 * 0.05;
+      const cy = boxHeight / 2 - R0 * 0.08;
 
       const breath = animated ? 1 + Math.sin(t * 0.85) * 0.018 + lv * 0.045 + bloom * 0.06 : 1;
       const R = R0 * breath;
