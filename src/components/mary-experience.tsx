@@ -20,7 +20,6 @@ import {
   type SpeakHandle,
 } from "@/lib/audio-engine";
 
-
 type Line = { id: string; role: "user" | "mary"; text: string };
 type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 type Point = { x: number; y: number; w: number };
@@ -162,7 +161,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     speakRef.current = null;
   }, []);
 
-
   const say = useCallback(
     (text: string, opts: { record?: boolean } = { record: true }) => {
       const words = text.split(/\s+/).filter(Boolean).length;
@@ -214,7 +212,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     },
     [stopSpeaking],
   );
-
 
   const finalize = useCallback(async (finalCollected: Collected) => {
     sessionFinishedRef.current = true;
@@ -369,7 +366,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   );
 
   handleUtteranceRef.current = (utterance) => void handleUtterance(utterance);
-
 
   const enterLive = useCallback(async () => {
     setStage("live");
@@ -530,7 +526,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       sessionRef.current?.close();
     };
   }, []);
-
 
   useEffect(() => {
     if (stage === "live") inputRef.current?.focus();
@@ -823,7 +818,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                     className={`surface-raised relative size-11 shrink-0 rounded-full ${micMuted ? "" : "bg-primary text-primary-foreground"}`}
                   >
                     {micMuted ? <MicOff /> : <Mic />}
-
                   </MotionButton>
                   <textarea
                     ref={inputRef}
@@ -843,7 +837,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                           ? "Finishing your answer…"
                           : micMuted
                             ? "Muted — type your answer"
-
                             : "Speak or type your answer"
                     }
                     className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
@@ -891,7 +884,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                           : micMuted
                             ? "Your microphone is muted. Unmute to keep talking, or type."
                             : "MARY is listening. Just talk — she answers when you pause."}
-
                     </motion.p>
                   </AnimatePresence>
                 </div>

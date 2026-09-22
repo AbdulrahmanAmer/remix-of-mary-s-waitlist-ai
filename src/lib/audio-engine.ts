@@ -461,7 +461,6 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   };
 }
 
-
 function encodeWav(chunks: Float32Array[], sampleRate: number, target = 16000) {
   let total = 0;
   for (const c of chunks) total += c.length;
