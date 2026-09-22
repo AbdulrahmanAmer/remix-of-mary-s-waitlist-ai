@@ -573,7 +573,7 @@ export function MaryExperience() {
                   transition={{ ...SOFT, delay: 0.32 }}
                   whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
-                  className={`h-13 rounded-full px-8 shadow-soft ${compact ? "mt-4" : "mt-7"}`}
+                  className={`surface-raised group h-13 rounded-full px-8 ${compact ? "mt-4" : "mt-7"}`}
                 >
                   Talk to MARY <ArrowRight />
                 </MotionButton>
@@ -746,7 +746,7 @@ export function MaryExperience() {
                         : { scale: 1 }
                   }
                   transition={SPRING}
-                  className="mx-auto flex w-full max-w-3xl items-end gap-1 rounded-full bg-card/70 px-2 py-1.5 shadow-soft backdrop-blur-sm"
+                  className="surface-floating mx-auto flex w-full max-w-3xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
                     onClick={toggleMic}
@@ -757,7 +757,7 @@ export function MaryExperience() {
                       handsFree ? "Pause hands-free listening" : "Start hands-free listening"
                     }
                     size="icon"
-                    className={`relative size-11 shrink-0 rounded-full ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
+                    className={`surface-raised relative size-11 shrink-0 rounded-full ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
                   >
                     {handsFree ? <Square className="fill-current" /> : <Mic />}
                   </MotionButton>
@@ -796,7 +796,7 @@ export function MaryExperience() {
                           size="icon"
                           variant="ghost"
                           aria-label="Send"
-                          className="size-11 shrink-0 rounded-full"
+                          className="surface-raised size-11 shrink-0 rounded-full"
                         >
                           <Send />
                         </Button>
