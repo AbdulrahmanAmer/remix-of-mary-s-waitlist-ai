@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
+import { AudioDiagnostics } from "@/components/audio-diagnostics";
 import { Button } from "@/components/ui/button";
 import { clearLessons, loadLessons, type StoredLesson } from "@/lib/experience-store";
 import { clearEntries, downloadCsv, loadEntries, type WaitlistEntry } from "@/lib/waitlist-store";
