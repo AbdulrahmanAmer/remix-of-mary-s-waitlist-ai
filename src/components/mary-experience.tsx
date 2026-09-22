@@ -869,7 +869,14 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const begin = useCallback(async () => {
     if (introRef.current) return;
     introRef.current = true;
+    // iPhone Safari only grants the microphone while the tap is still being
+    // handled, so it is asked for here — before any animation or await.
+    const primed = primeMicPermission().catch((error: unknown) => {
+      setMicError(micMessage(error));
+      return null;
+    });
     await unlockAudio();
+    await primed;
 
     if (reduced) {
       await enterLive();
