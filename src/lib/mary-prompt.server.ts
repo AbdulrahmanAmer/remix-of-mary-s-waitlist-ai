@@ -3,7 +3,7 @@ import { z } from "zod";
 // directly, so the spec and her actual behaviour can never drift apart.
 import MARY_VOICE_SPEC from "../../docs/mary-voice.md?raw";
 import { groundCollected, type Proposed } from "./mary-grounding";
-import { CUT_OFF_MARK } from "./voice-logic";
+import { CUT_OFF_MARK, isEchoOfAssistant, stripAssistantEcho } from "./voice-logic";
 import type { Collected, MaryTurn, TurnFlags } from "./mary.functions";
 
 export const SYSTEM = MARY_VOICE_SPEC;
