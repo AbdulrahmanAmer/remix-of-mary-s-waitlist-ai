@@ -711,7 +711,6 @@ export function speak(
     }
   };
 
-
   // ---- stall guard ----
   // If the output clock stops moving (context suspended by the OS, a phone
   // call, a backgrounded tab, no audio device at all) nothing above would ever

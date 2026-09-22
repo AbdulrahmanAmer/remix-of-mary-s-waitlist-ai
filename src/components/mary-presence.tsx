@@ -404,7 +404,6 @@ export const MaryPresence = memo(function MaryPresence({
       raf = requestAnimationFrame(frame);
     };
 
-
     if (reduced) {
       draw(false);
     } else {
