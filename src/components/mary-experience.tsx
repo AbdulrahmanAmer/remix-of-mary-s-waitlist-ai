@@ -681,7 +681,9 @@ export function MaryExperience() {
                       <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
                         MARY
                       </p>
-                      <p className="text-pretty text-xl leading-relaxed text-ink sm:text-2xl">
+                      <p
+                        className={`text-pretty leading-relaxed text-ink ${compact ? "text-lg" : "text-xl sm:text-2xl"}`}
+                      >
                         {lastMary.text.split(/\s+/).map((word, index) => (
                           <motion.span
                             key={`${lastMary.id}-${index}`}
