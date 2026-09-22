@@ -152,7 +152,13 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [echoHint, setEchoHint] = useState(false);
-  const [result, setResult] = useState<{ position: number; message: string } | null>(null);
+  const [result, setResult] = useState<{
+    position: number;
+    message: string;
+    callback?: boolean;
+  } | null>(null);
+  /** This visit's row in the browser store. */
+  const entryIdRef = useRef<string>("session");
 
   const speakRef = useRef<SpeakHandle | null>(null);
   /** The line currently being voiced, so a cut-off can keep only what was heard. */
