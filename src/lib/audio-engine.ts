@@ -16,6 +16,13 @@
  * Every export must be called from an effect or event handler, never at import.
  */
 import {
+  VOICE_INTERRUPT,
+  VOICE_KEEP,
+  VOICE_ONSET,
+  VoiceDetector,
+  type VoiceReading,
+} from "./voice-detector";
+import {
   EchoTracker,
   endpointDelayMs,
   isEchoOfAssistant,
@@ -24,6 +31,57 @@ import {
 } from "./voice-logic";
 
 const RATE = 24000;
+
+/**
+ * Every clock the live line runs on, in one place. These are the numbers that
+ * decide how a call feels: too eager and a cough takes her turn, too patient
+ * and she talks over people.
+ */
+const TIMINGS = {
+  /** Learning the room before any decision is made. */
+  calibrationMs: 500,
+  /** Voice-like frames needed to open a turn while she is quiet. */
+  onsetFrames: 5,
+  /** Voice-like frames needed to cut in over her. */
+  interruptFrames: 4,
+  /** Default quiet needed to call a sentence finished. */
+  endpointSilenceMs: 800,
+  /** Nothing voice-like for this long closes the turn, whatever the room does. */
+  noVoiceEndpointMs: 1800,
+  /** Her voice draining out of the room before a cut-in can be judged. */
+  cutInSettleMs: 180,
+  /** A cut-in that proves nothing in this long was not a person. */
+  cutInDecideMs: 520,
+  /** A hold can never outlive this. */
+  holdMaxMs: 4000,
+  /** Longest single turn. */
+  maxUtteranceMs: 45000,
+} as const;
+
+/** Worklet-side capture: peaks and raw frames, off the main thread. */
+const CAPTURE_WORKLET = `
+class MaryCapture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffer = new Float32Array(2048);
+    this.filled = 0;
+  }
+  process(inputs) {
+    const input = inputs[0] && inputs[0][0];
+    if (input) {
+      for (let i = 0; i < input.length; i++) {
+        this.buffer[this.filled++] = input[i];
+        if (this.filled === this.buffer.length) {
+          this.port.postMessage(this.buffer.slice(0));
+          this.filled = 0;
+        }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('mary-capture', MaryCapture);
+`;
 
 /** Optional event tap for diagnostics (`window.__maryTrace`). No-op otherwise. */
 function trace(event: Record<string, unknown>) {
@@ -37,6 +95,10 @@ let sharedContext: AudioContext | null = null;
 let activeMicTrack: MediaStreamTrack | null = null;
 /** A stream captured during the tap, handed to the session so iOS sees a gesture. */
 let primedStream: MediaStream | null = null;
+/** The latest read of what the microphone is hearing, for the sound check. */
+let voiceReading: VoiceReading | null = null;
+/** What the microphone actually agreed to do (echo cancellation and friends). */
+let micProcessing = "";
 
 /** Thrown when the device/browser simply cannot do live audio at all. */
 export class AudioUnsupportedError extends Error {}
@@ -264,6 +326,11 @@ export function audioDiagnostics() {
       ? `${activeMicTrack.readyState}${activeMicTrack.muted ? " (muted)" : ""}`
       : "none",
     micLabel: activeMicTrack?.label ?? "",
+    micProcessing,
+    voiceScore: voiceReading ? Math.round(voiceReading.score * 100) : -1,
+    voiceSnrDb: voiceReading ? Math.round(voiceReading.snrDb) : 0,
+    roomFloorDb: voiceReading ? Math.round(voiceReading.floorDb) : 0,
+    voiceFlatness: voiceReading ? Math.round(voiceReading.flatness * 100) / 100 : 0,
     speechRecognition: typeof window !== "undefined" && !!recognitionCtor(),
     secureContext: typeof window !== "undefined" ? window.isSecureContext : false,
     inAppBrowser: isInAppBrowser(),
@@ -733,6 +800,8 @@ export type MicSessionOptions = {
   onInterruptCancelled?: (heldFirst: boolean) => void;
   /** How loudly the microphone hears her (0 = headphones, ~0.3+ = laptop speakers). */
   onEchoCoupling?: (coupling: number) => void;
+  /** Frame-by-frame read of how much the microphone sounds like a person. */
+  onVoice?: (reading: VoiceReading) => void;
   /** The microphone went away mid-call: headset unplugged, another app took it. */
   onLost?: (reason: MicFailure) => void;
   silenceMs?: number;
@@ -894,6 +963,23 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     }
   }
   activeMicTrack = stream.getAudioTracks()[0] ?? null;
+  // Phones and laptops are free to ignore what we asked for. Read back what
+  // the device actually agreed to: when it refuses to clean the line, our own
+  // echo and noise handling is all there is, and the check panel should say so.
+  try {
+    const applied = activeMicTrack?.getSettings() as
+      | { echoCancellation?: boolean; noiseSuppression?: boolean; autoGainControl?: boolean }
+      | undefined;
+    micProcessing = applied
+      ? [
+          applied.echoCancellation ? "echo cancel" : "no echo cancel",
+          applied.noiseSuppression ? "noise suppression" : "no noise suppression",
+          applied.autoGainControl ? "auto gain" : "no auto gain",
+        ].join(", ")
+      : "unknown";
+  } catch {
+    micProcessing = "unknown";
+  }
 
   const Ctor =
     window.AudioContext ??
@@ -908,57 +994,94 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
-  analyser.fftSize = 512;
-  analyser.smoothingTimeConstant = 0.6;
+  // 1024 gives ~47Hz bins at 48k: fine enough to separate the speech band from
+  // rumble and hiss, short enough to stay inside one animation frame.
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.35;
   source.connect(analyser);
 
   // ---- PCM capture with a short pre-roll so the first syllable is never lost ----
-  const processor = ctx.createScriptProcessor(4096, 1, 1);
   /** Recent frames, each marked with whether she was audible at the time. */
   const preRoll: { audio: Float32Array; hers: boolean }[] = [];
   let chunks: Float32Array[] = [];
   let capturing = false;
   let capturePeak = 0;
   let blockPeak = 0;
-  processor.onaudioprocess = (event) => {
-    const input = event.inputBuffer.getChannelData(0);
+  const onFrame = (input: Float32Array) => {
     let peak = 0;
     for (let i = 0; i < input.length; i++) {
       const v = Math.abs(input[i]!);
       if (v > peak) peak = v;
     }
     blockPeak = Math.max(blockPeak, peak);
-    const copy = new Float32Array(input);
     if (capturing) {
-      chunks.push(copy);
+      chunks.push(input);
       if (peak > capturePeak) capturePeak = peak;
     } else {
-      preRoll.push({ audio: copy, hers: monitor.active && !monitor.paused });
+      preRoll.push({ audio: input, hers: monitor.active && !monitor.paused });
       // Enough to catch the first syllable, short enough that a cut-in
       // recording carries as little of her own voice as possible.
-      if (preRoll.length > 3) preRoll.shift();
+      if (preRoll.length > 6) preRoll.shift();
     }
   };
-  source.connect(processor);
-  processor.connect(ctx.destination);
+
+  // Capture belongs off the main thread: an animation frame busy with the
+  // sphere used to drop whole blocks, and a dropped block is a missed
+  // syllable. Browsers without worklets keep the old script processor.
+  let worklet: AudioWorkletNode | null = null;
+  let processor: ScriptProcessorNode | null = null;
+  const captureSink = ctx.createGain();
+  captureSink.gain.value = 0;
+  captureSink.connect(ctx.destination);
+  try {
+    if (ctx.audioWorklet) {
+      const url = URL.createObjectURL(
+        new Blob([CAPTURE_WORKLET], { type: "application/javascript" }),
+      );
+      await ctx.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      worklet = new AudioWorkletNode(ctx, "mary-capture", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      });
+      worklet.port.onmessage = (event: MessageEvent<Float32Array>) => {
+        onFrame(event.data);
+      };
+      source.connect(worklet);
+      worklet.connect(captureSink);
+    }
+  } catch {
+    worklet = null;
+  }
+  if (!worklet) {
+    processor = ctx.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (event) => {
+      onFrame(new Float32Array(event.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(captureSink);
+  }
 
   // ---- state ----
   const data = new Uint8Array(analyser.frequencyBinCount);
-  const baseSilenceMs = options.silenceMs ?? 800;
-  const maxUtteranceMs = options.maxUtteranceMs ?? 45000;
+  const spectrum = new Uint8Array(analyser.frequencyBinCount);
+  const detector = new VoiceDetector();
+  const baseSilenceMs = options.silenceMs ?? TIMINGS.endpointSilenceMs;
+  const maxUtteranceMs = options.maxUtteranceMs ?? TIMINGS.maxUtteranceMs;
   const tracker = new EchoTracker();
   const openedAt = performance.now();
-  const calibrationMs = 500;
+  const calibrationMs = TIMINGS.calibrationMs;
   let noiseFloor = 0.008;
   let muted = false;
   let alive = true;
   let speechCandidateAt = 0;
-  /** Running onset score: up on loud frames, down on quiet ones. */
+  /** Running onset score: up on voice-like frames, down on the rest. */
   let loudScore = 0;
   let lastEchoThreshold = 0.02;
   let lastSpeechAt = 0;
-  // The last clearly-louder-than-the-room moment. Steady noise keeps
-  // `lastSpeechAt` alive forever; this one only moves for real speech.
+  // The last moment that actually sounded like a person. Steady noise keeps
+  // `lastSpeechAt` alive forever; this one only moves for a voice.
   let lastRealSpeechAt = 0;
   // When she went quiet for a cut-in, so a hold can never last for ever.
   let holdingSince = 0;
@@ -971,7 +1094,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let raf = 0;
 
   /** She is paused and we are checking whether the sound was really you. */
-  let pending: { at: number; frames: number; loud: number; words: boolean } | null = null;
+  let pending: {
+    at: number;
+    frames: number;
+    loud: number;
+    words: boolean;
+    voice: number;
+  } | null = null;
   /** Confirmed: she is held quiet until this utterance resolves. */
   let holding = false;
 
@@ -1155,14 +1284,14 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   function beginCandidate(fromWords: boolean) {
     if (pending || holding || muted) return;
     const now = performance.now();
-    pending = { at: now, frames: 0, loud: 0, words: fromWords };
+    pending = { at: now, frames: 0, loud: 0, words: fromWords, voice: 0 };
     startCapture(now, true);
     trace({ type: "candidate", fromWords });
     options.onInterruptCandidate?.();
     // onInterruptCandidate pauses MARY synchronously. Start a fresh recognition
     // session, so none of her pre-pause transcript can be delivered as the user.
-    recognitionReopenAt = now + monitor.outputLatencyMs + 180;
-    window.setTimeout(reopenRecognition, monitor.outputLatencyMs + 190);
+    recognitionReopenAt = now + monitor.outputLatencyMs + TIMINGS.cutInSettleMs;
+    window.setTimeout(reopenRecognition, monitor.outputLatencyMs + TIMINGS.cutInSettleMs + 10);
   }
 
   const confirmInterrupt = () => {
@@ -1175,6 +1304,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   };
 
   const cancelInterrupt = () => {
+    // Only her own voice coming back through the room should teach the echo
+    // model. A cough or a chair scrape is not echo, and letting it raise the
+    // bar every time is how a call slowly goes deaf to quiet talkers.
+    const wasEchoLike = (pending?.voice ?? 0) < VOICE_KEEP;
     pending = null;
     capturing = false;
     chunks = [];
@@ -1184,8 +1317,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     committed = "";
     interim = "";
     emitInterim();
-    tracker.learnFalseInterrupt();
-    trace({ type: "cancelled", coupling: tracker.peakCoupling });
+    if (wasEchoLike) tracker.learnFalseInterrupt();
+    trace({ type: "cancelled", coupling: tracker.peakCoupling, echoLike: wasEchoLike });
     options.onInterruptCancelled?.(false);
   };
 
@@ -1268,14 +1401,31 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       options.onLevel?.(0);
       return;
     }
-    options.onLevel?.(Math.min(1, peak * 1.8));
+
+    const speaking = assistantActive();
+
+    // ---- is this a voice, or is it the room? ----
+    // The room profile is only allowed to grow on frames where nobody can be
+    // talking: she is silent, her echo has drained, and nothing is being
+    // captured. Everything else is judged against it.
+    const learnRoom = !speaking && !capturing && !pending && !holding && !withinTail();
+    analyser.getByteFrequencyData(spectrum);
+    const voice: VoiceReading = detector.update(
+      spectrum,
+      ctx.sampleRate,
+      analyser.fftSize,
+      learnRoom,
+    );
+    voiceReading = voice;
+    // The meter follows the voice, not the room: a fan no longer lights her up.
+    options.onLevel?.(Math.min(1, peak * 1.8 * (0.25 + 0.75 * voice.score)));
+    options.onVoice?.(voice);
 
     if (now - openedAt < calibrationMs) {
       noiseFloor = noiseFloor * 0.88 + peak * 0.12;
       return;
     }
 
-    const speaking = assistantActive();
     if (speaking && !recognitionQuarantined) quarantineRecognition();
     if (!speaking && recognitionQuarantined && now >= recognitionReopenAt && !withinTail()) {
       reopenRecognition();
@@ -1286,43 +1436,49 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       Math.max(baseThreshold, echo.expectedEcho * 1.7 + baseThreshold),
     );
 
+    // Loud enough AND voice-shaped. Either one on its own is the room.
+    const voiced = voice.score >= VOICE_ONSET;
+    const stillVoiced = voice.score >= VOICE_KEEP;
+
     // A hold can never outlive the sentence it was waiting for. If she has been
     // quiet for a cut-in this long with nothing closing it, close it here.
-    if (holding && now - holdingSince > 4000) {
+    if (holding && now - holdingSince > TIMINGS.holdMaxMs) {
       flush();
       return;
     }
 
     // ---- she is paused: was that really you? ----
     // Her voice takes a moment to drain out of the room after the pause, so
-    // the first stretch is ignored; after that, a mic that stays loud with
-    // nothing playing can only be a person. The check always ends in a
-    // decision, one way or the other.
+    // the first stretch is ignored; after that it takes a run of frames that
+    // both clear the echo model and sound like a person. The check always ends
+    // in a decision, one way or the other.
     if (pending) {
       const age = now - pending.at;
-      const settle = 180 + monitor.outputLatencyMs;
+      const settle = TIMINGS.cutInSettleMs + monitor.outputLatencyMs;
+      if (voice.score > pending.voice) pending.voice = voice.score;
       if (age > settle) {
         pending.frames += 1;
-        // Her voice is still draining out of the room, so the bar stays at
-        // the echo model, not the plain noise floor.
-        if (peak >= Math.max(baseThreshold * 1.15, echoThreshold)) {
+        if (peak >= Math.max(baseThreshold * 1.15, echoThreshold) && stillVoiced) {
           pending.loud += 1;
           cleanPeak = Math.max(cleanPeak, peak);
           lastSpeechAt = now;
+          lastRealSpeechAt = now;
         }
       }
-      if (pending.words || pending.loud >= 6) {
+      if (pending.words || pending.loud >= TIMINGS.interruptFrames) {
         confirmInterrupt();
-      } else if (age >= settle + 520) {
+      } else if (age >= settle + TIMINGS.cutInDecideMs) {
         cancelInterrupt();
       }
       return;
     }
 
     // Speech is bursty: a syllable gap must not reset the clock, so onset is a
-    // running score that climbs on loud frames and eases off on quiet ones.
+    // running score that climbs on voice-like frames and eases off on the rest.
+    // Non-voice frames cost two, so intermittent clatter can never accumulate
+    // its way into a turn the way a run of syllables does.
     const scoreLoud = (loud: boolean) => {
-      loudScore = loud ? Math.min(10, loudScore + 1) : Math.max(0, loudScore - 1);
+      loudScore = loud ? Math.min(10, loudScore + 1) : Math.max(0, loudScore - 2);
       if (loud && !speechCandidateAt) speechCandidateAt = now;
       if (loudScore === 0) speechCandidateAt = 0;
       return loudScore;
@@ -1339,14 +1495,20 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
         confirmInterrupt();
         return;
       }
-      // Her own voice must clear the echo model before it counts as you.
-      if (scoreLoud(peak >= echoThreshold) >= 6) {
+      // Cutting in over her has to look like a person: past the echo model and
+      // clearly voice-shaped. A door, a clatter or her own voice never is.
+      if (
+        scoreLoud(peak >= echoThreshold && voice.score >= VOICE_INTERRUPT) >=
+        TIMINGS.interruptFrames
+      ) {
         speechCandidateAt = 0;
         loudScore = 0;
         trace({
           type: "energy",
           peak: Number(peak.toFixed(3)),
           threshold: Number(echoThreshold.toFixed(3)),
+          voice: Number(voice.score.toFixed(2)),
+          snr: Number(voice.snrDb.toFixed(1)),
           expected: Number(echo.expectedEcho.toFixed(3)),
           coupling: Number(echo.coupling.toFixed(2)),
           playback: Number(monitor.level.toFixed(3)),
@@ -1358,19 +1520,21 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     const threshold = withinTail() ? echoThreshold : baseThreshold;
 
-    if (peak >= threshold) {
+    if (peak >= threshold && stillVoiced) {
       lastSpeechAt = now;
-      // Clearly above the room, not just over the line: this is what stops a
-      // noisy café from holding a recording open until the 45-second cap.
-      if (peak >= threshold * 1.6) lastRealSpeechAt = now;
+      // A frame that really sounds like a person. Steady noise never gets here,
+      // so it can neither open a turn nor hold one open.
+      if (voiced) lastRealSpeechAt = now;
       cleanPeak = Math.max(cleanPeak, peak);
-      if (scoreLoud(true) >= 7 && !capturing) {
+      if (scoreLoud(voiced) >= TIMINGS.onsetFrames && !capturing) {
         startCapture(now, false);
         cleanPeak = peak;
         options.onSpeechStart?.();
       }
     } else if (!capturing) {
       scoreLoud(false);
+      // Room learning happens in the detector; this keeps the older level
+      // model in step with it for the echo comparisons above.
       if (!withinTail()) noiseFloor = noiseFloor * 0.985 + peak * 0.015;
       // Words the level detector missed (a quiet talker) still make a turn.
       if (committed && now - lastFinalAt > 450) flush();
@@ -1380,9 +1544,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       // A final result after the last sound is a strong "they're done".
       if (lastFinalAt > lastSpeechAt && liveText) wait = Math.min(wait, 380);
       if (now - lastSpeechAt >= wait) flush();
-      // Steady room noise can keep refreshing the silence clock; nothing that
-      // actually sounds like speech for this long means the turn is over.
-      else if (now - lastRealSpeechAt >= 2500) flush();
+      // Nothing that sounds like a person for this long means the turn is over,
+      // however loud the room behind them is.
+      else if (now - lastRealSpeechAt >= TIMINGS.noVoiceEndpointMs) flush();
     }
 
     if (capturing && now - utteranceStartedAt >= maxUtteranceMs) flush();
@@ -1474,9 +1638,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       cancelAnimationFrame(raf);
       window.clearInterval(watchdog);
       stopRecognition();
-      processor.onaudioprocess = null;
+      if (processor) processor.onaudioprocess = null;
+      if (worklet) worklet.port.onmessage = null;
+      voiceReading = null;
       try {
-        processor.disconnect();
+        processor?.disconnect();
+        worklet?.disconnect();
+        captureSink.disconnect();
         analyser.disconnect();
         source.disconnect();
       } catch {
