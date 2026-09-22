@@ -1474,6 +1474,14 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       options.onInterruptCancelled?.(wasHolding);
       return;
     }
+    if (ambient) {
+      utteranceOverAssistant = false;
+      nearField.learnAmbient(peak);
+      trace({ type: "ambient", peak, margin: Number(nearField.marginDb(peak).toFixed(1)) });
+      options.onAmbient?.({ marginDb: nearField.marginDb(peak), peak });
+      options.onInterruptCancelled?.(wasHolding);
+      return;
+    }
     options.onUtterance({
       text,
       audio,
