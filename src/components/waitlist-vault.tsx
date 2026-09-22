@@ -179,6 +179,7 @@ export function WaitlistVault() {
                 [
                   ["entries", "Conversations"],
                   ["notes", "MARY's field notes"],
+                  ["audio", "Sound & mic check"],
                 ] as const
               ).map(([key, label]) => (
                 <button
