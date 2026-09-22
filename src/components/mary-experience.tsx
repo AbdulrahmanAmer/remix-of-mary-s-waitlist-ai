@@ -148,17 +148,19 @@ export function MaryExperience() {
       if (opts.record !== false) setLines((prev) => [...prev, { id: uid(), role: "mary", text }]);
       setReveal(0);
 
-      const duration = Math.max(1400, words * 300);
-      const start = performance.now();
-      let raf = 0;
-      const animateWords = () => {
-        const progress = Math.min(1, (performance.now() - start) / duration);
-        setReveal(Math.ceil(progress * words));
-        if (progress < 1) raf = requestAnimationFrame(animateWords);
-      };
-      raf = requestAnimationFrame(animateWords);
+      // Rough spoken length, used only as a floor while the audio stream fills.
+      const approx = Math.max(1.4, words * 0.42);
 
       if (mutedRef.current) {
+        const duration = approx * 1000;
+        const start = performance.now();
+        let raf = 0;
+        const animateWords = () => {
+          const progress = Math.min(1, (performance.now() - start) / duration);
+          setReveal(Math.ceil(progress * words));
+          if (progress < 1) raf = requestAnimationFrame(animateWords);
+        };
+        raf = requestAnimationFrame(animateWords);
         setPresenceState("speaking");
         return new Promise<void>((resolve) => {
           window.setTimeout(() => {
@@ -174,8 +176,10 @@ export function MaryExperience() {
       setPresenceState("speaking");
       const handle = speak(text, {
         onLevel: setLevel,
+        approxDurationSec: approx,
+        // Words land in step with the voice that is actually playing.
+        onProgress: (progress) => setReveal(Math.ceil(progress * words)),
         onEnd: () => {
-          cancelAnimationFrame(raf);
           setReveal(words);
           setPresenceState((current) => (current === "speaking" ? "idle" : current));
         },
@@ -482,8 +486,10 @@ export function MaryExperience() {
   const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
-  const landingOrb = Math.max(110, Math.min(200, Math.round(viewportHeight * 0.2)));
-  const liveOrb = Math.max(84, Math.min(132, Math.round(viewportHeight * 0.14)));
+  // The presence now sizes itself from its box including halo + ground shadow,
+  // so it gets a taller stage and still never touches the edges.
+  const landingOrb = Math.max(140, Math.min(260, Math.round(viewportHeight * 0.26)));
+  const liveOrb = Math.max(110, Math.min(180, Math.round(viewportHeight * 0.19)));
 
   return (
     <main className="relative h-dvh overflow-hidden">
@@ -569,7 +575,7 @@ export function MaryExperience() {
                   transition={{ ...SOFT, delay: 0.32 }}
                   whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
-                  className={`h-13 rounded-full px-8 shadow-soft ${compact ? "mt-4" : "mt-7"}`}
+                  className={`surface-raised group h-13 rounded-full px-8 ${compact ? "mt-4" : "mt-7"}`}
                 >
                   Talk to MARY <ArrowRight />
                 </MotionButton>
@@ -742,7 +748,7 @@ export function MaryExperience() {
                         : { scale: 1 }
                   }
                   transition={SPRING}
-                  className="mx-auto flex w-full max-w-3xl items-end gap-1 rounded-full bg-card/70 px-2 py-1.5 shadow-soft backdrop-blur-sm"
+                  className="surface-floating mx-auto flex w-full max-w-3xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
                     onClick={toggleMic}
@@ -753,7 +759,7 @@ export function MaryExperience() {
                       handsFree ? "Pause hands-free listening" : "Start hands-free listening"
                     }
                     size="icon"
-                    className={`relative size-11 shrink-0 rounded-full ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
+                    className={`surface-raised relative size-11 shrink-0 rounded-full ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
                   >
                     {handsFree ? <Square className="fill-current" /> : <Mic />}
                   </MotionButton>
@@ -792,7 +798,7 @@ export function MaryExperience() {
                           size="icon"
                           variant="ghost"
                           aria-label="Send"
-                          className="size-11 shrink-0 rounded-full"
+                          className="surface-raised size-11 shrink-0 rounded-full"
                         >
                           <Send />
                         </Button>

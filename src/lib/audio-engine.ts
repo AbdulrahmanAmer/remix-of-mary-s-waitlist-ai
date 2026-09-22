@@ -39,6 +39,10 @@ export function speak(
   opts: {
     onLevel?: (level: number) => void;
     onFirstAudio?: () => void;
+    /** Playback progress 0..1, paced by the actual audio clock. */
+    onProgress?: (progress: number) => void;
+    /** Rough expected length in seconds; keeps early progress honest while the stream fills. */
+    approxDurationSec?: number;
     onEnd?: () => void;
   } = {},
 ): SpeakHandle {
@@ -57,6 +61,8 @@ export function speak(
   let stopped = false;
   let raf = 0;
   let firstAudioFired = false;
+  let startAt = 0;
+  let progress = 0;
   let resolveDone: () => void = () => {};
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
@@ -71,6 +77,18 @@ export function speak(
       if (v > peak) peak = v;
     }
     opts.onLevel?.(Math.min(1, peak * 1.6));
+
+    if (opts.onProgress && startAt > 0) {
+      const elapsed = Math.max(0, ctx.currentTime - startAt);
+      // Total is whatever is scheduled so far, floored by the rough estimate so
+      // the reveal never sprints ahead while the stream is still filling.
+      const total = Math.max(playhead - startAt, opts.approxDurationSec ?? 0, 0.25);
+      const next = Math.min(0.995, elapsed / total);
+      if (next > progress) {
+        progress = next;
+        opts.onProgress(progress);
+      }
+    }
     raf = requestAnimationFrame(tick);
   };
 
@@ -79,6 +97,7 @@ export function speak(
     stopped = true;
     cancelAnimationFrame(raf);
     opts.onLevel?.(0);
+    opts.onProgress?.(1);
     opts.onEnd?.();
     try {
       analyser.disconnect();
@@ -108,8 +127,10 @@ export function speak(
     const source = ctx.createBufferSource();
     source.buffer = audioBuffer;
     source.connect(analyser);
-    if (playhead === 0) playhead = ctx.currentTime + 0.08;
-    else playhead = Math.max(playhead, ctx.currentTime);
+    if (playhead === 0) {
+      playhead = ctx.currentTime + 0.08;
+      startAt = playhead;
+    } else playhead = Math.max(playhead, ctx.currentTime);
     source.start(playhead);
     playhead += audioBuffer.duration;
     sources.add(source);
