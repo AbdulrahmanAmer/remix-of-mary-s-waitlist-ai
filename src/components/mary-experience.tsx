@@ -673,7 +673,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   transition={{ ...SOFT, delay: introDelay + 0.32 }}
                   whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
-                  className={`surface-raised group h-13 rounded-full px-8 ${compact ? "mt-4" : "mt-7"}`}
+                  className={`surface-raised h-13 rounded-full bg-primary px-8 text-white ${compact ? "mt-4" : "mt-7"}`}
                 >
                   Talk to MARY <ArrowRight />
                 </MotionButton>
