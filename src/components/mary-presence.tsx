@@ -342,6 +342,16 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.lineWidth = Math.max(0.6, R * 0.014);
       ctx.stroke();
 
+      // Sub-perceptual dither over the glow area — kills residual gradient banding.
+      if (noise) {
+        const d = R * (cur.halo + 0.4);
+        ctx.save();
+        ctx.globalAlpha = 0.022;
+        ctx.fillStyle = noise;
+        ctx.fillRect(cx - d, cy - d, d * 2, d * 2.2);
+        ctx.restore();
+      }
+
       // Completion bloom.
       if (bloom > 0.01) {
         ctx.strokeStyle = withAlpha(primary, bloom * 0.35);
