@@ -110,13 +110,13 @@ export const MaryPresence = memo(function MaryPresence({
 
     const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
-    /** Ribbons of light orbiting the sphere. Each has its own tilt, roll and speed. */
+    /** Ribbons of light swirling around the sphere: near-frontal, slowly rolling arcs. */
     const RINGS = [
-      { r: 1.0, tilt: 0.22, roll: 0.1, speed: 0.55, weight: 3.2, accent: false },
-      { r: 0.94, tilt: -0.5, roll: 0.85, speed: -0.42, weight: 2.4, accent: false },
-      { r: 0.99, tilt: 0.72, roll: -0.6, speed: 0.33, weight: 2.8, accent: true },
-      { r: 0.88, tilt: -0.18, roll: 1.9, speed: -0.66, weight: 1.8, accent: false },
-      { r: 0.82, tilt: 0.95, roll: 2.7, speed: 0.48, weight: 1.5, accent: true },
+      { r: 1.0, tilt: 0.3, roll: 0.1, speed: 0.22, weight: 3.0, accent: false },
+      { r: 0.95, tilt: -0.24, roll: 0.9, speed: -0.17, weight: 2.4, accent: false },
+      { r: 0.99, tilt: 0.38, roll: 2.1, speed: 0.13, weight: 2.0, accent: false },
+      { r: 0.9, tilt: -0.34, roll: 3.4, speed: -0.27, weight: 1.7, accent: true },
+      { r: 0.85, tilt: 0.2, roll: 4.6, speed: 0.31, weight: 1.4, accent: false },
     ];
 
     const SPARKS = Array.from({ length: 16 }, (_, i) => {
@@ -132,15 +132,15 @@ export const MaryPresence = memo(function MaryPresence({
       cy: number,
       radius: number,
       ring: (typeof RINGS)[number],
-      phase: number,
+      roll: number,
       color: string,
     ) => {
       const st = Math.sin(ring.tilt);
       const ct = Math.cos(ring.tilt);
-      const sr = Math.sin(ring.roll);
-      const cr = Math.cos(ring.roll);
-      const sp = Math.sin(phase);
-      const cp = Math.cos(phase);
+      const sr = Math.sin(roll);
+      const cr = Math.cos(roll);
+      const ox = Math.cos(roll * 0.7) * radius * 0.05;
+      const oy = Math.sin(roll * 0.7) * radius * 0.05;
 
       let prevX = 0;
       let prevY = 0;
@@ -148,36 +148,24 @@ export const MaryPresence = memo(function MaryPresence({
 
       for (let i = 0; i <= SEGMENTS; i++) {
         const u = (i / SEGMENTS) * Math.PI * 2;
-        const wob = 1 + Math.sin(u * 3 + t * 2.2 + ring.roll) * (0.02 + lv * 0.09);
-        const rr = radius * ring.r * wob * (1 + lv * 0.08);
-        let x = Math.cos(u) * rr;
-        let y = Math.sin(u) * rr;
-        let z = 0;
-        // tilt about X
-        let ny = y * ct - z * st;
-        z = y * st + z * ct;
-        y = ny;
-        // roll about Z
-        const nx = x * cr - y * sr;
-        ny = x * sr + y * cr;
-        x = nx;
-        y = ny;
-        // spin about Y
-        const fx = x * cp + z * sp;
-        const fz = -x * sp + z * cp;
-        const depth = fz / Math.max(1, rr); // -1 back .. 1 front
-        const px = cx + fx;
-        const py = cy + y;
+        const wob = 1 + Math.sin(u * 3 + t * 2.2 + ring.roll) * (0.02 + lv * 0.08);
+        const rr = radius * ring.r * wob * (1 + lv * 0.07);
+        // A circle tilted away from the viewer, then rolled in the picture plane.
+        const x0 = Math.cos(u) * rr;
+        const y0 = Math.sin(u) * rr * ct;
+        const z0 = Math.sin(u) * rr * st;
+        const px = cx + ox + (x0 * cr - y0 * sr);
+        const py = cy + oy + (x0 * sr + y0 * cr);
+        const depth = z0 / Math.max(1, rr); // -1 back .. 1 front
 
         if (i > 0) {
-          const d = (prevD + depth) / 2;
-          const front = (d + 1) / 2;
-          const a = (0.1 + front * front * 0.62) * cur.glow * (0.75 + lv * 0.4);
+          const front = ((prevD + depth) / 2 + 1) / 2;
+          const a = (0.08 + front * front * 0.6) * cur.glow * (0.75 + lv * 0.4);
           const w = ring.weight * (0.45 + front * 0.85) * (radius / 70);
-          // soft bloom pass
-          ctx.strokeStyle = withAlpha(color, a * 0.28);
-          ctx.lineWidth = w * 3.4;
           ctx.lineCap = "round";
+          // soft bloom pass
+          ctx.strokeStyle = withAlpha(color, a * 0.24);
+          ctx.lineWidth = w * 3.6;
           ctx.beginPath();
           ctx.moveTo(prevX, prevY);
           ctx.lineTo(px, py);
