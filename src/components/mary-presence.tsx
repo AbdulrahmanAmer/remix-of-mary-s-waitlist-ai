@@ -167,7 +167,6 @@ export const MaryPresence = memo(function MaryPresence({
       return { x: Math.cos(a) * d * 0.72, y: Math.sin(a) * d * 0.6 + 0.14, p: i * 1.7 };
     });
 
-
     /** Sweeping brightness around the tube — bright at the front, faint behind. */
     const sweepGradient = (cx: number, cy: number, R: number, angle: number, color: string) => {
       const hasConic = typeof ctx.createConicGradient === "function";
@@ -325,7 +324,6 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.lineCap = "round";
       ctx.lineWidth = Math.max(0.6, R * 0.014);
       ctx.stroke();
-
 
       // Completion bloom.
       if (bloom > 0.01) {
