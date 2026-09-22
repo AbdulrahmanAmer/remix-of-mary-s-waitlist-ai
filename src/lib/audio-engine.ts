@@ -1167,6 +1167,33 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     if (capturing && now - utteranceStartedAt >= maxUtteranceMs) flush();
   };
 
+  // ---- device health: a headset unplugged or a mic stolen by another app must
+  // be noticed, not left as an eternally silent line ----
+  let lost = false;
+  const reportLost = (reason: MicFailure) => {
+    if (lost || !alive) return;
+    lost = true;
+    options.onLost?.(reason);
+  };
+  const track = stream.getAudioTracks()[0];
+  if (track) {
+    track.addEventListener("ended", () => reportLost("no-device"));
+    // A route change mutes the track for a moment; only a lasting mute counts.
+    track.addEventListener("mute", () => {
+      window.setTimeout(() => {
+        if (alive && track.muted && track.readyState === "live") reportLost("busy");
+      }, 1500);
+    });
+    track.addEventListener("unmute", () => {
+      lost = false;
+    });
+  }
+  const onDeviceChange = () => {
+    const current = stream.getAudioTracks()[0];
+    if (!current || current.readyState === "ended") reportLost("no-device");
+  };
+  navigator.mediaDevices.addEventListener?.("devicechange", onDeviceChange);
+
   raf = requestAnimationFrame(tick);
   startRecognition();
   // Belt and braces: if recognition quietly died, bring it back.
