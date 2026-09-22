@@ -472,6 +472,9 @@ export function MaryExperience() {
   const lastMary = [...lines].reverse().find((line) => line.role === "mary");
   const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
+  const compact = viewportHeight < 780;
+  const landingOrb = Math.max(110, Math.min(200, Math.round(viewportHeight * 0.2)));
+  const liveOrb = Math.max(84, Math.min(132, Math.round(viewportHeight * 0.14)));
 
   return (
     <main className="relative h-dvh overflow-hidden">
