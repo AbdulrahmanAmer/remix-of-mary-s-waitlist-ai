@@ -631,11 +631,11 @@ export function MaryExperience() {
               </div>
               <ProgressConstellation collected={collected} />
 
-              <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
+              <div className="no-scrollbar mt-3 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-y-auto">
                 <motion.div
                   layout
                   transition={SPRING}
-                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto pr-7 md:pr-0"
+                  className="no-scrollbar mx-auto w-full max-w-3xl space-y-2.5"
                 >
                   <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
