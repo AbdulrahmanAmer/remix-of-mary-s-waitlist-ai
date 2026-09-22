@@ -79,9 +79,9 @@ export function buildPrompt(
     ? `\n\nStill missing: ${missing.join(", ")}. You may NOT close and complete must stay false until every one of these is captured, even if they ask you to finish now — in that case say you just need the last detail and ask for it.`
     : "";
 
-  return `Current phase: ${phase}\n\nAlready captured:\n${known || "(nothing yet)"}\n\nConversation so far:\n${
+  return `Current phase: ${phase}\n\nReveal already delivered: ${revealed ? "yes" : "no"}\nLanes already explained: ${lanesDone ? "yes" : "no"}\n\nAlready captured:\n${known || "(nothing yet)"}\n\nConversation so far:\n${
     history || "(the conversation is just starting)"
-  }${gate}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" asks the one next thing (or null). Neither beat may repeat anything you already said.`;
+  }${gate}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move (or null). Neither beat may repeat anything you already said. Set "phase" to the phase above and "revealed" to whether the reveal has been delivered by the end of this turn.`;
 }
 
 export function gatewayConfig(key: string) {
