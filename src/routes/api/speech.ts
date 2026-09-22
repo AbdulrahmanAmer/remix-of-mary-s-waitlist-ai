@@ -39,7 +39,7 @@ export const Route = createFileRoute("/api/speech")({
                 role: "user",
                 parts: [
                   {
-                    text,
+                    text: `${delivery}${text}`,
                   },
                 ],
               },
