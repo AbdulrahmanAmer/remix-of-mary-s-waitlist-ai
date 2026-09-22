@@ -205,7 +205,73 @@ export async function unlockAudio() {
 function outputNode(ctx: AudioContext): AudioNode {
   const s = ensureSink(ctx);
   if (s.element.paused) s.element.play().catch(() => {});
-  return s.node;
+  return hub ?? s.node;
+}
+
+/**
+ * Watches the element's own clock while a line plays. If it never moves the
+ * element is not really making sound (blocked autoplay, silent switch, a
+ * routing the phone refuses), so the speakers take over.
+ */
+function watchOutput() {
+  const s = sink;
+  if (!s) return;
+  let last = -1;
+  let stuckFrames = 0;
+  lastElementProgressAt = performance.now();
+  const check = () => {
+    if (!sink || sink !== s) return;
+    if (!monitor.active || monitor.paused) {
+      last = -1;
+      stuckFrames = 0;
+      window.setTimeout(check, 250);
+      return;
+    }
+    const now = s.element.currentTime;
+    if (s.element.paused || now === last) {
+      stuckFrames += 1;
+      if (stuckFrames >= 3) enableDirectOutput();
+    } else {
+      stuckFrames = 0;
+      lastElementProgressAt = performance.now();
+    }
+    last = now;
+    if (!directOn) window.setTimeout(check, 250);
+  };
+  window.setTimeout(check, 250);
+}
+
+/** What the audio path is actually doing right now, for the on-phone check. */
+export function audioDiagnostics() {
+  const ctx = sharedContext;
+  return {
+    context: ctx ? ctx.state : "none",
+    sampleRate: ctx?.sampleRate ?? 0,
+    callRoute: sink?.ok ?? false,
+    elementPaused: sink ? sink.element.paused : true,
+    elementTime: sink ? Math.round(sink.element.currentTime * 100) / 100 : 0,
+    directOutput: directOn,
+    echoCancellationDegraded: degraded,
+    speaking: monitor.active && !monitor.paused,
+    lastOutputMovedMsAgo: lastElementProgressAt
+      ? Math.round(performance.now() - lastElementProgressAt)
+      : -1,
+    micTrack: activeMicTrack
+      ? `${activeMicTrack.readyState}${activeMicTrack.muted ? " (muted)" : ""}`
+      : "none",
+    micLabel: activeMicTrack?.label ?? "",
+    speechRecognition: typeof window !== "undefined" && !!recognitionCtor(),
+    secureContext: typeof window !== "undefined" ? window.isSecureContext : false,
+    inAppBrowser: isInAppBrowser(),
+  };
+}
+
+/** The last thing she said out loud, so it can be played again on demand. */
+let lastSpokenText = "";
+export function replayLastLine(): SpeakHandle | null {
+  if (!lastSpokenText) return null;
+  enableDirectOutput();
+  return speak(lastSpokenText);
 }
 
 // ---------------------------------------------------------------------------
