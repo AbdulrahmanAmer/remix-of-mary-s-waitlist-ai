@@ -36,7 +36,7 @@ export const MaryOrb = memo(function MaryOrb({
         className="absolute inset-2 rounded-full border border-primary/25 bg-primary/5"
         animate={
           reduced
-            ? undefined
+            ? false
             : state === "idle"
               ? { scale: [0.98, 1.02, 0.98], opacity: [0.45, 0.72, 0.45] }
               : { scale: 1 + energy * 0.16, opacity: 0.5 + energy * 0.35 }
@@ -52,7 +52,7 @@ export const MaryOrb = memo(function MaryOrb({
 
       <motion.div
         className="relative grid size-[48%] place-items-center rounded-full bg-ink text-background shadow-lift"
-        animate={reduced ? undefined : { scale: coreScale }}
+        animate={reduced ? false : { scale: coreScale }}
         transition={{ type: "spring", stiffness: 240, damping: 22 }}
       >
         <span className="text-2xl font-bold">M</span>
