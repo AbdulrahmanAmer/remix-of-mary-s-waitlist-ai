@@ -111,6 +111,7 @@ export async function streamMaryTurn(
       wrapAsked: false,
       revealed: input.flags.revealed,
       lanesDone: input.flags.lanesDone,
+      introDone: input.flags.introDone ?? false,
       rejected: [],
     };
   }

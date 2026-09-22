@@ -329,7 +329,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const echoHintShownRef = useRef(false);
   const micMutedRef = useRef(false);
   const sessionFinishedRef = useRef(false);
-  const flagsRef = useRef<TurnFlags>({ revealed: false, lanesDone: false });
+  const flagsRef = useRef<TurnFlags>({ revealed: false, lanesDone: false, introDone: false });
   /** One queue for the whole call, so utterances are answered in the order they were said. */
   const chainRef = useRef<Promise<void>>(Promise.resolve());
   const turnGenerationRef = useRef(0);
@@ -731,6 +731,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           lanesDone:
             flagsRef.current.lanesDone ||
             (turn.lanesDone && /cultivate/i.test(heardText) && /recover/i.test(heardText)),
+          // The intro counts once she actually got who she is and what
+          // OmniSuite is out loud — a cut-off welcome resumes next turn.
+          introDone:
+            flagsRef.current.introDone ||
+            (turn.introDone && /omnisuite/i.test(heardText) && /\bmary\b/i.test(heardText)),
           // Carried forward so the next turn knows where the conversation stands.
           wrapAsked: flagsRef.current.wrapAsked || turn.wrapAsked,
           callback: flagsRef.current.callback || turn.callbackRequested,

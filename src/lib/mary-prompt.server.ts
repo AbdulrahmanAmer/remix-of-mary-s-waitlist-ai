@@ -94,6 +94,9 @@ export function buildPrompt(
   // a beat she was cut off in does not count — so nothing is replayed or skipped.
   const revealed = flags.revealed;
   const lanesDone = flags.lanesDone;
+  // The intro is a milestone like the reveal: it only counts once it was
+  // fully heard, so an interrupted welcome resumes instead of vanishing.
+  const introDone = Boolean(flags.introDone);
   const discoveryDone = Boolean(
     collected["name"] && collected["business"] && collected["industry"] && collected["operations"],
   );
@@ -158,7 +161,7 @@ export function buildPrompt(
 
   return `Current phase: ${phase}\n\nReveal already delivered: ${revealed ? "yes" : "no"}\nLanes already explained: ${lanesDone ? "yes" : "no"}\n\nAlready captured (do not change these unless the person just corrected them):\n${known || "(nothing yet)"}\n\nConversation so far:\n${
     history || "(the conversation is just starting)"
-  }${gate}${cutOff}${rejectedNote}${modeNote}${intentRule}${driveRule}${experience}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move — a real question or a specific step, and it is null only on a closing, exit or final callback turn. Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
+  }${gate}${cutOff}${rejectedNote}${modeNote}${intentRule}${driveRule}${experience}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move — a real question or a specific step, and it is null only on a closing, exit or final callback turn. Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "introDone" to whether your introduction (a greeting, who you are, and what OmniSuite is) has been fully said by the end of this turn, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
 }
 
 /**
@@ -237,6 +240,7 @@ export function finishTurn(
     wrapAsked: Boolean(input.flags.wrapAsked) || out.wrapAsked,
     revealed: input.flags.revealed || out.revealed,
     lanesDone: input.flags.lanesDone || out.lanesDone,
+    introDone: Boolean(input.flags.introDone) || out.introDone,
     rejected: grounded.rejected,
   };
 }
