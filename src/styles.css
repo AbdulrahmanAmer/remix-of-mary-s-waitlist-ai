@@ -221,8 +221,12 @@
 
 /* ---------- MARY boot sequence ---------- */
 
+/* Every boot animation is offset by --boot-elapsed (time already spent on the
+   placeholder copy) so the sequence resumes mid-arc instead of restarting when
+   the app hydrates. One clock, one continuous play. */
 .mary-boot {
   animation: mary-boot-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(-1 * var(--boot-elapsed, 0s));
 }
 
 @keyframes mary-boot-in {
