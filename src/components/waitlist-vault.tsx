@@ -142,7 +142,7 @@ export function WaitlistVault() {
                 {tab === "entries" ? (
                   <>
                     <Button
-                      variant="secondary"
+                      variant="outline"
                       onClick={() => downloadCsv(entries)}
                       disabled={entries.length === 0}
                     >
