@@ -32,3 +32,10 @@
 - [x] Phase machine WELCOME → CLOSE derived from what MARY has said
 - [x] Live call: persistent mic session, mute toggle, ordered turn queue
 - [x] Boot screen restart fix; footer pinned in all stages
+
+## Cross-browser startup (done 2026-09-22)
+- Her voice now plays even when the WebRTC loopback route fails (Safari/Firefox/older WebViews); previously she was silently inaudible.
+- Audio element is primed inside the tap so iPhone Safari allows playback.
+- Mic context resumes on iOS; both contexts are woken by the watchdog after screen lock.
+- Specific messages for blocked / missing / busy mic, http pages and unsupported browsers; status line points at typing when there is no mic.
+- ResizeObserver guarded with window resize/orientation fallback.

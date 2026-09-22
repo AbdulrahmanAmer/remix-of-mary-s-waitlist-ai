@@ -33,6 +33,7 @@ import {
   type LeadPayload,
 } from "@/lib/lead-sync";
 import {
+  MicUnavailableError,
   speak,
   startMicSession,
   transcribe,
@@ -41,6 +42,25 @@ import {
   type SpeakHandle,
   type Utterance,
 } from "@/lib/audio-engine";
+
+/** Plain words for every way a microphone can fail to open. */
+function micMessage(error: unknown): string {
+  const reason = error instanceof MicUnavailableError ? error.reason : "unknown";
+  switch (reason) {
+    case "denied":
+      return "Microphone is blocked. Allow it in your browser's address bar, or just type — I'm reading either way.";
+    case "no-device":
+      return "I can't find a microphone on this device. Typing works perfectly.";
+    case "busy":
+      return "Another app is using your microphone. Close it and reload, or keep going by typing.";
+    case "insecure":
+      return "This page needs a secure (https) address to use the microphone. You can still type to me.";
+    case "unsupported":
+      return "This browser won't let me listen — Safari, Chrome or Edge will. Typing works here.";
+    default:
+      return "I couldn't open the microphone. You can keep the conversation going by typing.";
+  }
+}
 import {
   CUT_OFF_MARK,
   isEchoOfAssistant,
@@ -109,12 +129,17 @@ function useStageHeight(ref: React.RefObject<HTMLElement | null>): number {
       if (measured > 0) setHeight(measured);
     };
     update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
+    // Older browsers without ResizeObserver still get window-driven updates.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(node);
     window.visualViewport?.addEventListener("resize", update);
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
       window.visualViewport?.removeEventListener("resize", update);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
     };
   }, [ref]);
   return height;
@@ -928,9 +953,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         setMicLive(true);
         setMicError(null);
         setListeningPhase(micMutedRef.current ? "paused" : "listening");
-      } catch {
+      } catch (error) {
+        if (cancelled) return;
         setMicLive(false);
-        setMicError("Microphone access is off. You can keep the conversation going by typing.");
+        setMicError(micMessage(error));
+        setListeningPhase("paused");
         inputRef.current?.focus();
       }
     })();
@@ -1059,6 +1086,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           : micMuted
             ? "muted"
             : "live";
+  // With no working microphone every prompt has to point at typing instead.
+  const typingOnly = !micLive && !!micError;
   const statusText =
     statusKey === "hearing"
       ? "Go ahead — I'm listening."
@@ -1069,8 +1098,12 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           : statusKey === "muted"
             ? "Your microphone is muted. Unmute to keep talking, or type."
             : statusKey === "speaking"
-              ? "MARY is speaking. Just talk to cut in."
-              : "MARY is listening. Just talk — she answers when you pause.";
+              ? typingOnly
+                ? "MARY is speaking."
+                : "MARY is speaking. Just talk to cut in."
+              : typingOnly
+                ? "Type your reply — MARY is reading."
+                : "MARY is listening. Just talk — she answers when you pause.";
 
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
