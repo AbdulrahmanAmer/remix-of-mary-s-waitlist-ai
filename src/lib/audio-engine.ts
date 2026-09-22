@@ -326,6 +326,11 @@ export function audioDiagnostics() {
       ? `${activeMicTrack.readyState}${activeMicTrack.muted ? " (muted)" : ""}`
       : "none",
     micLabel: activeMicTrack?.label ?? "",
+    micProcessing,
+    voiceScore: voiceReading ? Math.round(voiceReading.score * 100) : -1,
+    voiceSnrDb: voiceReading ? Math.round(voiceReading.snrDb) : 0,
+    roomFloorDb: voiceReading ? Math.round(voiceReading.floorDb) : 0,
+    voiceFlatness: voiceReading ? Math.round(voiceReading.flatness * 100) / 100 : 0,
     speechRecognition: typeof window !== "undefined" && !!recognitionCtor(),
     secureContext: typeof window !== "undefined" ? window.isSecureContext : false,
     inAppBrowser: isInAppBrowser(),
