@@ -216,6 +216,9 @@ export type RecordingOptions = {
   onMaxDuration?: () => void;
   silenceMs?: number;
   maxDurationMs?: number;
+  /** Raises the speech threshold — used while MARY is talking so only a real
+   *  interruption counts, not her own voice leaking through the speakers. */
+  thresholdScale?: number;
 };
 
 /** Captures mic PCM, detects a completed utterance, and returns a 16k mono WAV blob. */
