@@ -17,6 +17,14 @@ export const Route = createFileRoute("/api/speech")({
         if (!text) return new Response("Missing text", { status: 400 });
         if (text.length > 1200) text = text.slice(0, 1200);
 
+        const delivery =
+          "Read the line below as a real person speaking on a friendly phone call. " +
+          "Warm, relaxed and unhurried — a natural conversational pace, slightly slower than average. " +
+          "Let sentences breathe: a short breath at commas, a fuller pause at full stops. " +
+          "Gentle emphasis on the words that carry meaning, a light lift mid-sentence and a soft " +
+          "falling tone at the end. Never announcer-like, never rushed, no robotic evenness. " +
+          "Speak only the line itself, exactly as written:\n\n";
+
         const upstream = await fetch("https://ai.gateway.lovable.dev/v1/audio/speech", {
           method: "POST",
           headers: {
