@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Mic, MicOff, Send, Volume2, VolumeX } from "lucide-react";
+import { ArrowRight, Headphones, Mic, MicOff, Send, Volume2, VolumeX } from "lucide-react";
 
 import { AuroraBackground } from "./aurora-background";
 import { BrandLockup } from "./brand-lockup";
@@ -8,7 +8,13 @@ import { MaryPresence, type PresenceState } from "./mary-presence";
 import { ProgressConstellation } from "./progress-constellation";
 import { Button } from "@/components/ui/button";
 import lockupAsset from "@/assets/omnisuite-lockup.png.asset.json";
-import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
+import {
+  maryTurn,
+  WAITLIST_FIELDS,
+  type Collected,
+  type MaryTurn,
+  type TurnFlags,
+} from "@/lib/mary.functions";
 import { streamMaryTurn } from "@/lib/mary-stream";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
@@ -18,13 +24,34 @@ import {
   unlockAudio,
   type MicSession,
   type SpeakHandle,
+  type Utterance,
 } from "@/lib/audio-engine";
+import {
+  CUT_OFF_MARK,
+  isEchoOfAssistant,
+  spokenPortion,
+  stripAssistantEcho,
+} from "@/lib/voice-logic";
 
-type Line = { id: string; role: "user" | "mary"; text: string };
+type Line = {
+  id: string;
+  role: "user" | "mary";
+  text: string;
+  /** She was cut off; `text` holds only what was actually heard. */
+  interrupted?: boolean;
+};
 type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 type Point = { x: number; y: number; w: number };
 /** Screen-space path the OmniSuite mark travels during the intro. */
 type Flight = { from: Point; mid: Point; to: Point };
+
+/** The conversation as the model should see it. */
+function toMessages(lines: Line[]) {
+  return lines.map((line) => ({
+    role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
+    content: line.role === "mary" && line.interrupted ? `${line.text} ${CUT_OFF_MARK}` : line.text,
+  }));
+}
 
 const MotionButton = motion.create(Button);
 

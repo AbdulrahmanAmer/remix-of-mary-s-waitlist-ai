@@ -10,6 +10,9 @@
  *      end-of-turn pacing and truncating an interrupted line.
  */
 
+/** Appended to a MARY line she never got to finish, so the model knows. */
+export const CUT_OFF_MARK = "[cut off here — they spoke over you and did not hear the rest]";
+
 const STOPWORDS = new Set([
   "a", "an", "the", "to", "of", "on", "in", "and", "or", "so", "it", "is", "i", "im",
   "you", "we", "me", "my", "your", "that", "thats", "this", "for", "at", "with", "as",

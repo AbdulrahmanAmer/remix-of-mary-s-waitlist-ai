@@ -3,6 +3,7 @@ import { z } from "zod";
 // directly, so the spec and her actual behaviour can never drift apart.
 import MARY_VOICE_SPEC from "../../docs/mary-voice.md?raw";
 import { groundCollected, type Proposed } from "./mary-grounding";
+import { CUT_OFF_MARK } from "./voice-logic";
 import type { Collected, MaryTurn, TurnFlags } from "./mary.functions";
 
 export const SYSTEM = MARY_VOICE_SPEC;
@@ -15,9 +16,6 @@ export const WAITLIST_FIELDS = [
   "industry",
   "operations",
 ] as const;
-
-/** Marker the client appends to a line she never got to finish. */
-export const CUT_OFF_MARK = "[cut off here — they spoke over you and did not hear the rest]";
 
 // Property order matters: "say" streams first and is final the moment
 // "followUp" begins, which is what lets her voice start early.
