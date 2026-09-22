@@ -4,6 +4,7 @@
 - [ ] Research (25 parallel investigations): browser echo cancellation, barge-in design, transcript echo rejection, VAD, prompt grounding
 - [ ] Stop MARY hearing herself: gate recognition + capture while she speaks, tail guard after playback, transcript-vs-her-lines echo filter, playback-aware energy threshold
 - [ ] Make barge-in require real evidence (sustained energy + words that are not hers) before cutting her off
+- [ ] Cutting her off must be instant and reliable (user priority): speaking over her stops her voice within ~150 ms of a genuine interruption; history keeps only what she actually said
 - [ ] Ground extraction: MARY may only record business/industry/operations the person actually stated or confirmed; guesses stay questions
 - [ ] Verify with Playwright (fake mic) + scripted /api/turn conversations (ambiguous, one-word, guess-correction)
 
