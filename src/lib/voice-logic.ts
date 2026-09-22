@@ -14,11 +14,67 @@
 export const CUT_OFF_MARK = "[cut off here — they spoke over you and did not hear the rest]";
 
 const STOPWORDS = new Set([
-  "a", "an", "the", "to", "of", "on", "in", "and", "or", "so", "it", "is", "i", "im",
-  "you", "we", "me", "my", "your", "that", "thats", "this", "for", "at", "with", "as",
-  "be", "do", "are", "was", "up", "out", "if", "but", "by", "from", "they", "them",
-  "what", "who", "how", "all", "not", "no", "yes", "oh", "um", "uh", "its", "just",
-  "then", "than", "there", "here", "when", "one", "get", "got", "can", "will", "would",
+  "a",
+  "an",
+  "the",
+  "to",
+  "of",
+  "on",
+  "in",
+  "and",
+  "or",
+  "so",
+  "it",
+  "is",
+  "i",
+  "im",
+  "you",
+  "we",
+  "me",
+  "my",
+  "your",
+  "that",
+  "thats",
+  "this",
+  "for",
+  "at",
+  "with",
+  "as",
+  "be",
+  "do",
+  "are",
+  "was",
+  "up",
+  "out",
+  "if",
+  "but",
+  "by",
+  "from",
+  "they",
+  "them",
+  "what",
+  "who",
+  "how",
+  "all",
+  "not",
+  "no",
+  "yes",
+  "oh",
+  "um",
+  "uh",
+  "its",
+  "just",
+  "then",
+  "than",
+  "there",
+  "here",
+  "when",
+  "one",
+  "get",
+  "got",
+  "can",
+  "will",
+  "would",
 ]);
 
 export function tokens(text: string): string[] {
@@ -103,7 +159,10 @@ export function stripAssistantEcho(transcript: string, assistantLines: string[])
   const runFromEnd = () => {
     let best = 0;
     for (let size = 2; size <= norm.length; size++) {
-      const gram = norm.slice(norm.length - size).filter(Boolean).join(" ");
+      const gram = norm
+        .slice(norm.length - size)
+        .filter(Boolean)
+        .join(" ");
       if (gram && assistantJoined.includes(` ${gram} `)) best = size;
       else if (size > 2) break;
     }
@@ -117,9 +176,33 @@ export function stripAssistantEcho(transcript: string, assistantLines: string[])
 }
 
 const BACKCHANNELS = new Set([
-  "yeah", "yep", "yes", "ok", "okay", "mhm", "mm", "mmhmm", "mm-hmm", "uh-huh", "uhhuh",
-  "right", "sure", "gotit", "got it", "i see", "cool", "nice", "true", "hm", "hmm", "aha",
-  "alright", "great", "good", "oh", "wow",
+  "yeah",
+  "yep",
+  "yes",
+  "ok",
+  "okay",
+  "mhm",
+  "mm",
+  "mmhmm",
+  "mm-hmm",
+  "uh-huh",
+  "uhhuh",
+  "right",
+  "sure",
+  "gotit",
+  "got it",
+  "i see",
+  "cool",
+  "nice",
+  "true",
+  "hm",
+  "hmm",
+  "aha",
+  "alright",
+  "great",
+  "good",
+  "oh",
+  "wow",
 ]);
 
 /** Short acknowledgements that should never cut MARY off. */
@@ -132,8 +215,22 @@ export function isBackchannel(text: string): boolean {
 }
 
 const INTERRUPT_COMMANDS = [
-  "stop", "wait", "hold on", "hang on", "pause", "no", "hey", "excuse me", "one sec",
-  "one second", "actually", "sorry", "question", "hmm no", "not really", "no no",
+  "stop",
+  "wait",
+  "hold on",
+  "hang on",
+  "pause",
+  "no",
+  "hey",
+  "excuse me",
+  "one sec",
+  "one second",
+  "actually",
+  "sorry",
+  "question",
+  "hmm no",
+  "not really",
+  "no no",
 ];
 
 /** Words that mean "let me in" and should interrupt immediately, however short. */

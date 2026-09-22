@@ -44,7 +44,11 @@ export type TurnObject = z.infer<typeof TurnSchema>;
 
 export type TurnMessage = { role: "user" | "assistant"; content: string };
 
-export function buildPrompt(messages: TurnMessage[], collected: Record<string, string>, flags: TurnFlags) {
+export function buildPrompt(
+  messages: TurnMessage[],
+  collected: Record<string, string>,
+  flags: TurnFlags,
+) {
   const history = messages
     .map((m) => `${m.role === "user" ? "Person" : "MARY"}: ${m.content}`)
     .join("\n");

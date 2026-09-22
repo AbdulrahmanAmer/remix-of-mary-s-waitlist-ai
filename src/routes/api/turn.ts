@@ -2,7 +2,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, Output } from "ai";
 import type { z } from "zod";
-import { SYSTEM, TurnSchema, buildPrompt, finishTurn, gatewayConfig } from "@/lib/mary-prompt.server";
+import {
+  SYSTEM,
+  TurnSchema,
+  buildPrompt,
+  finishTurn,
+  gatewayConfig,
+} from "@/lib/mary-prompt.server";
 import { TurnInput } from "@/lib/mary.functions";
 
 /**

@@ -182,7 +182,12 @@ export function speak(
   };
 
   // ---- just-in-time scheduling from a cursor ----
-  type Piece = { source: AudioBufferSourceNode; startAt: number; length: number; cancelled: boolean };
+  type Piece = {
+    source: AudioBufferSourceNode;
+    startAt: number;
+    length: number;
+    cancelled: boolean;
+  };
   const active: Piece[] = [];
   const LOOKAHEAD = 0.4;
   const SLICE = Math.round(RATE * 0.2);

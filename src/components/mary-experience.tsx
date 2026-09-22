@@ -399,7 +399,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           if (allDone) await finalize(turn.collected);
         }
       } catch {
-        if (!interruptRef.current) await say("I hit a snag on my side — could you try that once more?");
+        if (!interruptRef.current)
+          await say("I hit a snag on my side — could you try that once more?");
       } finally {
         busyRef.current = false;
         lastActivityRef.current = Date.now();
