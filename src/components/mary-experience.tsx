@@ -1014,6 +1014,16 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     };
   }, [maybeShowEchoHint, micAttempt, stage]);
 
+  // If her voice ever had to be forced to the speakers, the phone's ring
+  // switch is the usual culprit — say so plainly, once.
+  useEffect(() => {
+    if (stage !== "live" || silentHint) return;
+    const timer = window.setInterval(() => {
+      if (audioDiagnostics().directOutput) setSilentHint(true);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [silentHint, stage]);
+
   /** Ask for the microphone again — after a refusal, a swap, or a stolen line. */
   const retryMic = useCallback(() => {
     lastActivityRef.current = Date.now();
