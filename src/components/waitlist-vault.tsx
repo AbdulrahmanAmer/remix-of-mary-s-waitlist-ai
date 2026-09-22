@@ -200,6 +200,8 @@ export function WaitlistVault() {
               ))}
             </div>
 
+            {tab === "audio" && <AudioDiagnostics />}
+
             {tab === "entries" && (
               <div className="mt-5 space-y-3">
                 {entries.length === 0 && (
