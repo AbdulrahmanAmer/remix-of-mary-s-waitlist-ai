@@ -98,7 +98,8 @@ function uid() {
 
 export function MaryExperience() {
   const reduced = useReducedMotion();
-  const viewportHeight = useViewportHeight();
+  const shellRef = useRef<HTMLElement | null>(null);
+  const viewportHeight = useStageHeight(shellRef);
   const trailRef = useRef<HTMLDivElement | null>(null);
   const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
