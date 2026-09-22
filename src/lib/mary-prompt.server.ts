@@ -114,7 +114,7 @@ export function buildPrompt(
         : !revealed
           ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn. Set revealed true."
           : !lanesDone
-            ? "LANES — immediately tie Cultivate and Recover to their own situation, one short beat each, then land that it is three lanes in one system. No questions here. Set lanesDone true."
+            ? "LANES — tie Cultivate and Recover to their own situation in one short beat each, in this turn, and land that it is three lanes in one system. Do not offer to explain them later and do not ask which one they want; just say it. End on one question that pulls them forward from what they told you. Set lanesDone true."
             : !allCaptured
               ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
               : wrapAsked
