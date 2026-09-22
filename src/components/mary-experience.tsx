@@ -16,7 +16,7 @@ import {
   type TurnFlags,
 } from "@/lib/mary.functions";
 import { streamMaryTurn } from "@/lib/mary-stream";
-import { WaitlistVault } from "./waitlist-vault";
+import { OWNER_VIEW_EVENT, WaitlistVault } from "./waitlist-vault";
 import {
   loadProgress,
   newSession,
@@ -586,6 +586,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     speakRef.current?.stop();
     newSession();
     window.location.reload();
+  }, []);
+
+  /** Five quick taps on "omnikom" open the owner view where there is no keyboard. */
+  const ownerTapsRef = useRef<number[]>([]);
+  const ownerTap = useCallback(() => {
+    const now = Date.now();
+    ownerTapsRef.current = [...ownerTapsRef.current.filter((t) => now - t < 2000), now];
+    if (ownerTapsRef.current.length >= 5) {
+      ownerTapsRef.current = [];
+      window.dispatchEvent(new Event(OWNER_VIEW_EVENT));
+    }
   }, []);
 
   const runTurn = useCallback(
@@ -1674,7 +1685,14 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         >
           <span>OmniSuite · AI-native revenue infrastructure</span>
           <span>
-            A product by <span className="wordmark text-ink">omnikom</span>
+            A product by{" "}
+            <span
+              className="wordmark cursor-default select-none text-ink"
+              onClick={ownerTap}
+              aria-hidden="true"
+            >
+              omnikom
+            </span>
           </span>
         </footer>
       </div>
