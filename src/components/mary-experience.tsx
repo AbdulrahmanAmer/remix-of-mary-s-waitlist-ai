@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { ArrowRight, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
+import { ArrowRight, Mic, MicOff, Send, Volume2, VolumeX } from "lucide-react";
 
 import { AuroraBackground } from "./aurora-background";
 import { BrandLockup } from "./brand-lockup";
@@ -13,12 +13,13 @@ import { streamMaryTurn } from "@/lib/mary-stream";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
   speak,
-  startRecording,
+  startMicSession,
   transcribe,
   unlockAudio,
-  type Recorder,
+  type MicSession,
   type SpeakHandle,
 } from "@/lib/audio-engine";
+
 
 type Line = { id: string; role: "user" | "mary"; text: string };
 type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
