@@ -561,6 +561,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let speechCandidateAt = 0;
   /** Running onset score: up on loud frames, down on quiet ones. */
   let loudScore = 0;
+  let lastEchoThreshold = 0.02;
   let lastSpeechAt = 0;
   let utteranceStartedAt = 0;
   let utteranceOverAssistant = false;
@@ -787,7 +788,15 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     blockPeak *= 0.55;
     const now = performance.now();
 
-    const echo = tracker.update(peak, monitor.level, now);
+    // The room is only learned from frames that already look like echo — the
+    // moment the mic climbs past the echo model, learning stops until it settles.
+    const echo = tracker.update(
+      peak,
+      monitor.level,
+      now,
+      peak < lastEchoThreshold && !pending && !holding,
+    );
+    lastEchoThreshold = Math.min(0.95, echo.expectedEcho * 1.7 + 0.02);
     sincePlayback = echo.sincePlayback;
     if (now - lastCouplingReport > 1500 && echo.coupling !== undefined) {
       lastCouplingReport = now;
