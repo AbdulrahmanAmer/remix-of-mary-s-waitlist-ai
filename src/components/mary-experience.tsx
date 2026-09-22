@@ -866,7 +866,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         recent: linesRef.current.slice(-6).map((line) => `${line.role}: ${line.text}`),
       });
       noteAddresseeVerdict(verdict);
-      micRef.current?.noteVerdict(verdict === "mary" ? "mary" : "ambient", utterance.peak);
+      sessionRef.current?.noteVerdict(verdict === "mary" ? "mary" : "ambient", utterance.peak);
       if (verdict !== "mary") {
         // Not for her: she never heard it. If she had gone quiet for it, she
         // carries straight on; nothing is learned from it either.
