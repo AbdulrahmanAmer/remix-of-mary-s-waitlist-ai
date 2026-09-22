@@ -34,9 +34,9 @@ function base64ToBytes(base64: string) {
  *  measured Mary  : median pitch ~220 Hz, articulation ~4.1 syllables/s, ~1.0 s pauses
  *  base TTS voice : median pitch ~213 Hz, articulation ~5.4 syllables/s (matched conditions)
  *
- * Pitch is already within ~0.6 of a semitone, so only pace is corrected: the audio is
- * time-stretched (pitch preserved) to land near her slower, more relaxed delivery.
- * MARY_PITCH_RATIO retunes playback pitch, MARY_PACE_RATIO sets net speaking speed.
+ * MARY_PITCH_RATIO lifts playback pitch ~0.7 semitones onto her median; MARY_PACE_RATIO
+ * slows net delivery toward hers. The time stretcher below compensates so the pitch lift
+ * does not also speed her up. Measured result: 220.6 Hz / 4.6 syllables per second.
  * Set both to 1 to disable shaping entirely.
  */
 const MARY_PITCH_RATIO = 1.04;
