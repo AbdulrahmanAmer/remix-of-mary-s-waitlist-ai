@@ -46,17 +46,33 @@ export function buildPrompt(
     .join("\n");
 
   const allCaptured = WAITLIST_FIELDS.every((f) => collected[f]);
+  const saidByMary = messages
+    .filter((m) => m.role === "assistant")
+    .map((m) => m.content)
+    .join(" ");
   const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant")?.content;
-  // The wrap question has already gone out if MARY's last line asked something
-  // once everything was captured — only then may she close.
+  // Phase is derived from what MARY has actually already said this session, so
+  // a beat can never be replayed or skipped.
+  const revealed = /convert/i.test(saidByMary);
+  const lanesDone = /cultivate/i.test(saidByMary) && /recover/i.test(saidByMary);
+  const discoveryDone = Boolean(
+    collected["name"] && collected["business"] && collected["industry"] && collected["operations"],
+  );
   const wrapAsked = Boolean(lastAssistant && lastAssistant.includes("?"));
+
   const phase = !history
-    ? "WELCOME — the conversation is just starting; this is your one and only welcome."
-    : allCaptured
-      ? wrapAsked
-        ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the closing line and set complete true."
-        : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false."
-      : "COLLECT — the welcome already happened. Do NOT mention the waitlist offer or first access again. React to what they just said, sell the point that fits their own situation when there is an opening, and ask only for what is genuinely still missing.";
+    ? "WELCOME — the conversation is just starting. One sentence on who you are and what OmniSuite does, then ask if they want first access. No personal question yet."
+    : !discoveryDone
+      ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and pull what is still missing using guesses, labels and assumptive framing. Never ask a plain intake question."
+      : !revealed
+        ? "REVEAL — you now have their name, business, industry and how they operate. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn."
+        : !lanesDone
+          ? "LANES — immediately tie Cultivate and Recover to their own situation, one short beat each, then land that it is three lanes in one system. No questions here."
+          : !allCaptured
+            ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
+            : wrapAsked
+              ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the exact closing line and set complete true."
+              : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false.";
 
   const missing = WAITLIST_FIELDS.filter((f) => !collected[f]);
   const gate = missing.length
