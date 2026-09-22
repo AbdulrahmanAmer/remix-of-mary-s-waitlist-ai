@@ -38,14 +38,10 @@ export const MaryOrb = memo(function MaryOrb({
           reduced
             ? false
             : state === "idle"
-              ? { scale: [0.98, 1.02, 0.98], opacity: [0.45, 0.72, 0.45] }
+              ? { scale: 1, opacity: 0.55 }
               : { scale: 1 + energy * 0.16, opacity: 0.5 + energy * 0.35 }
         }
-        transition={
-          state === "idle"
-            ? { duration: 4.8, repeat: Infinity, ease: "easeInOut" }
-            : { type: "spring", stiffness: 220, damping: 24 }
-        }
+        transition={{ type: "spring", stiffness: 220, damping: 24 }}
       />
 
       <div className="absolute inset-6 rounded-full border border-border-strong bg-card shadow-soft" />

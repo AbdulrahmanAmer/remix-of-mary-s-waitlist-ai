@@ -413,9 +413,9 @@ export function MaryExperience() {
   return (
     <main className="relative min-h-dvh overflow-hidden">
       <AuroraBackground />
-      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-[78rem] flex-col px-5 py-5 sm:px-8 sm:py-6">
-        <header className="flex h-12 items-center justify-between gap-4">
-          <BrandLockup compact />
+      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
+        <header className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}>
+          <BrandLockup compact={stage !== "landing"} centered={stage === "landing"} />
           {stage === "live" && (
             <Button
               variant="outline"
@@ -441,65 +441,35 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -12 }}
               transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
-              className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.08fr_0.92fr] lg:py-14"
+              className="flex flex-1 flex-col items-center justify-center py-10 text-center sm:py-14"
             >
-              <div className="max-w-2xl">
+              <div className="mx-auto flex max-w-3xl flex-col items-center">
                 <p className="eyebrow">Early access · MARY is ready</p>
-                <h1 className="mt-5 text-balance text-5xl font-semibold leading-[1.02] text-ink sm:text-6xl lg:text-7xl">
-                  Meet the concierge who works the revenue you already have.
+                <h1 className="mt-5 text-balance text-5xl font-semibold leading-[0.98] text-ink sm:text-7xl lg:text-8xl">
+                  Meet <span className="text-muted-foreground">MARY.</span>
                 </h1>
-                <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
-                  Speak or type with MARY. She’ll learn about your business and personally add you
-                  to the OmniSuite launch waitlist.
+                <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
+                  Your AI Revenue Concierge. She works the revenue you already have and personally
+                  welcomes you to the OmniSuite launch waitlist.
                 </p>
-                <div className="mt-8 flex flex-wrap items-center gap-4">
-                  <MotionButton
-                    onClick={begin}
-                    size="lg"
-                    whileHover={reduced ? {} : { y: -2 }}
-                    whileTap={reduced ? {} : { y: 1 }}
-                    className="h-12 rounded-full px-7 shadow-soft"
-                  >
-                    Talk to MARY <ArrowRight />
-                  </MotionButton>
-                  <span className="text-sm text-muted-foreground">
-                    Voice or text · switch anytime
-                  </span>
+                <div className="relative mt-8">
+                  <div className="absolute inset-5 -z-10 rounded-full bg-primary/10" />
+                  <MaryOrb state="idle" level={0} size={176} />
                 </div>
-                <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-5 text-sm text-muted-foreground">
-                  <span>
-                    <strong className="text-ink">Convert</strong> fresh demand
-                  </span>
-                  <span>
-                    <strong className="text-ink">Cultivate</strong> your database
-                  </span>
-                  <span>
-                    <strong className="text-ink">Recover</strong> missed opportunities
-                  </span>
-                </div>
-              </div>
-
-              <div className="relative mx-auto w-full max-w-md">
-                <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-primary/8" />
-                <div className="rounded-2xl border border-border bg-card p-6 shadow-lift sm:p-8">
-                  <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent-text">
-                        Live concierge
-                      </p>
-                      <p className="mt-1 text-xl font-semibold text-ink">MARY</p>
-                    </div>
-                    <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-accent-text">
-                      <span className="size-1.5 rounded-full bg-primary" /> Online
-                    </span>
-                  </div>
-                  <div className="flex justify-center py-7">
-                    <MaryOrb state="idle" level={0} size={190} />
-                  </div>
-                  <div className="rounded-xl bg-surface px-4 py-3 text-sm leading-relaxed text-muted-foreground">
-                    “I work new leads, existing databases and missed opportunities — then bring the
-                    right conversations to your team.”
-                  </div>
+                <MotionButton
+                  onClick={begin}
+                  size="lg"
+                  whileHover={reduced ? {} : { y: -2, scale: 1.01 }}
+                  whileTap={reduced ? {} : { scale: 0.98 }}
+                  className="mt-7 h-13 rounded-full px-8 shadow-soft"
+                >
+                  Talk to MARY <ArrowRight />
+                </MotionButton>
+                <span className="mt-3 text-sm text-muted-foreground">Voice or text · switch anytime</span>
+                <div className="mt-9 grid w-full grid-cols-3 divide-x divide-border border-y border-border py-4 text-xs text-muted-foreground sm:text-sm">
+                  <span className="px-2"><strong className="block text-ink sm:inline">Convert</strong> fresh demand</span>
+                  <span className="px-2"><strong className="block text-ink sm:inline">Cultivate</strong> your database</span>
+                  <span className="px-2"><strong className="block text-ink sm:inline">Recover</strong> opportunities</span>
                 </div>
               </div>
             </motion.section>
@@ -512,32 +482,24 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -10 }}
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              className="grid flex-1 gap-4 py-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-5 lg:py-7"
+              className="mx-auto flex w-full max-w-4xl flex-1 flex-col py-5 lg:py-7"
             >
-              <aside className="hidden rounded-2xl border border-border bg-card p-5 shadow-soft lg:flex lg:flex-col">
-                <div className="flex flex-col items-center border-b border-border pb-5">
-                  <MaryOrb state={orbState} level={level} size={164} />
-                  <p className="mt-4 text-center text-sm text-muted-foreground">
-                    AI Revenue Concierge
-                  </p>
-                </div>
-                <div className="mt-5 flex-1">
-                  <ProgressConstellation collected={collected} />
-                </div>
-                <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
-                  Your conversation stays intact when you switch between speaking and typing.
-                </p>
-              </aside>
+              <div className="flex justify-center py-1">
+                <MaryOrb state={orbState} level={level} size={128} />
+              </div>
+              <div className="mt-3">
+                <ProgressConstellation collected={collected} />
+              </div>
 
-              <div className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col rounded-2xl border border-border bg-card shadow-lift lg:min-h-0">
-                <div className="flex items-center gap-3 border-b border-border px-4 py-3 lg:hidden">
-                  <MaryOrb state={orbState} level={level} size={74} />
-                  <div className="min-w-0 flex-1">
+              <div className="mt-4 flex min-h-[28rem] min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-lift">
+                <div className="flex items-center justify-between border-b border-border px-5 py-3">
+                  <div>
                     <p className="font-semibold text-ink">MARY</p>
-                    <p className="truncate text-xs text-muted-foreground">AI Revenue Concierge</p>
+                    <p className="text-xs text-muted-foreground">AI Revenue Concierge</p>
                   </div>
-                  <span className="text-xs text-muted-foreground">
-                    {Object.keys(collected).length}/6
+                  <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+                    <span className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`} />
+                    {handsFree ? "Hands-free" : "Ready"}
                   </span>
                 </div>
 
@@ -565,11 +527,11 @@ export function MaryExperience() {
                     </AnimatePresence>
 
                     {lastMary && (
-                      <div className="rounded-2xl rounded-bl-sm border border-primary/25 bg-primary/8 p-4 sm:p-5">
+                      <div className="mx-auto max-w-2xl text-center">
                         <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
                           MARY
                         </p>
-                        <p className="text-pretty text-lg leading-relaxed text-ink sm:text-xl">
+                        <p className="text-pretty text-xl leading-relaxed text-ink sm:text-2xl">
                           {lastMary.text.split(/\s+/).map((word, index) => (
                             <motion.span
                               key={`${lastMary.id}-${index}`}
@@ -602,12 +564,12 @@ export function MaryExperience() {
                         ? false
                         : recording || orbState === "speaking"
                           ? { scale: pulseScale, borderColor: "var(--primary)" }
-                          : { scale: [1, 1.004, 1] }
+                          : { scale: 1 }
                     }
                     transition={
                       recording || orbState === "speaking"
                         ? { type: "spring", stiffness: 240, damping: 24 }
-                        : { duration: 3.2, repeat: Infinity, ease: "easeInOut" }
+                        : { duration: 0.25 }
                     }
                     className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
                   >
@@ -675,17 +637,17 @@ export function MaryExperience() {
               initial={reduced ? false : { opacity: 0, y: 18 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-              className="grid flex-1 items-center gap-8 py-10 lg:grid-cols-[0.8fr_1.2fr]"
+              className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-10 text-center"
             >
-              <div className="text-center lg:text-left">
-                <div className="flex justify-center lg:justify-start">
+              <div>
+                <div className="flex justify-center">
                   <MaryOrb state="success" level={0.3} size={190} />
                 </div>
                 <p className="eyebrow mt-7">Early access confirmed</p>
                 <h1 className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink">
                   You’re on the waitlist.
                 </h1>
-                <p className="mt-4 max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground">
+                <p className="mx-auto mt-4 max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground">
                   Thanks for signing up — we’ll be in touch as soon as OmniSuite launches, a product
                   by Omnikom.
                 </p>
@@ -696,7 +658,7 @@ export function MaryExperience() {
                 )}
               </div>
 
-              <div className="rounded-2xl border border-border bg-card p-6 shadow-lift sm:p-8">
+              <div className="mt-8 w-full rounded-2xl border border-border bg-card p-6 text-left shadow-lift sm:p-8">
                 <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
