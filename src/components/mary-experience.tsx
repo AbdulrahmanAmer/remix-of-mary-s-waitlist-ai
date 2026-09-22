@@ -712,13 +712,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const lastMary = last?.role === "mary" ? last : undefined;
   const history = (lastMary ? lines.slice(0, -1) : lines).slice(-6);
 
+  // Once she is actually talking, that is the truth of the moment — whatever
+  // the microphone was doing a second ago.
   const statusKey =
-    listeningPhase === "hearing" || listeningPhase === "finishing"
-      ? listeningPhase
-      : micMuted
-        ? "muted"
-        : presence === "speaking"
-          ? "speaking"
+    presence === "speaking" && !micMuted
+      ? "speaking"
+      : listeningPhase === "hearing" || listeningPhase === "finishing"
+        ? listeningPhase
+        : micMuted
+          ? "muted"
           : "live";
   const statusText =
     statusKey === "hearing"
