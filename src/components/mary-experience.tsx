@@ -572,7 +572,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
                   transition={{ ...SOFT, delay: 0.4 }}
-                  className="mt-10 flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm"
+                  className={`flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm ${compact ? "mt-5" : "mt-10"}`}
                 >
                   <span>
                     <strong className="text-ink">Convert</strong> fresh demand
