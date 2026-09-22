@@ -822,6 +822,37 @@ export async function micPermissionState(): Promise<"granted" | "denied" | "prom
   }
 }
 
+/**
+ * Asks for the microphone on the tick of the tap. iPhone Safari only treats a
+ * request made inside the gesture as one the person asked for; a request a
+ * couple of seconds later can be refused with no prompt shown at all. The
+ * stream is kept and handed to the session that opens moments later.
+ */
+export async function primeMicPermission(): Promise<void> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    throw new MicUnavailableError(
+      typeof window !== "undefined" && window.isSecureContext === false
+        ? "insecure"
+        : "unsupported",
+    );
+  }
+  if (primedStream?.getAudioTracks().some((track) => track.readyState === "live")) return;
+  try {
+    primedStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        ...({ echoCancellationMode: "all" } as Record<string, unknown>),
+      } as MediaTrackConstraints,
+    });
+  } catch (error) {
+    primedStream = null;
+    throw new MicUnavailableError(micFailureFrom(error));
+  }
+}
+
 export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {
   // A page served over plain http (or an in-app browser that strips the API)
   // has no microphone at all — say so plainly instead of blaming permissions.
