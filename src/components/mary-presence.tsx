@@ -167,48 +167,6 @@ export const MaryPresence = memo(function MaryPresence({
       return { x: Math.cos(a) * d * 0.72, y: Math.sin(a) * d * 0.6 + 0.14, p: i * 1.7 };
     });
 
-    /**
-     * Imperceptible grain that breaks up residual gradient banding. It is
-     * radially faded to nothing so it can never leave a visible square patch
-     * of tinted paper around the sphere.
-     */
-    let grain: HTMLCanvasElement | null = null;
-    let grainSize = 0;
-    const grainFor = (d: number) => {
-      const size = Math.max(16, Math.round(d * 2));
-      if (grain && Math.abs(size - grainSize) < 8) return grain;
-      const off = document.createElement("canvas");
-      off.width = size;
-      off.height = size;
-      const octx = off.getContext("2d");
-      if (!octx) return null;
-      const img = octx.createImageData(size, size);
-      for (let i = 0; i < img.data.length; i += 4) {
-        const v = Math.random() < 0.5 ? 0 : 255;
-        img.data[i] = v;
-        img.data[i + 1] = v;
-        img.data[i + 2] = v;
-        img.data[i + 3] = 255;
-      }
-      octx.putImageData(img, 0, 0);
-      octx.globalCompositeOperation = "destination-in";
-      const mask = octx.createRadialGradient(
-        size / 2,
-        size / 2,
-        size * 0.06,
-        size / 2,
-        size / 2,
-        size / 2,
-      );
-      mask.addColorStop(0, "rgba(0,0,0,1)");
-      mask.addColorStop(0.6, "rgba(0,0,0,0.55)");
-      mask.addColorStop(1, "rgba(0,0,0,0)");
-      octx.fillStyle = mask;
-      octx.fillRect(0, 0, size, size);
-      grain = off;
-      grainSize = size;
-      return grain;
-    };
 
     /** Sweeping brightness around the tube — bright at the front, faint behind. */
     const sweepGradient = (cx: number, cy: number, R: number, angle: number, color: string) => {
