@@ -7,6 +7,7 @@ import { BrandLockup } from "./brand-lockup";
 import { MaryPresence, type PresenceState } from "./mary-presence";
 import { ProgressConstellation } from "./progress-constellation";
 import { Button } from "@/components/ui/button";
+import lockupAsset from "@/assets/omnisuite-lockup.png.asset.json";
 import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
@@ -20,6 +21,9 @@ import {
 
 type Line = { id: string; role: "user" | "mary"; text: string };
 type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
+type Point = { x: number; y: number; w: number };
+/** Screen-space path the OmniSuite mark travels during the intro. */
+type Flight = { from: Point; mid: Point };
 
 const MotionButton = motion.create(Button);
 
@@ -96,12 +100,16 @@ function uid() {
   return Math.random().toString(36).slice(2);
 }
 
-export function MaryExperience() {
+export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const reduced = useReducedMotion();
   const shellRef = useRef<HTMLElement | null>(null);
   const viewportHeight = useStageHeight(shellRef);
   const trailRef = useRef<HTMLDivElement | null>(null);
-  const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
+  const headerRef = useRef<HTMLElement | null>(null);
+  const lockupRef = useRef<HTMLDivElement | null>(null);
+  const introRef = useRef(false);
+  const [flight, setFlight] = useState<Flight | null>(null);
+  const [stage, setStage] = useState<"landing" | "intro" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
   const [collected, setCollected] = useState<Collected>({});
   const [presence, setPresenceState] = useState<PresenceState>("idle");
@@ -354,12 +362,48 @@ export function MaryExperience() {
 
   finishListeningRef.current = finishListening;
 
-  const begin = useCallback(async () => {
+  const enterLive = useCallback(async () => {
     setStage("live");
-    await unlockAudio();
     lastActivityRef.current = Date.now();
     await runTurn([]);
   }, [runTurn]);
+
+  // Talk to MARY: the attribution wipes back behind the divider, the page
+  // scrolls away under a blur, and the mark flies to centre, blooms, then
+  // pops up to its resting place in the corner.
+  const begin = useCallback(async () => {
+    if (introRef.current) return;
+    introRef.current = true;
+    await unlockAudio();
+
+    if (reduced) {
+      await enterLive();
+      return;
+    }
+
+    setStage("intro");
+
+    window.setTimeout(() => {
+      const mark = lockupRef.current?.querySelector("img");
+      if (!mark) return;
+      const r = mark.getBoundingClientRect();
+      // Cap the growth at the mark's native width so it stays razor sharp.
+      const grown = Math.min(r.width * 2.7, Math.min(320, window.innerWidth * 0.62));
+      const grownH = (grown / r.width) * r.height;
+      setFlight({
+        from: { x: r.left, y: r.top, w: r.width },
+        mid: {
+          x: window.innerWidth / 2 - grown / 2,
+          y: window.innerHeight / 2 - grownH / 2,
+          w: grown,
+        },
+      });
+    }, 420);
+
+    window.setTimeout(() => {
+      void enterLive();
+    }, 1380);
+  }, [enterLive, reduced]);
 
   const startInterim = useCallback(() => {
     const Ctor =
@@ -537,11 +581,24 @@ export function MaryExperience() {
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
         <motion.header
+          ref={headerRef}
           layout
           transition={SPRING}
-          className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}
+          className={`flex min-h-12 items-center gap-4 ${stage === "landing" || stage === "intro" ? "justify-center" : "justify-between"}`}
         >
-          <BrandLockup compact={stage !== "landing"} centered={stage === "landing"} />
+          <div ref={lockupRef} className="min-w-0">
+            <BrandLockup
+              // Remounting on the stage switch replays the reveal, so the mark
+              // slides back in from the side once it has popped at centre.
+              key={stage === "live" || stage === "done" ? "corner" : "stage"}
+              compact={stage === "live" || stage === "done"}
+              centered={stage === "landing" || stage === "intro"}
+              wiping={stage === "intro"}
+              hidden={stage === "intro" && flight !== null}
+              revealDelay={stage === "landing" ? introDelay : 0}
+              slideIn={stage === "live"}
+            />
+          </div>
           <AnimatePresence>
             {stage === "live" && (
               <motion.button
@@ -570,7 +627,7 @@ export function MaryExperience() {
               key="landing"
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -14, filter: "blur(4px)" }}
+              exit={{ opacity: 0, y: -90, filter: "blur(12px)" }}
               transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-4 text-center"
             >
@@ -578,7 +635,7 @@ export function MaryExperience() {
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.05 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.05 }}
                   className="eyebrow"
                 >
                   Early access · MARY is ready
@@ -586,7 +643,7 @@ export function MaryExperience() {
                 <motion.h1
                   initial={reduced ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.12 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.12 }}
                   className={`text-balance font-semibold leading-[0.98] text-ink ${compact ? "mt-3 text-4xl sm:text-5xl" : "mt-5 text-5xl sm:text-6xl lg:text-7xl"}`}
                 >
                   Meet <span className="text-muted-foreground">MARY.</span>
@@ -594,7 +651,7 @@ export function MaryExperience() {
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.2 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.2 }}
                   className={`max-w-xl text-pretty leading-relaxed text-muted-foreground ${compact ? "mt-3 text-base" : "mt-5 text-lg sm:text-xl"}`}
                 >
                   Your AI Revenue Concierge. She works the revenue you already have and personally
@@ -603,7 +660,7 @@ export function MaryExperience() {
                 <motion.div
                   initial={reduced ? false : { opacity: 0, scale: 0.94 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  transition={{ ...SPRING, delay: 0.24 }}
+                  transition={{ ...SPRING, delay: introDelay + 0.24 }}
                   className={compact ? "mt-1" : "mt-3"}
                 >
                   <MaryPresence state="idle" level={0} height={landingOrb} />
@@ -613,7 +670,7 @@ export function MaryExperience() {
                   size="lg"
                   initial={reduced ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.32 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.32 }}
                   whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
                   className={`surface-raised group h-13 rounded-full px-8 ${compact ? "mt-4" : "mt-7"}`}
@@ -626,7 +683,7 @@ export function MaryExperience() {
                 <motion.div
                   initial={reduced ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ ...SOFT, delay: 0.4 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.4 }}
                   className={`flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm ${compact ? "mt-5" : "mt-10"}`}
                 >
                   <span>
@@ -931,6 +988,35 @@ export function MaryExperience() {
         </AnimatePresence>
 
         {stage === "live" && <ProgressConstellation collected={collected} />}
+
+        {/* The mark itself, flying: centre stage, a bloom, then a pop into the corner. */}
+        <AnimatePresence>
+          {stage === "intro" && flight && (
+            <motion.img
+              key="flight"
+              src={lockupAsset.url}
+              alt=""
+              aria-hidden="true"
+              className="pointer-events-none fixed left-0 top-0 z-40 h-auto"
+              initial={{
+                x: flight.from.x,
+                y: flight.from.y,
+                width: flight.from.w,
+                opacity: 1,
+                filter: "blur(0px)",
+              }}
+              animate={{
+                x: [flight.from.x, flight.mid.x, flight.mid.x, flight.mid.x],
+                y: [flight.from.y, flight.mid.y, flight.mid.y, flight.mid.y - 10],
+                width: [flight.from.w, flight.mid.w, flight.mid.w, flight.mid.w * 1.12],
+                opacity: [1, 1, 1, 0],
+                filter: ["blur(0px)", "blur(0px)", "blur(0px)", "blur(5px)"],
+              }}
+              exit={{ opacity: 0, transition: { duration: 0.12 } }}
+              transition={{ duration: 1.02, times: [0, 0.5, 0.78, 1], ease: EASE }}
+            />
+          )}
+        </AnimatePresence>
 
         <footer className="flex flex-wrap items-center justify-between gap-2 py-4 text-[0.68rem] text-muted-foreground">
           <span>OmniSuite · AI-native revenue infrastructure</span>

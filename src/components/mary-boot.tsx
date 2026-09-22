@@ -1,9 +1,13 @@
 // Full-screen boot sequence shown while MARY's experience loads.
 // Pure CSS animation so it renders identically before and after hydration.
 
-export function MaryBoot() {
+export function MaryBoot({ exiting = false }: { exiting?: boolean }) {
   return (
-    <div className="mary-boot relative grid h-dvh place-items-center overflow-hidden">
+    <div
+      className={`mary-boot relative grid h-dvh place-items-center overflow-hidden ${
+        exiting ? "mary-boot--out" : ""
+      }`}
+    >
       {/* soft lime glow that blooms in from the centre */}
       <div className="mary-boot-glow" aria-hidden="true" />
 
