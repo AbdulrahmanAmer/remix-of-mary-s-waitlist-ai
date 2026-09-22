@@ -73,15 +73,24 @@ const SHELLS: Shell[] = [
   { r: 0.915, w: 0.032, speed: -0.95, phase: 5.6, squash: 0.95, accent: false, alpha: 0.7 },
 ];
 
-/** Soft-tube stroke passes: wide + faint through narrow + bright. */
+/** Soft-tube stroke passes: one wide bloom, one body, one bright core. */
 const PASSES = [
-  { k: 3.4, a: 0.035 },
-  { k: 2.4, a: 0.055 },
-  { k: 1.7, a: 0.09 },
-  { k: 1.15, a: 0.16 },
-  { k: 0.7, a: 0.3 },
-  { k: 0.34, a: 0.55 },
+  { k: 2.8, a: 0.075 },
+  { k: 1.3, a: 0.22 },
+  { k: 0.4, a: 0.62 },
 ];
+
+/** Smooth, eased alpha falloff — many stops so wide glows never step. */
+function falloffStops(peak: number) {
+  const stops: [number, number][] = [];
+  for (let i = 0; i <= 8; i++) {
+    const p = i / 8;
+    const e = (1 - p) * (1 - p) * (1 - p * 0.35);
+    stops.push([p, peak * e]);
+  }
+  stops[stops.length - 1]![1] = 0;
+  return stops;
+}
 
 /**
  * MARY's living presence: a hollow sphere ringed by soft tubes of liquid light
