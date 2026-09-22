@@ -306,7 +306,7 @@ export function MaryExperience() {
         onLevel: setLevel,
         onSpeechStart: () => {
           setListeningPhase("hearing");
-          setPresenceState("listening");
+          setPresenceState("hearing");
         },
         onSilence: () => void finishListeningRef.current(),
         onMaxDuration: () => void finishListeningRef.current(),
