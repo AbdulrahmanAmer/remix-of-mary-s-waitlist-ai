@@ -966,57 +966,94 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
-  analyser.fftSize = 512;
-  analyser.smoothingTimeConstant = 0.6;
+  // 1024 gives ~47Hz bins at 48k: fine enough to separate the speech band from
+  // rumble and hiss, short enough to stay inside one animation frame.
+  analyser.fftSize = 1024;
+  analyser.smoothingTimeConstant = 0.35;
   source.connect(analyser);
 
   // ---- PCM capture with a short pre-roll so the first syllable is never lost ----
-  const processor = ctx.createScriptProcessor(4096, 1, 1);
   /** Recent frames, each marked with whether she was audible at the time. */
   const preRoll: { audio: Float32Array; hers: boolean }[] = [];
   let chunks: Float32Array[] = [];
   let capturing = false;
   let capturePeak = 0;
   let blockPeak = 0;
-  processor.onaudioprocess = (event) => {
-    const input = event.inputBuffer.getChannelData(0);
+  const onFrame = (input: Float32Array) => {
     let peak = 0;
     for (let i = 0; i < input.length; i++) {
       const v = Math.abs(input[i]!);
       if (v > peak) peak = v;
     }
     blockPeak = Math.max(blockPeak, peak);
-    const copy = new Float32Array(input);
     if (capturing) {
-      chunks.push(copy);
+      chunks.push(input);
       if (peak > capturePeak) capturePeak = peak;
     } else {
-      preRoll.push({ audio: copy, hers: monitor.active && !monitor.paused });
+      preRoll.push({ audio: input, hers: monitor.active && !monitor.paused });
       // Enough to catch the first syllable, short enough that a cut-in
       // recording carries as little of her own voice as possible.
-      if (preRoll.length > 3) preRoll.shift();
+      if (preRoll.length > 6) preRoll.shift();
     }
   };
-  source.connect(processor);
-  processor.connect(ctx.destination);
+
+  // Capture belongs off the main thread: an animation frame busy with the
+  // sphere used to drop whole blocks, and a dropped block is a missed
+  // syllable. Browsers without worklets keep the old script processor.
+  let worklet: AudioWorkletNode | null = null;
+  let processor: ScriptProcessorNode | null = null;
+  const captureSink = ctx.createGain();
+  captureSink.gain.value = 0;
+  captureSink.connect(ctx.destination);
+  try {
+    if (ctx.audioWorklet) {
+      const url = URL.createObjectURL(
+        new Blob([CAPTURE_WORKLET], { type: "application/javascript" }),
+      );
+      await ctx.audioWorklet.addModule(url);
+      URL.revokeObjectURL(url);
+      worklet = new AudioWorkletNode(ctx, "mary-capture", {
+        numberOfInputs: 1,
+        numberOfOutputs: 1,
+        outputChannelCount: [1],
+      });
+      worklet.port.onmessage = (event: MessageEvent<Float32Array>) => {
+        onFrame(event.data);
+      };
+      source.connect(worklet);
+      worklet.connect(captureSink);
+    }
+  } catch {
+    worklet = null;
+  }
+  if (!worklet) {
+    processor = ctx.createScriptProcessor(4096, 1, 1);
+    processor.onaudioprocess = (event) => {
+      onFrame(new Float32Array(event.inputBuffer.getChannelData(0)));
+    };
+    source.connect(processor);
+    processor.connect(captureSink);
+  }
 
   // ---- state ----
   const data = new Uint8Array(analyser.frequencyBinCount);
-  const baseSilenceMs = options.silenceMs ?? 800;
-  const maxUtteranceMs = options.maxUtteranceMs ?? 45000;
+  const spectrum = new Uint8Array(analyser.frequencyBinCount);
+  const detector = new VoiceDetector();
+  const baseSilenceMs = options.silenceMs ?? TIMINGS.endpointSilenceMs;
+  const maxUtteranceMs = options.maxUtteranceMs ?? TIMINGS.maxUtteranceMs;
   const tracker = new EchoTracker();
   const openedAt = performance.now();
-  const calibrationMs = 500;
+  const calibrationMs = TIMINGS.calibrationMs;
   let noiseFloor = 0.008;
   let muted = false;
   let alive = true;
   let speechCandidateAt = 0;
-  /** Running onset score: up on loud frames, down on quiet ones. */
+  /** Running onset score: up on voice-like frames, down on the rest. */
   let loudScore = 0;
   let lastEchoThreshold = 0.02;
   let lastSpeechAt = 0;
-  // The last clearly-louder-than-the-room moment. Steady noise keeps
-  // `lastSpeechAt` alive forever; this one only moves for real speech.
+  // The last moment that actually sounded like a person. Steady noise keeps
+  // `lastSpeechAt` alive forever; this one only moves for a voice.
   let lastRealSpeechAt = 0;
   // When she went quiet for a cut-in, so a hold can never last for ever.
   let holdingSince = 0;
@@ -1029,7 +1066,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let raf = 0;
 
   /** She is paused and we are checking whether the sound was really you. */
-  let pending: { at: number; frames: number; loud: number; words: boolean } | null = null;
+  let pending: {
+    at: number;
+    frames: number;
+    loud: number;
+    words: boolean;
+    voice: number;
+  } | null = null;
   /** Confirmed: she is held quiet until this utterance resolves. */
   let holding = false;
 
