@@ -414,7 +414,9 @@ export function MaryExperience() {
     <main className="relative min-h-dvh overflow-hidden">
       <AuroraBackground />
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
-        <header className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}>
+        <header
+          className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}
+        >
           <BrandLockup compact={stage !== "landing"} centered={stage === "landing"} />
           {stage === "live" && (
             <Button
@@ -465,11 +467,19 @@ export function MaryExperience() {
                 >
                   Talk to MARY <ArrowRight />
                 </MotionButton>
-                <span className="mt-3 text-sm text-muted-foreground">Voice or text · switch anytime</span>
+                <span className="mt-3 text-sm text-muted-foreground">
+                  Voice or text · switch anytime
+                </span>
                 <div className="mt-9 grid w-full grid-cols-3 divide-x divide-border border-y border-border py-4 text-xs text-muted-foreground sm:text-sm">
-                  <span className="px-2"><strong className="block text-ink sm:inline">Convert</strong> fresh demand</span>
-                  <span className="px-2"><strong className="block text-ink sm:inline">Cultivate</strong> your database</span>
-                  <span className="px-2"><strong className="block text-ink sm:inline">Recover</strong> opportunities</span>
+                  <span className="px-2">
+                    <strong className="block text-ink sm:inline">Convert</strong> fresh demand
+                  </span>
+                  <span className="px-2">
+                    <strong className="block text-ink sm:inline">Cultivate</strong> your database
+                  </span>
+                  <span className="px-2">
+                    <strong className="block text-ink sm:inline">Recover</strong> opportunities
+                  </span>
                 </div>
               </div>
             </motion.section>
@@ -498,7 +508,9 @@ export function MaryExperience() {
                     <p className="text-xs text-muted-foreground">AI Revenue Concierge</p>
                   </div>
                   <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                    <span className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`} />
+                    <span
+                      className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
+                    />
                     {handsFree ? "Hands-free" : "Ready"}
                   </span>
                 </div>

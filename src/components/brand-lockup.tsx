@@ -1,7 +1,13 @@
 import { motion, useReducedMotion } from "motion/react";
 import lockup from "@/assets/omnisuite-lockup.png.asset.json";
 
-export function BrandLockup({ compact = false, centered = false }: { compact?: boolean; centered?: boolean }) {
+export function BrandLockup({
+  compact = false,
+  centered = false,
+}: {
+  compact?: boolean;
+  centered?: boolean;
+}) {
   const reduced = useReducedMotion();
 
   return (
@@ -21,7 +27,9 @@ export function BrandLockup({ compact = false, centered = false }: { compact?: b
         />
       </motion.div>
       <div className="hidden h-7 w-px bg-border sm:block" />
-      <p className={`${centered ? "block" : "hidden sm:block"} whitespace-nowrap text-xs text-muted-foreground`}>
+      <p
+        className={`${centered ? "block" : "hidden sm:block"} whitespace-nowrap text-xs text-muted-foreground`}
+      >
         A product by <span className="wordmark text-ink">omnikom</span>
       </p>
     </div>
