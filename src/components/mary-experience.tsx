@@ -36,6 +36,7 @@ import {
   audioDiagnostics,
   isInAppBrowser,
   micPermissionState,
+  noteAddresseeVerdict,
   primeMicPermission,
   replayLastLine,
   MicUnavailableError,
@@ -48,6 +49,7 @@ import {
   type SpeakHandle,
   type Utterance,
 } from "@/lib/audio-engine";
+import { judgeAddressee } from "@/lib/addressee";
 
 /** Plain words for every way a microphone can fail to open. */
 function micMessage(error: unknown): string {
@@ -854,6 +856,32 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         );
         return;
       }
+      // Words alone do not make it hers. Before she reacts, a fast background
+      // judgement decides whether that was the person talking to her or the
+      // room talking among themselves.
+      const lastMary = recentMary[recentMary.length - 1] ?? "";
+      const verdict = await judgeAddressee({
+        heard: spoken,
+        lastAssistant: lastMary,
+        recent: linesRef.current.slice(-6).map((line) => `${line.role}: ${line.text}`),
+      });
+      noteAddresseeVerdict(verdict);
+      sessionRef.current?.noteVerdict(verdict === "mary" ? "mary" : "ambient", utterance.peak);
+      if (verdict !== "mary") {
+        // Not for her: she never heard it. If she had gone quiet for it, she
+        // carries straight on; nothing is learned from it either.
+        const wasHeld = holdRef.current || speakRef.current?.isPaused();
+        releaseHold();
+        setListeningPhase(micMutedRef.current ? "paused" : "listening");
+        setPresenceState((current) =>
+          current === "hearing" || current === "thinking"
+            ? wasHeld && speakRef.current
+              ? "speaking"
+              : "idle"
+            : current,
+        );
+        return;
+      }
       void sendUser(spoken, "voice");
     },
     [releaseHold, sendUser],
@@ -985,6 +1013,13 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             maybeShowEchoHint();
           },
           onUtterance: (utterance) => handleUtteranceRef.current(utterance),
+          // Voices across the room. She never heard them, and never waits on them.
+          onAmbient: () => {
+            noteAddresseeVerdict("ambient");
+            releaseHold();
+            setInterim("");
+            setListeningPhase(micMutedRef.current ? "paused" : "listening");
+          },
           // Headset unplugged, or another app grabbed the mic mid-call.
           onLost: (reason) => {
             if (cancelled) return;

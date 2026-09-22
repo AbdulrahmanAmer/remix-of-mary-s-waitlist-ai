@@ -16,6 +16,7 @@
  * Every export must be called from an effect or event handler, never at import.
  */
 import {
+  NearFieldModel,
   VOICE_INTERRUPT,
   VOICE_KEEP,
   VOICE_ONSET,
@@ -56,6 +57,10 @@ const TIMINGS = {
   holdMaxMs: 4000,
   /** Longest single turn. */
   maxUtteranceMs: 45000,
+  /** How far above the room's own voices the person on the mic must sit. */
+  nearFieldMarginDb: 9,
+  /** A run of near-field voice must hold together this long to open a turn. */
+  onsetHoldMs: 220,
 } as const;
 
 /** Worklet-side capture: peaks and raw frames, off the main thread. */
@@ -99,6 +104,16 @@ let primedStream: MediaStream | null = null;
 let voiceReading: VoiceReading | null = null;
 /** What the microphone actually agreed to do (echo cancellation and friends). */
 let micProcessing = "";
+/** The person on the mic against the voices around them, for the sound check. */
+let nearFieldSnapshot: { own: number; ambient: number; marginDb: number } | null = null;
+/** The last few verdicts on who a stretch of speech was for. */
+const addresseeLog: string[] = [];
+
+/** Recorded by the experience so the sound check can show what she decided. */
+export function noteAddresseeVerdict(verdict: string) {
+  addresseeLog.push(verdict);
+  if (addresseeLog.length > 10) addresseeLog.shift();
+}
 
 /** Thrown when the device/browser simply cannot do live audio at all. */
 export class AudioUnsupportedError extends Error {}
@@ -395,6 +410,10 @@ export function audioDiagnostics() {
     voiceSnrDb: voiceReading ? Math.round(voiceReading.snrDb) : 0,
     roomFloorDb: voiceReading ? Math.round(voiceReading.floorDb) : 0,
     voiceFlatness: voiceReading ? Math.round(voiceReading.flatness * 100) / 100 : 0,
+    nearFieldMarginDb: nearFieldSnapshot ? Math.round(nearFieldSnapshot.marginDb) : 0,
+    ownVoiceLevel: nearFieldSnapshot ? Math.round(nearFieldSnapshot.own * 100) : -1,
+    roomVoiceLevel: nearFieldSnapshot ? Math.round(nearFieldSnapshot.ambient * 100) : -1,
+    addresseeVerdicts: addresseeLog.slice(-10),
     speechRecognition: typeof window !== "undefined" && !!recognitionCtor(),
     secureContext: typeof window !== "undefined" ? window.isSecureContext : false,
     inAppBrowser: isInAppBrowser(),
@@ -859,6 +878,12 @@ export type Utterance = {
 export type MicSession = {
   /** Silences capture without releasing the device (no permission re-prompt). */
   setMuted: (muted: boolean) => void;
+  /**
+   * What the conversation decided about the last utterance: whether it really
+   * was the person on the microphone talking to her, or the room. This is what
+   * teaches the near-field model who it is listening to.
+   */
+  noteVerdict: (verdict: "mary" | "ambient", peak: number) => void;
   close: () => void;
 };
 
@@ -870,6 +895,8 @@ export type MicSessionOptions = {
   onInterim?: (text: string) => void;
   /** A complete utterance. */
   onUtterance: (utterance: Utterance) => void;
+  /** Voice-shaped sound that was somebody else in the room, not the person here. */
+  onAmbient?: (info: { marginDb: number; peak: number }) => void;
   /** Sound over her speech that might be you — she should pause right now. */
   onInterruptCandidate?: () => void;
   /** It really is you — she should stay quiet until your words have been handled. */
@@ -1147,6 +1174,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   const data = new Uint8Array(analyser.frequencyBinCount);
   const spectrum = new Uint8Array(analyser.frequencyBinCount);
   const detector = new VoiceDetector();
+  const nearField = new NearFieldModel();
   const baseSilenceMs = options.silenceMs ?? TIMINGS.endpointSilenceMs;
   const maxUtteranceMs = options.maxUtteranceMs ?? TIMINGS.maxUtteranceMs;
   const tracker = new EchoTracker();
@@ -1169,6 +1197,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let utteranceOverAssistant = false;
   /** Loudest frame of this utterance recorded while she was NOT audible. */
   let cleanPeak = 0;
+  /** Frames of this utterance that were the person on the microphone. */
+  let nearFrames = 0;
   let lastFinalAt = 0;
   let lastCouplingReport = 0;
   let raf = 0;
@@ -1357,6 +1387,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     chunks = preRoll.filter((f) => !f.hers).map((f) => f.audio);
     capturePeak = 0;
     cleanPeak = 0;
+    nearFrames = 0;
     lastSpeechAt = now;
     lastRealSpeechAt = now;
   };
@@ -1413,10 +1444,16 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const ownVoice = cleanPeak < 0.02;
     const audio = chunks.length && !ownVoice ? encodeWav(chunks, ctx.sampleRate) : null;
     const peak = capturePeak;
+    // Not one solid moment of the person on the microphone: this was the room
+    // talking among themselves. She never hears it and never reacts to it.
+    // A quiet talker whose words only ever arrived as text (no turn was opened
+    // by level at all) is never judged this way — there is nothing to judge.
+    const ambient = capturing && nearFrames < 3;
     chunks = [];
     capturing = false;
     capturePeak = 0;
     cleanPeak = 0;
+    nearFrames = 0;
     speechCandidateAt = 0;
     loudScore = 0;
     utteranceStartedAt = 0;
@@ -1439,6 +1476,15 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       options.onInterruptCancelled?.(wasHolding);
       return;
     }
+    if (ambient) {
+      utteranceOverAssistant = false;
+      nearField.learnAmbient(peak);
+      trace({ type: "ambient", peak, margin: Number(nearField.marginDb(peak).toFixed(1)) });
+      options.onAmbient?.({ marginDb: nearField.marginDb(peak), peak });
+      options.onInterruptCancelled?.(wasHolding);
+      return;
+    }
+    if (peak > 0) nearField.learnOwn(peak);
     options.onUtterance({
       text,
       audio,
@@ -1519,6 +1565,19 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const voiced = voice.score >= VOICE_ONSET;
     const stillVoiced = voice.score >= VOICE_KEEP;
 
+    // ---- is this the person on the microphone, or somebody near them? ----
+    // Everybody in a hall has a human voice; only the person holding the device
+    // is centimetres from the microphone. Voice-shaped sound that sits close to
+    // the room's own voices is other people, and it teaches the room profile
+    // rather than opening a turn.
+    const nearHere = nearField.isNearField(peak, TIMINGS.nearFieldMarginDb);
+    if (stillVoiced && !nearHere && !speaking && !withinTail()) nearField.learnAmbient(peak);
+    nearFieldSnapshot = {
+      own: nearField.ownLevel,
+      ambient: nearField.ambientLevel,
+      marginDb: nearField.marginDb(peak),
+    };
+
     // A hold can never outlive the sentence it was waiting for. If she has been
     // quiet for a cut-in this long with nothing closing it, close it here.
     if (holding && now - holdingSince > TIMINGS.holdMaxMs) {
@@ -1577,7 +1636,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       // Cutting in over her has to look like a person: past the echo model and
       // clearly voice-shaped. A door, a clatter or her own voice never is.
       if (
-        scoreLoud(peak >= echoThreshold && voice.score >= VOICE_INTERRUPT) >=
+        scoreLoud(peak >= echoThreshold && voice.score >= VOICE_INTERRUPT && nearHere) >=
         TIMINGS.interruptFrames
       ) {
         speechCandidateAt = 0;
@@ -1599,13 +1658,24 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     const threshold = withinTail() ? echoThreshold : baseThreshold;
 
-    if (peak >= threshold && stillVoiced) {
+    if (peak >= threshold && stillVoiced && nearHere) {
       lastSpeechAt = now;
-      // A frame that really sounds like a person. Steady noise never gets here,
-      // so it can neither open a turn nor hold one open.
-      if (voiced) lastRealSpeechAt = now;
+      // A frame that really sounds like the person on the microphone. Steady
+      // noise and voices across the room never get here, so neither can open a
+      // turn nor hold one open.
+      if (voiced) {
+        lastRealSpeechAt = now;
+        nearFrames += 1;
+      }
       cleanPeak = Math.max(cleanPeak, peak);
-      if (scoreLoud(voiced) >= TIMINGS.onsetFrames && !capturing) {
+      // A run of near-field voice that has also held together for a moment:
+      // scattered fragments from around the room never manage both.
+      if (
+        scoreLoud(voiced) >= TIMINGS.onsetFrames &&
+        speechCandidateAt &&
+        now - speechCandidateAt >= TIMINGS.onsetHoldMs &&
+        !capturing
+      ) {
         startCapture(now, false);
         cleanPeak = peak;
         options.onSpeechStart?.();
@@ -1710,6 +1780,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
         recognitionReopenAt = 0;
         startRecognition();
       }
+    },
+    noteVerdict: (verdict, peak) => {
+      if (verdict === "mary") nearField.learnOwn(peak);
+      else nearField.learnAmbient(peak);
     },
     close: () => {
       if (!alive) return;
