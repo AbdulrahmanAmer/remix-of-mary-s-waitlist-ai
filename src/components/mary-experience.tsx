@@ -406,11 +406,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           w: restW,
         },
       });
-    }, 420);
+    }, 520);
 
     window.setTimeout(() => {
       void enterLive();
-    }, 1320);
+    }, 2800);
   }, [enterLive, reduced]);
 
   const startInterim = useCallback(() => {
@@ -635,7 +635,13 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               key="landing"
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -16, scale: 0.92, filter: "blur(14px)" }}
+              exit={{
+                opacity: 0,
+                y: -16,
+                scale: 0.92,
+                filter: "blur(14px)",
+                transition: { duration: 0.95, ease: EASE },
+              }}
               transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-4 text-center"
             >
@@ -1021,7 +1027,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 filter: ["blur(0px)", "blur(0px)", "blur(0px)", "blur(0px)"],
               }}
               exit={{ opacity: 0, transition: { duration: 0.14 } }}
-              transition={{ duration: 1.12, times: [0, 0.46, 0.66, 1], ease: EASE }}
+              transition={{ duration: 2.3, times: [0, 0.34, 0.6, 1], ease: EASE }}
             />
           )}
         </AnimatePresence>
