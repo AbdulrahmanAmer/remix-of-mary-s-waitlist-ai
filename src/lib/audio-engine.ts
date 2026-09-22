@@ -1618,7 +1618,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       // Cutting in over her has to look like a person: past the echo model and
       // clearly voice-shaped. A door, a clatter or her own voice never is.
       if (
-        scoreLoud(peak >= echoThreshold && voice.score >= VOICE_INTERRUPT) >=
+        scoreLoud(peak >= echoThreshold && voice.score >= VOICE_INTERRUPT && nearHere) >=
         TIMINGS.interruptFrames
       ) {
         speechCandidateAt = 0;
