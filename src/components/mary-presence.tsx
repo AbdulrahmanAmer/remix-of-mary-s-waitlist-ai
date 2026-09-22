@@ -112,11 +112,11 @@ export const MaryPresence = memo(function MaryPresence({
 
     /** Ribbons of light swirling around the sphere: near-frontal, slowly rolling arcs. */
     const RINGS = [
-      { r: 1.0, tilt: 0.3, roll: 0.1, speed: 0.22, weight: 3.0, accent: false },
-      { r: 0.95, tilt: -0.24, roll: 0.9, speed: -0.17, weight: 2.4, accent: false },
-      { r: 0.99, tilt: 0.38, roll: 2.1, speed: 0.13, weight: 2.0, accent: false },
-      { r: 0.9, tilt: -0.34, roll: 3.4, speed: -0.27, weight: 1.7, accent: true },
-      { r: 0.85, tilt: 0.2, roll: 4.6, speed: 0.31, weight: 1.4, accent: false },
+      { r: 1.0, tilt: 0.45, roll: 0.1, speed: 0.22, weight: 3.2, accent: false },
+      { r: 0.93, tilt: -0.62, roll: 1.2, speed: -0.17, weight: 2.6, accent: false },
+      { r: 0.98, tilt: 0.78, roll: 2.4, speed: 0.13, weight: 2.2, accent: false },
+      { r: 0.86, tilt: -0.4, roll: 3.6, speed: -0.29, weight: 1.8, accent: true },
+      { r: 0.8, tilt: 0.6, roll: 5.0, speed: 0.34, weight: 1.5, accent: false },
     ];
 
     const SPARKS = Array.from({ length: 16 }, (_, i) => {
