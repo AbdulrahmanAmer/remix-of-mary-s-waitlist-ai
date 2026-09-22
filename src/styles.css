@@ -538,3 +538,14 @@
     animation: none;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .mary-boot--out,
+  .mary-boot--out .mary-boot-orb,
+  .mary-boot--out .mary-boot-glow,
+  .mary-boot--out .mary-boot-line,
+  .mary-boot--out .mary-boot-caption,
+  .mary-boot--out .mary-boot-word span {
+    animation: mary-boot-out 0.2s linear both;
+  }
+}
