@@ -25,7 +25,7 @@ export function ProgressConstellation({ collected }: { collected: Collected }) {
           {completed}/{WAITLIST_FIELDS.length}
         </span>
       </div>
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
         {WAITLIST_FIELDS.map((field, i) => {
           const value = collected[field];
           return (
@@ -49,9 +49,7 @@ export function ProgressConstellation({ collected }: { collected: Collected }) {
                   {LABELS[field]}
                 </span>
               </div>
-              <p className="mt-1.5 truncate text-xs font-medium text-ink">
-                {value || "Not captured"}
-              </p>
+              <p className="mt-1.5 truncate text-xs font-medium text-ink">{value || "Pending"}</p>
             </motion.div>
           );
         })}
