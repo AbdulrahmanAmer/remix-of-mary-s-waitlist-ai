@@ -19,6 +19,20 @@ export type Collected = Partial<Record<WaitlistField, string>>;
 /** What MARY has actually finished saying — beats she was cut off in don't count. */
 export type TurnFlags = { revealed: boolean; lanesDone: boolean };
 
+/** What the person's last message was actually doing, read before the funnel. */
+export const TURN_INTENTS = [
+  "greeting",
+  "answering",
+  "asking",
+  "correcting",
+  "objecting",
+  "callback",
+  "refusing",
+  "leaving",
+  "smalltalk",
+] as const;
+export type TurnIntent = (typeof TURN_INTENTS)[number];
+
 export type MaryTurn = {
   say: string;
   followUp: string | null;
@@ -26,6 +40,11 @@ export type MaryTurn = {
   nextField: WaitlistField | "none";
   complete: boolean;
   declined: boolean;
+  /** They asked to be called back instead of finishing here. */
+  callbackRequested: boolean;
+  intent: TurnIntent;
+  /** She asked the wrap question this turn — no punctuation guessing. */
+  wrapAsked: boolean;
   revealed: boolean;
   lanesDone: boolean;
   /** Fields the model proposed without the person's words to back them. */
