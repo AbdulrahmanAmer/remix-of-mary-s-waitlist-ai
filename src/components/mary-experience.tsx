@@ -508,130 +508,128 @@ export function MaryExperience() {
               </div>
 
               <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
-                  <div className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto">
-                    <AnimatePresence initial={false}>
-                      {history.map((line, index) => (
-                        <motion.div
-                          key={line.id}
-                          layout
-                          initial={{ opacity: 0, y: 10 }}
-                          animate={{ opacity: 0.35 + (index / Math.max(1, history.length)) * 0.5 }}
-                          exit={{ opacity: 0, y: -6 }}
-                          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
-                          className={
-                            line.role === "user" ? "flex justify-end" : "flex justify-start"
-                          }
+                <div className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto">
+                  <AnimatePresence initial={false}>
+                    {history.map((line, index) => (
+                      <motion.div
+                        key={line.id}
+                        layout
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 0.35 + (index / Math.max(1, history.length)) * 0.5 }}
+                        exit={{ opacity: 0, y: -6 }}
+                        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                        className={line.role === "user" ? "flex justify-end" : "flex justify-start"}
+                      >
+                        <div
+                          className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/90 text-background" : "bg-surface text-muted-foreground"}`}
                         >
-                          <div
-                            className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/90 text-background" : "bg-surface text-muted-foreground"}`}
+                          {line.text}
+                        </div>
+                      </motion.div>
+                    ))}
+                  </AnimatePresence>
+
+                  {lastMary && (
+                    <div className="mx-auto max-w-2xl text-center">
+                      <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
+                        MARY
+                      </p>
+                      <p className="text-pretty text-xl leading-relaxed text-ink sm:text-2xl">
+                        {lastMary.text.split(/\s+/).map((word, index) => (
+                          <motion.span
+                            key={`${lastMary.id}-${index}`}
+                            initial={false}
+                            animate={
+                              index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }
+                            }
+                            transition={{ duration: 0.22 }}
+                            className="mr-[0.28em] inline-block"
                           >
-                            {line.text}
-                          </div>
-                        </motion.div>
-                      ))}
-                    </AnimatePresence>
-
-                    {lastMary && (
-                      <div className="mx-auto max-w-2xl text-center">
-                        <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
-                          MARY
-                        </p>
-                        <p className="text-pretty text-xl leading-relaxed text-ink sm:text-2xl">
-                          {lastMary.text.split(/\s+/).map((word, index) => (
-                            <motion.span
-                              key={`${lastMary.id}-${index}`}
-                              initial={false}
-                              animate={
-                                index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }
-                              }
-                              transition={{ duration: 0.22 }}
-                              className="mr-[0.28em] inline-block"
-                            >
-                              {word}
-                            </motion.span>
-                          ))}
-                        </p>
-                      </div>
-                    )}
-                    {interim && (
-                      <p className="text-right text-sm italic text-muted-foreground">{interim}</p>
-                    )}
-                  </div>
-                </div>
-
-                <div className="pt-3">
-                  {micError && (
-                    <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>
+                            {word}
+                          </motion.span>
+                        ))}
+                      </p>
+                    </div>
                   )}
-                  <motion.div
-                    animate={
-                      reduced
-                        ? false
-                        : recording || presence === "speaking"
-                          ? { scale: pulseScale, borderColor: "var(--primary)" }
-                          : { scale: 1 }
-                    }
-                    transition={
-                      recording || presence === "speaking"
-                        ? { type: "spring", stiffness: 240, damping: 24 }
-                        : { duration: 0.25 }
-                    }
-                    className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
-                  >
-                    <MotionButton
-                      onClick={toggleMic}
-                      whileTap={reduced ? {} : { scale: 0.94 }}
-                      aria-label={
-                        handsFree ? "Pause hands-free listening" : "Start hands-free listening"
-                      }
-                      size="icon"
-                      className={`relative size-11 shrink-0 rounded-lg ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
-                    >
-                      {handsFree ? <Square className="fill-current" /> : <Mic />}
-                    </MotionButton>
-                    <textarea
-                      ref={inputRef}
-                      value={draft}
-                      onChange={(event) => onDraftChange(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.shiftKey) {
-                          event.preventDefault();
-                          void sendUser(draft);
-                        }
-                      }}
-                      rows={1}
-                      placeholder={
-                        listeningPhase === "hearing"
-                          ? "I can hear you…"
-                          : listeningPhase === "finishing"
-                            ? "Finishing your answer…"
-                            : handsFree
-                              ? "Listening — or type your answer"
-                              : "Speak or type your answer"
-                      }
-                      className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
-                    />
-                    <Button
-                      onClick={() => void sendUser(draft)}
-                      disabled={!draft.trim()}
-                      size="icon"
-                      variant="ghost"
-                      aria-label="Send"
-                      className="size-11 shrink-0 rounded-lg"
-                    >
-                      <Send />
-                    </Button>
-                  </motion.div>
-                  <p className="mt-2 text-center text-[0.68rem] text-muted-foreground">
-                    {listeningPhase === "hearing"
-                      ? "Keep speaking — MARY replies when you finish."
-                      : listeningPhase === "finishing"
-                        ? "Got it. MARY is preparing her reply."
-                        : handsFree
-                          ? "Hands-free is on. Speak naturally; no second tap needed."
-                          : "Tap the microphone once for hands-free conversation, or type anytime."}
-                  </p>
+                  {interim && (
+                    <p className="text-right text-sm italic text-muted-foreground">{interim}</p>
+                  )}
                 </div>
+              </div>
+
+              <div className="pt-3">
+                {micError && (
+                  <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>
+                )}
+                <motion.div
+                  animate={
+                    reduced
+                      ? false
+                      : recording || presence === "speaking"
+                        ? { scale: pulseScale, borderColor: "var(--primary)" }
+                        : { scale: 1 }
+                  }
+                  transition={
+                    recording || presence === "speaking"
+                      ? { type: "spring", stiffness: 240, damping: 24 }
+                      : { duration: 0.25 }
+                  }
+                  className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
+                >
+                  <MotionButton
+                    onClick={toggleMic}
+                    whileTap={reduced ? {} : { scale: 0.94 }}
+                    aria-label={
+                      handsFree ? "Pause hands-free listening" : "Start hands-free listening"
+                    }
+                    size="icon"
+                    className={`relative size-11 shrink-0 rounded-lg ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
+                  >
+                    {handsFree ? <Square className="fill-current" /> : <Mic />}
+                  </MotionButton>
+                  <textarea
+                    ref={inputRef}
+                    value={draft}
+                    onChange={(event) => onDraftChange(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" && !event.shiftKey) {
+                        event.preventDefault();
+                        void sendUser(draft);
+                      }
+                    }}
+                    rows={1}
+                    placeholder={
+                      listeningPhase === "hearing"
+                        ? "I can hear you…"
+                        : listeningPhase === "finishing"
+                          ? "Finishing your answer…"
+                          : handsFree
+                            ? "Listening — or type your answer"
+                            : "Speak or type your answer"
+                    }
+                    className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
+                  />
+                  <Button
+                    onClick={() => void sendUser(draft)}
+                    disabled={!draft.trim()}
+                    size="icon"
+                    variant="ghost"
+                    aria-label="Send"
+                    className="size-11 shrink-0 rounded-lg"
+                  >
+                    <Send />
+                  </Button>
+                </motion.div>
+                <p className="mt-2 text-center text-[0.68rem] text-muted-foreground">
+                  {listeningPhase === "hearing"
+                    ? "Keep speaking — MARY replies when you finish."
+                    : listeningPhase === "finishing"
+                      ? "Got it. MARY is preparing her reply."
+                      : handsFree
+                        ? "Hands-free is on. Speak naturally; no second tap needed."
+                        : "Tap the microphone once for hands-free conversation, or type anytime."}
+                </p>
+              </div>
             </motion.section>
           )}
 
