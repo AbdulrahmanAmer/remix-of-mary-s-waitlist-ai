@@ -567,11 +567,11 @@ export function MaryExperience() {
                     <MotionButton
                       onClick={toggleMic}
                       whileTap={reduced ? {} : { scale: 0.94 }}
-                      aria-label={recording ? "Stop and send" : "Talk to MARY"}
+                      aria-label={handsFree ? "Pause hands-free listening" : "Start hands-free listening"}
                       size="icon"
-                      className={`relative size-11 shrink-0 rounded-lg ${recording ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}`}
+                      className={`relative size-11 shrink-0 rounded-lg ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
                     >
-                      {recording ? <Square className="fill-current" /> : <Mic />}
+                      {handsFree ? <Square className="fill-current" /> : <Mic />}
                     </MotionButton>
                     <textarea
                       ref={inputRef}
@@ -584,7 +584,15 @@ export function MaryExperience() {
                         }
                       }}
                       rows={1}
-                      placeholder={recording ? "Listening…" : "Speak or type your answer"}
+                      placeholder={
+                        listeningPhase === "hearing"
+                          ? "I can hear you…"
+                          : listeningPhase === "finishing"
+                            ? "Finishing your answer…"
+                            : handsFree
+                              ? "Listening — or type your answer"
+                              : "Speak or type your answer"
+                      }
                       className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
                     />
                     <Button
@@ -599,7 +607,13 @@ export function MaryExperience() {
                     </Button>
                   </motion.div>
                   <p className="mt-2 text-center text-[0.68rem] text-muted-foreground">
-                    {recording ? "Tap stop when you’re done." : "MARY listens, reads, and follows your lead."}
+                    {listeningPhase === "hearing"
+                      ? "Keep speaking — MARY replies when you finish."
+                      : listeningPhase === "finishing"
+                        ? "Got it. MARY is preparing her reply."
+                        : handsFree
+                          ? "Hands-free is on. Speak naturally; no second tap needed."
+                          : "Tap the microphone once for hands-free conversation, or type anytime."}
                   </p>
                 </div>
               </div>
