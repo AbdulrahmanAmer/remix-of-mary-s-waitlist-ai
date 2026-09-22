@@ -410,7 +410,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
     window.setTimeout(() => {
       void enterLive();
-    }, 1380);
+    }, 1600);
   }, [enterLive, reduced]);
 
   const startInterim = useCallback(() => {
@@ -604,7 +604,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               wiping={stage === "intro"}
               hidden={stage === "intro" && flight !== null}
               revealDelay={stage === "landing" ? introDelay : 0}
-              slideIn={stage === "live"}
+              slideIn={false}
             />
           </div>
           <AnimatePresence>
