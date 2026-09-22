@@ -61,6 +61,8 @@ export function speak(
   let stopped = false;
   let raf = 0;
   let firstAudioFired = false;
+  let startAt = 0;
+  let progress = 0;
   let resolveDone: () => void = () => {};
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
@@ -75,6 +77,18 @@ export function speak(
       if (v > peak) peak = v;
     }
     opts.onLevel?.(Math.min(1, peak * 1.6));
+
+    if (opts.onProgress && startAt > 0) {
+      const elapsed = Math.max(0, ctx.currentTime - startAt);
+      // Total is whatever is scheduled so far, floored by the rough estimate so
+      // the reveal never sprints ahead while the stream is still filling.
+      const total = Math.max(playhead - startAt, opts.approxDurationSec ?? 0, 0.25);
+      const next = Math.min(0.995, elapsed / total);
+      if (next > progress) {
+        progress = next;
+        opts.onProgress(progress);
+      }
+    }
     raf = requestAnimationFrame(tick);
   };
 
