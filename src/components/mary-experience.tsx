@@ -631,7 +631,10 @@ export function MaryExperience() {
               </div>
               <ProgressConstellation collected={collected} />
 
-              <div className="no-scrollbar mt-3 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-y-auto">
+              <div
+                ref={trailRef}
+                className="no-scrollbar mt-3 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-y-auto"
+              >
                 <motion.div
                   layout
                   transition={SPRING}
