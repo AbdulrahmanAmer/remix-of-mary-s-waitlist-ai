@@ -79,7 +79,8 @@ export const MaryPresence = memo(function MaryPresence({
 
     const styles = getComputedStyle(canvas);
     const primary = styles.getPropertyValue("--primary") || "oklch(0.79 0.175 118)";
-    const ink = styles.getPropertyValue("--ink") || "oklch(0.15 0.01 110)";
+    const accent =
+      styles.getPropertyValue("--secondary") || styles.getPropertyValue("--ink") || primary;
 
     let width = 0;
     let boxHeight = 0;
