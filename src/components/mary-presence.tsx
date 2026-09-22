@@ -38,12 +38,12 @@ type Tuning = {
 };
 
 const TUNING: Record<PresenceState, Tuning> = {
-  idle: { flow: 0.045, swirl: 0.3, glow: 0.78, halo: 1.55 },
-  listening: { flow: 0.06, swirl: 0.44, glow: 0.84, halo: 1.62 },
-  hearing: { flow: 0.1, swirl: 0.66, glow: 0.92, halo: 1.74 },
-  thinking: { flow: 0.035, swirl: 1.35, glow: 0.88, halo: 1.6 },
-  speaking: { flow: 0.13, swirl: 0.9, glow: 1, halo: 1.86 },
-  done: { flow: 0.03, swirl: 0.22, glow: 0.96, halo: 1.72 },
+  idle: { flow: 0.03, swirl: 0.3, glow: 0.78, halo: 1.55 },
+  listening: { flow: 0.04, swirl: 0.44, glow: 0.84, halo: 1.62 },
+  hearing: { flow: 0.065, swirl: 0.66, glow: 0.92, halo: 1.74 },
+  thinking: { flow: 0.025, swirl: 1.35, glow: 0.88, halo: 1.6 },
+  speaking: { flow: 0.085, swirl: 0.9, glow: 1, halo: 1.86 },
+  done: { flow: 0.022, swirl: 0.22, glow: 0.96, halo: 1.72 },
 };
 
 type Ring = {
@@ -233,7 +233,7 @@ export const MaryPresence = memo(function MaryPresence({
 
       // Size from the space available *including* the halo and ground shadow,
       // so nothing is ever clipped at the top or bottom.
-      const R0 = Math.min(boxHeight * 0.5, width * 0.5) / 1.66;
+      const R0 = Math.min(boxHeight * 0.5, width * 0.5) / 1.5;
       if (R0 <= 0) return;
       const cx = width / 2;
       const cy = boxHeight / 2 - R0 * 0.08;
