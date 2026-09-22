@@ -131,20 +131,37 @@ export const MaryPresence = memo(function MaryPresence({
     let width = 0;
     let boxHeight = 0;
     let small = false;
+    /** Frame-cost relief: drops detail when the device cannot keep up. */
+    let lite = false;
+    /** Gradients are rebuilt only when their shape actually changes. */
+    const gradients = new Map<string, CanvasGradient>();
+    const q = (n: number, step: number) => Math.round(n / step) * step;
+    const cachedGradient = (key: string, make: () => CanvasGradient) => {
+      let g = gradients.get(key);
+      if (!g) {
+        g = make();
+        if (gradients.size > 240) gradients.clear();
+        gradients.set(key, g);
+      }
+      return g;
+    };
     const resize = () => {
       const rect = canvas.getBoundingClientRect();
       width = Math.max(1, rect.width);
       boxHeight = Math.max(1, rect.height);
       small = width < 360;
-      // Supersample: soft glows need >= 2x pixels or they step, whatever the screen
-      // reports. Browser zoom changes the effective ratio, so recompute it too.
+      gradients.clear();
+      // Supersample enough that soft glows do not step, but never so far that
+      // painting competes with her voice for the device. Browser zoom changes
+      // the effective ratio, so recompute it too.
       const zoom = window.visualViewport?.scale ?? 1;
       const raw = (window.devicePixelRatio || 1) * (zoom > 1 ? zoom : 1);
-      const dpr = small ? 2.5 : Math.min(4, Math.max(3, raw));
+      const dpr = Math.min(2, Math.max(1.5, raw));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(boxHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     };
+
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
@@ -153,6 +170,9 @@ export const MaryPresence = memo(function MaryPresence({
     let raf = 0;
     let t = 0;
     let lv = 0;
+    let smoothed = 0;
+    let cost = 0;
+
     let sweep = 0;
     let bloom = 0;
     let lastDone = false;
@@ -170,36 +190,40 @@ export const MaryPresence = memo(function MaryPresence({
     /** Sweeping brightness around the tube — bright at the front, faint behind. */
     const sweepGradient = (cx: number, cy: number, R: number, angle: number, color: string) => {
       const hasConic = typeof ctx.createConicGradient === "function";
-      const g = hasConic
-        ? ctx.createConicGradient(angle, cx, cy)
-        : ctx.createLinearGradient(
-            cx - Math.cos(angle) * R,
-            cy - Math.sin(angle) * R,
-            cx + Math.cos(angle) * R,
-            cy + Math.sin(angle) * R,
-          );
-      const stops: [number, number][] = hasConic
-        ? [
-            [0, 0.28],
-            [0.14, 1],
-            [0.32, 0.46],
-            [0.5, 0.86],
-            [0.68, 0.3],
-            [0.86, 0.72],
-            [1, 0.28],
-          ]
-        : [
-            [0, 0.3],
-            [0.5, 1],
-            [1, 0.34],
-          ];
-      for (const [p, a] of stops) g.addColorStop(p, withAlpha(color, a));
-      return g;
+      const a = q(angle, Math.PI / 90);
+      return cachedGradient(`sw:${color}:${a.toFixed(3)}:${q(R, 2)}:${hasConic ? 1 : 0}`, () => {
+        const g = hasConic
+          ? ctx.createConicGradient(a, cx, cy)
+          : ctx.createLinearGradient(
+              cx - Math.cos(a) * R,
+              cy - Math.sin(a) * R,
+              cx + Math.cos(a) * R,
+              cy + Math.sin(a) * R,
+            );
+        const stops: [number, number][] = hasConic
+          ? [
+              [0, 0.28],
+              [0.14, 1],
+              [0.32, 0.46],
+              [0.5, 0.86],
+              [0.68, 0.3],
+              [0.86, 0.72],
+              [1, 0.28],
+            ]
+          : [
+              [0, 0.3],
+              [0.5, 1],
+              [1, 0.34],
+            ];
+        for (const [p, alpha] of stops) g.addColorStop(p, withAlpha(color, alpha));
+        return g;
+      });
     };
 
     /** One soft tube: a gently folded closed curve stroked from wide-faint to narrow-bright. */
     const drawShell = (cx: number, cy: number, R: number, shell: Shell) => {
-      const segments = small ? 96 : 168;
+      const segments = lite ? 64 : small ? 84 : 132;
+
       const rr = R * shell.r;
       ctx.beginPath();
       let prev: { x: number; y: number } | null = null;
@@ -232,7 +256,7 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       const base = R * shell.w * cur.thick * (1 + lv * 0.22);
-      for (const pass of PASSES) {
+      for (const pass of lite ? PASSES.slice(1) : PASSES) {
         ctx.globalAlpha = Math.min(1, pass.a * shell.alpha * cur.glow * (0.85 + lv * 0.4));
         ctx.lineWidth = Math.max(0.5, base * pass.k);
         ctx.stroke();
@@ -258,8 +282,11 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.translate(cx, gy);
       ctx.scale(1, 0.2);
       ctx.translate(-cx, -gy);
-      const shadow = ctx.createRadialGradient(cx, gy, 0, cx, gy, R * 1.05);
-      for (const [p, a] of falloffStops(0.1)) shadow.addColorStop(p, withAlpha(ink, a));
+      const shadow = cachedGradient(`sh:${q(R, 1)}:${q(gy, 1)}`, () => {
+        const g = ctx.createRadialGradient(cx, gy, 0, cx, gy, R * 1.05);
+        for (const [p, a] of falloffStops(0.1)) g.addColorStop(p, withAlpha(ink, a));
+        return g;
+      });
       ctx.fillStyle = shadow;
       ctx.beginPath();
       ctx.arc(cx, gy, R * 1.05, 0, Math.PI * 2);
@@ -268,9 +295,15 @@ export const MaryPresence = memo(function MaryPresence({
 
       // Outer halo.
       const haloR = R * (cur.halo + lv * 0.22 + bloom * 0.35);
-      const halo = ctx.createRadialGradient(cx, cy, R * 0.86, cx, cy, haloR);
-      for (const [p, a] of falloffStops((0.12 + lv * 0.13) * cur.glow))
-        halo.addColorStop(p, withAlpha(primary, a));
+      const haloPeak = (0.12 + lv * 0.13) * cur.glow;
+      const halo = cachedGradient(
+        `ha:${q(R, 1)}:${q(haloR, 1)}:${q(haloPeak, 0.004).toFixed(3)}`,
+        () => {
+          const g = ctx.createRadialGradient(cx, cy, R * 0.86, cx, cy, haloR);
+          for (const [p, a] of falloffStops(haloPeak)) g.addColorStop(p, withAlpha(primary, a));
+          return g;
+        },
+      );
       ctx.fillStyle = halo;
       ctx.beginPath();
       ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
@@ -281,19 +314,16 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.beginPath();
       ctx.arc(cx, cy, R * 0.97, 0, Math.PI * 2);
       ctx.clip();
-      const inner = ctx.createRadialGradient(
-        cx,
-        cy + R * 0.55,
-        R * 0.03,
-        cx,
-        cy + R * 0.3,
-        R * 1.05,
-      );
-      for (const [p, a] of falloffStops((0.045 + lv * 0.1) * cur.glow))
-        inner.addColorStop(p, withAlpha(primary, a));
+      const innerPeak = (0.045 + lv * 0.1) * cur.glow;
+      const inner = cachedGradient(`in:${q(R, 1)}:${q(innerPeak, 0.004).toFixed(3)}`, () => {
+        const g = ctx.createRadialGradient(cx, cy + R * 0.55, R * 0.03, cx, cy + R * 0.3, R * 1.05);
+        for (const [p, a] of falloffStops(innerPeak)) g.addColorStop(p, withAlpha(primary, a));
+        return g;
+      });
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
-      for (const m of MOTES) {
+
+      for (const m of lite ? MOTES.slice(0, 4) : MOTES) {
         const tw = 0.25 + 0.75 * Math.abs(Math.sin(t * 1.1 + m.p));
         const sx = cx + m.x * R + Math.sin(t * 0.4 + m.p) * R * 0.035;
         const sy = cy + m.y * R + Math.cos(t * 0.33 + m.p) * R * 0.035;
@@ -350,9 +380,12 @@ export const MaryPresence = memo(function MaryPresence({
       cur.thick = lerp(cur.thick, target.thick, k);
 
       const voiced = current === "speaking" || current === "listening" || current === "hearing";
-      const targetLevel = voiced ? Math.min(1, Math.max(0, levelRef.current)) : 0;
-      const rate = targetLevel > lv ? dt / 0.1 : dt / 0.32;
-      lv += (targetLevel - lv) * Math.min(1, rate);
+      const reading = voiced ? Math.min(1, Math.max(0, levelRef.current)) : 0;
+      // Ease the incoming reading first, so a late or dropped frame shows up as
+      // a soft swell rather than a visible jump.
+      smoothed += (reading - smoothed) * Math.min(1, dt / 0.06);
+      const rate = smoothed > lv ? dt / 0.1 : dt / 0.32;
+      lv += (smoothed - lv) * Math.min(1, rate);
 
       sweep += dt * cur.swirl;
 
@@ -361,7 +394,13 @@ export const MaryPresence = memo(function MaryPresence({
       lastDone = isDone;
       if (bloom > 0) bloom = Math.max(0, bloom - dt * 0.9);
 
+      const startedAt = performance.now();
       draw(true);
+      // Watch what a frame actually costs on this device and shed detail before
+      // the painting can ever be what makes her stutter.
+      cost += (performance.now() - startedAt - cost) * 0.1;
+      if (!lite && cost > 9) lite = true;
+      else if (lite && cost < 4) lite = false;
       raf = requestAnimationFrame(frame);
     };
 
