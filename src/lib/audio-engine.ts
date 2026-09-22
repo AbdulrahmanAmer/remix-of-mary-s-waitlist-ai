@@ -39,6 +39,10 @@ export function speak(
   opts: {
     onLevel?: (level: number) => void;
     onFirstAudio?: () => void;
+    /** Playback progress 0..1, paced by the actual audio clock. */
+    onProgress?: (progress: number) => void;
+    /** Rough expected length in seconds; keeps early progress honest while the stream fills. */
+    approxDurationSec?: number;
     onEnd?: () => void;
   } = {},
 ): SpeakHandle {
