@@ -871,13 +871,13 @@ export function MaryExperience() {
                   transition={SPRING}
                   className="mx-auto"
                 >
-                  <MaryPresence state="done" level={0} height={landingOrb} />
+                  <MaryPresence state="done" level={0} height={compact ? liveOrb : landingOrb} />
                 </motion.div>
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.14 }}
-                  className="eyebrow mt-7"
+                  className={`eyebrow ${compact ? "mt-3" : "mt-7"}`}
                 >
                   Early access confirmed
                 </motion.p>
@@ -885,7 +885,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ ...SOFT, delay: 0.2 }}
-                  className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink"
+                  className={`mt-3 text-balance font-semibold leading-tight text-ink ${compact ? "text-4xl" : "text-5xl"}`}
                 >
                   You’re on the waitlist.
                 </motion.h1>
