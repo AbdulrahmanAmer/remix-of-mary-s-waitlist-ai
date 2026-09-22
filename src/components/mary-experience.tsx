@@ -293,9 +293,6 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
 
-        // The mic stays open through her turn, so you can talk over her.
-        void armBargeInRef.current();
-
         if (firstBeat) await firstBeat;
         else await say(turn.say);
 
@@ -313,77 +310,66 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       } finally {
         busyRef.current = false;
         lastActivityRef.current = Date.now();
+        setListeningPhase(micMutedRef.current ? "paused" : "listening");
         inputRef.current?.focus();
-        if (handsFreeRef.current && !sessionFinishedRef.current) {
-          window.setTimeout(() => void startListeningRef.current(), 120);
-        }
       }
     },
     [finalize, say],
   );
 
   const sendUser = useCallback(
-    async (text: string) => {
+    (text: string) => {
       const clean = text.trim();
-      if (!clean) return;
+      if (!clean) return chainRef.current;
       // Talking (or typing) over her ends her turn immediately.
       interruptRef.current = true;
       stopSpeaking();
-      // If MARY is mid-turn, wait for her to finish rather than dropping the message.
-      while (busyRef.current) {
-        await new Promise((resolve) => window.setTimeout(resolve, 120));
-        if (sessionFinishedRef.current) return;
-      }
-      stopSpeaking();
-      interimRef.current = "";
-      setInterim("");
-      setDraft("");
-      const next = [...linesRef.current, { id: uid(), role: "user" as const, text: clean }];
-      setLines(next);
-      linesRef.current = next;
-      await runTurn(next);
+      // One queue: anything said while she is mid-turn is answered next, in order.
+      const run = chainRef.current
+        .then(async () => {
+          if (sessionFinishedRef.current) return;
+          stopSpeaking();
+          setInterim("");
+          setDraft("");
+          const next = [...linesRef.current, { id: uid(), role: "user" as const, text: clean }];
+          setLines(next);
+          linesRef.current = next;
+          await runTurn(next);
+        })
+        .catch(() => {});
+      chainRef.current = run;
+      return run;
     },
     [runTurn, stopSpeaking],
   );
 
-  const finishListening = useCallback(async () => {
-    if (completingRef.current) return;
-    const recorder = recorderRef.current;
-    if (!recorder) return;
-    completingRef.current = true;
-    recorderRef.current = null;
-    setRecording(false);
-    setListeningPhase("finishing");
-    setPresenceState("thinking");
-    recognitionRef.current?.stop();
-    recognitionRef.current = null;
-
-    try {
-      // Live recognition has already heard the words as they were spoken, so
-      // there is nothing left to wait for. Only fall back to uploading the
-      // audio when the browser gave us nothing.
-      const live = interimRef.current.trim();
-      let spoken = live;
-      if (live) {
-        recorder.cancel();
-      } else {
-        spoken = await transcribe(await recorder.stop());
+  /** A complete utterance came off the open line. */
+  const handleUtterance = useCallback(
+    async ({ text, audio }: { text: string; audio: Blob | null }) => {
+      if (sessionFinishedRef.current || micMutedRef.current) return;
+      let spoken = text.trim();
+      if (!spoken && audio) {
+        setListeningPhase("finishing");
+        setPresenceState("thinking");
+        try {
+          spoken = (await transcribe(audio)).trim();
+        } catch {
+          spoken = "";
+        }
       }
-      interimRef.current = "";
       setInterim("");
-      if (spoken) {
-        await sendUser(spoken);
-      } else if (handsFreeRef.current && !sessionFinishedRef.current) {
-        setPresenceState("idle");
+      if (!spoken) {
         setListeningPhase("listening");
-        window.setTimeout(() => void startListeningRef.current(), 350);
+        setPresenceState((current) => (current === "hearing" ? "idle" : current));
+        return;
       }
-    } finally {
-      completingRef.current = false;
-    }
-  }, [sendUser]);
+      void sendUser(spoken);
+    },
+    [sendUser],
+  );
 
-  finishListeningRef.current = finishListening;
+  handleUtteranceRef.current = (utterance) => void handleUtterance(utterance);
+
 
   const enterLive = useCallback(async () => {
     setStage("live");
