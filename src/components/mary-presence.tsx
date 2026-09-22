@@ -79,6 +79,7 @@ export const MaryPresence = memo(function MaryPresence({
 
     const styles = getComputedStyle(canvas);
     const primary = styles.getPropertyValue("--primary") || "oklch(0.79 0.175 118)";
+    const ink = styles.getPropertyValue("--ink") || "oklch(0.15 0.01 110)";
 
     let width = 0;
     let boxHeight = 0;
@@ -194,12 +195,19 @@ export const MaryPresence = memo(function MaryPresence({
         ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
       }
 
+      // Inner rim shading for depth.
+      const rim = ctx.createRadialGradient(cx, cy, radius * 0.55, cx, cy, radius * 1.02);
+      rim.addColorStop(0, withAlpha(primary, 0));
+      rim.addColorStop(1, withAlpha(ink, 0.22));
+      ctx.fillStyle = rim;
+      ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
+
       // Specular highlight.
       const hx = cx - radius * 0.3 + Math.cos(swirlPhase * 0.4) * radius * 0.08;
       const hy = cy - radius * 0.36 + Math.sin(swirlPhase * 0.33) * radius * 0.06;
       const spec = ctx.createRadialGradient(hx, hy, 0, hx, hy, radius * 0.52);
-      spec.addColorStop(0, withAlpha(primary, 0.85));
-      spec.addColorStop(1, withAlpha(primary, 0));
+      spec.addColorStop(0, "rgb(255 255 255 / 0.55)");
+      spec.addColorStop(1, "rgb(255 255 255 / 0)");
       ctx.fillStyle = spec;
       ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
       ctx.restore();
