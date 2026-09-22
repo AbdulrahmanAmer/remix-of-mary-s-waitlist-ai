@@ -957,6 +957,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             maybeShowEchoHint();
           },
           onUtterance: (utterance) => handleUtteranceRef.current(utterance),
+          // Headset unplugged, or another app grabbed the mic mid-call.
+          onLost: (reason) => {
+            if (cancelled) return;
+            sessionRef.current = null;
+            setMicLive(false);
+            setMicError(micLostMessage(reason));
+            setListeningPhase("paused");
+            setInterim("");
+            setLevel(0);
+            session?.close();
+          },
         });
         if (cancelled) {
           session.close();
@@ -982,7 +993,16 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       setMicLive(false);
       session?.close();
     };
-  }, [maybeShowEchoHint, stage]);
+  }, [maybeShowEchoHint, micAttempt, stage]);
+
+  /** Ask for the microphone again — after a refusal, a swap, or a stolen line. */
+  const retryMic = useCallback(() => {
+    lastActivityRef.current = Date.now();
+    micMutedRef.current = false;
+    setMicMuted(false);
+    setMicError(null);
+    setMicAttempt((n) => n + 1);
+  }, []);
 
   /** Mute keeps the call open but stops her hearing you. */
   const toggleMicMute = useCallback(() => {
