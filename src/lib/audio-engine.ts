@@ -34,12 +34,22 @@ function trace(event: Record<string, unknown>) {
 
 let sharedContext: AudioContext | null = null;
 
+/** Thrown when the device/browser simply cannot do live audio at all. */
+export class AudioUnsupportedError extends Error {}
+
 export function getAudioContext(): AudioContext {
   if (!sharedContext) {
     const Ctor =
       window.AudioContext ??
-      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    sharedContext = new Ctor({ sampleRate: RATE });
+      (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!Ctor) throw new AudioUnsupportedError("no web audio");
+    try {
+      // Matching her stream rate avoids a resample; older Safari rejects the
+      // option, in which case the default rate is used and buffers resample.
+      sharedContext = new Ctor({ sampleRate: RATE });
+    } catch {
+      sharedContext = new Ctor();
+    }
   }
   return sharedContext;
 }
@@ -47,17 +57,25 @@ export function getAudioContext(): AudioContext {
 // ---------------------------------------------------------------------------
 // Output sink — her voice leaves through a loopback peer connection and out of
 // an <audio> element. That is the one route browsers treat as "sound of the
-// far end", so their echo canceller subtracts it from the microphone. Playing
-// straight into the audio graph (or even into a plain element) leaves her
-// voice invisible to the canceller, and the mic hears every word she says.
+// far end", so their echo canceller subtracts it from the microphone. Where
+// that route cannot be built (no WebRTC, a browser that refuses the local
+// negotiation), the same element plays her voice directly instead: being heard
+// matters more than the canceller's help, and the local echo model covers it.
 // ---------------------------------------------------------------------------
 type Sink = {
   node: MediaStreamAudioDestinationNode;
   element: HTMLAudioElement;
   ready: Promise<boolean>;
+  /** The browser's call engine is carrying her voice (echo cancellation helps). */
   ok: boolean;
 };
 let sink: Sink | null = null;
+let degraded = false;
+
+/** True when her voice is playing without the browser's echo canceller. */
+export function echoCancellationDegraded(): boolean {
+  return degraded;
+}
 
 /** Sends a stream out and back through the browser's call engine. */
 async function loopback(stream: MediaStream): Promise<MediaStream> {
@@ -96,24 +114,34 @@ function ensureSink(ctx: AudioContext): Sink {
   const element = document.createElement("audio");
   element.setAttribute("playsinline", "");
   element.autoplay = true;
+  element.style.display = "none";
+  // Start the element on the direct stream immediately. iPhone Safari only
+  // grants playback on the tick of the tap, so the element has to be playing
+  // before the loopback negotiation's first await — swapping its source later
+  // keeps that permission.
+  element.srcObject = node.stream;
+  document.body.appendChild(element);
+  const primed = element
+    .play()
+    .then(() => true)
+    .catch(() => false);
   const created: Sink = { node, element, ok: false, ready: Promise.resolve(false) };
   created.ready = loopback(node.stream)
     .then(async (out) => {
       element.srcObject = out;
-      document.body.appendChild(element);
-      await element.play();
+      await element.play().catch(() => {});
       created.ok = true;
+      degraded = false;
       trace({ type: "sinkReady" });
       return true;
     })
-    .catch(() => {
+    .catch(async () => {
       created.ok = false;
-      element.pause();
-      element.srcObject = null;
-      element.remove();
-      if (sink === created) sink = null;
-      trace({ type: "sinkFailed" });
-      return false;
+      degraded = true;
+      element.srcObject = node.stream;
+      await element.play().catch(() => {});
+      trace({ type: "sinkDegraded" });
+      return primed;
     });
   sink = created;
   return created;
@@ -123,28 +151,21 @@ function ensureSink(ctx: AudioContext): Sink {
 export async function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
-  // A transient autoplay/WebRTC failure gets one clean rebuild. We never fall
-  // back to direct AudioContext output because the microphone cannot reliably
-  // remove that path from the room.
+  // A transient autoplay/WebRTC failure gets one clean rebuild.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const current = ensureSink(ctx);
     if (await current.ready) return;
+    if (current.ok) return;
+    // Degraded but audible is a valid outcome; only a dead element is retried.
+    if (!current.element.paused) return;
+    current.element.remove();
+    if (sink === current) sink = null;
   }
 }
 
 function outputNode(ctx: AudioContext): AudioNode {
   const s = ensureSink(ctx);
-  if (s.ok && s.element.paused) {
-    s.element.play().catch(() => {
-      s.ok = false;
-      s.element.srcObject = null;
-      s.element.remove();
-      if (sink === s) sink = null;
-      trace({ type: "sinkLost" });
-    });
-  }
-  // Silent is safer than direct playback: direct output is not a browser call
-  // path, so its words can return through the microphone as if the user spoke.
+  if (s.element.paused) s.element.play().catch(() => {});
   return s.node;
 }
 
