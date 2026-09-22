@@ -26,6 +26,8 @@ export const TurnSchema = z.object({
   nextField: z.enum(["name", "email", "phone", "business", "industry", "operations", "none"]),
   complete: z.boolean(),
   declined: z.boolean(),
+  phase: z.enum(["WELCOME", "DISCOVER", "REVEAL", "LANES", "CONTACT", "WRAP", "CLOSE"]),
+  revealed: z.boolean(),
 });
 
 export type TurnObject = z.infer<typeof TurnSchema>;
