@@ -878,6 +878,12 @@ export type Utterance = {
 export type MicSession = {
   /** Silences capture without releasing the device (no permission re-prompt). */
   setMuted: (muted: boolean) => void;
+  /**
+   * What the conversation decided about the last utterance: whether it really
+   * was the person on the microphone talking to her, or the room. This is what
+   * teaches the near-field model who it is listening to.
+   */
+  noteVerdict: (verdict: "mary" | "ambient", peak: number) => void;
   close: () => void;
 };
 
