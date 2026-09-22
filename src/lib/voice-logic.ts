@@ -137,20 +137,25 @@ export function isEchoOfAssistant(transcript: string, assistantLines: string[]):
   }
   if (assistantJoined.includes(userJoined.trim())) return true;
 
-  const n = Math.min(3, user.length);
-  const userGrams = ngrams(user, n);
-  const assistantGrams = ngrams(assistant, n);
-  let hits = 0;
-  for (const gram of userGrams) if (assistantGrams.has(gram)) hits += 1;
-  if (userGrams.size > 0 && hits / userGrams.size >= 0.6) return true;
+  const overlapOf = (n: number) => {
+    const userGrams = ngrams(user, n);
+    const assistantGrams = ngrams(assistant, n);
+    let hits = 0;
+    for (const gram of userGrams) if (assistantGrams.has(gram)) hits += 1;
+    return userGrams.size > 0 ? hits / userGrams.size : 0;
+  };
+  if (overlapOf(Math.min(3, user.length)) >= 0.6) return true;
 
   const userContent = contentTokens(user);
-  if (userContent.length >= 2) {
-    const assistantContent = new Set(contentTokens(assistant));
-    let contentHits = 0;
-    for (const word of userContent) if (assistantContent.has(word)) contentHits += 1;
-    if (contentHits / userContent.length >= 0.6) return true;
-  }
+  const assistantContent = new Set(contentTokens(assistant));
+  let contentHits = 0;
+  for (const word of userContent) if (assistantContent.has(word)) contentHits += 1;
+  const contentRatio = userContent.length ? contentHits / userContent.length : 0;
+  if (userContent.length >= 2 && contentRatio >= 0.6) return true;
+
+  // Short garbles ("come for running on you"): half the word pairs are hers
+  // and at least half of the real words are hers.
+  if (user.length <= 6 && overlapOf(2) >= 0.5 && contentRatio >= 0.5) return true;
   return false;
 }
 
