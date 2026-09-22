@@ -585,6 +585,11 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let restartTimer = 0;
   let restartAttempt = 0;
   let recognitionFatal = false;
+  // Browser speech recognition does not reliably honour acoustic echo
+  // cancellation. Keep it completely off while MARY is audible; a real
+  // interruption is detected by the local level/echo model first, then the
+  // recognizer is reopened after playback has paused.
+  let recognitionQuarantined = false;
 
   const emitInterim = () => {
     const live = `${committed} ${interim}`.trim();
@@ -686,6 +691,22 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     }
   };
 
+  const quarantineRecognition = () => {
+    committed = "";
+    interim = "";
+    options.onInterim?.("");
+    stopRecognition();
+    recognitionQuarantined = true;
+  };
+
+  const reopenRecognition = () => {
+    if (!recognitionQuarantined || !alive || muted) return;
+    recognitionQuarantined = false;
+    committed = "";
+    interim = "";
+    startRecognition();
+  };
+
   const takeText = () => {
     const text = `${committed} ${interim}`.trim();
     committed = "";
@@ -714,6 +735,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     startCapture(now, true);
     trace({ type: "candidate", fromWords });
     options.onInterruptCandidate?.();
+    // onInterruptCandidate pauses MARY synchronously. Start a fresh recognition
+    // session, so none of her pre-pause transcript can be delivered as the user.
+    window.setTimeout(reopenRecognition, monitor.outputLatencyMs + 80);
   }
 
   const confirmInterrupt = () => {
@@ -815,6 +839,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     }
 
     const speaking = assistantActive();
+    if (speaking && !recognitionQuarantined) quarantineRecognition();
+    if (!speaking && recognitionQuarantined && (pending || holding || !withinTail())) {
+      reopenRecognition();
+    }
     const baseThreshold = Math.min(0.3, Math.max(0.02, noiseFloor * 2.8 + 0.008));
     const echoThreshold = Math.min(
       0.95,
@@ -930,7 +958,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       options.onLevel?.(0);
       options.onInterim?.("");
       if (next) stopRecognition();
-      else startRecognition();
+      else if (!assistantActive() && !withinTail()) startRecognition();
     },
     close: () => {
       if (!alive) return;
