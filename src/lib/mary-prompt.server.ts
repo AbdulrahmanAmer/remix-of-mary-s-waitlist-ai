@@ -202,13 +202,20 @@ export function finishTurn(
   const required = WAITLIST_FIELDS.filter((f) => f !== "phone");
   const allCaptured = required.every((f) => collected[f]);
 
+  const callbackRequested = Boolean(input.flags.callback) || out.callbackRequested;
+
   return {
     say: out.say.trim(),
     followUp: out.followUp?.trim() ? out.followUp.trim() : null,
     collected,
     nextField: out.nextField,
-    complete: out.complete && allCaptured,
+    // A callback conversation never "completes" the waitlist sign-up.
+    complete: out.complete && allCaptured && !callbackRequested,
     declined: out.declined,
+    callbackRequested,
+    intent: out.intent,
+    mode: out.mode,
+    wrapAsked: Boolean(input.flags.wrapAsked) || out.wrapAsked,
     revealed: input.flags.revealed || out.revealed,
     lanesDone: input.flags.lanesDone || out.lanesDone,
     rejected: grounded.rejected,
