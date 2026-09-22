@@ -28,6 +28,99 @@ function base64ToBytes(base64: string) {
   return bytes;
 }
 
+/**
+ * Voice shaping — tuned from measurements of the real Mary's recordings.
+ *
+ *  measured Mary   : median pitch ~220 Hz, articulation ~4.1 syllables/s
+ *  base TTS voice  : median pitch ~210 Hz, articulation ~5.4 syllables/s (matched conditions)
+ *
+ * MARY_PITCH_RATIO lifts playback pitch by ~0.8 semitones to land on her median.
+ * MARY_PACE_RATIO is the net speaking speed relative to the raw TTS output.
+ * Set both to 1 to disable shaping entirely.
+ */
+const MARY_PITCH_RATIO = 1.048;
+const MARY_PACE_RATIO = 0.9;
+const MARY_STRETCH = MARY_PITCH_RATIO / MARY_PACE_RATIO;
+
+function hann(n: number) {
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
+  return w;
+}
+
+/**
+ * Streaming overlap-add time stretcher. Lengthens audio without changing pitch so
+ * the playbackRate pitch lift above does not also speed her up.
+ */
+class TimeStretcher {
+  private readonly size = 1024;
+  private readonly synthHop = 512;
+  private readonly analysisHop: number;
+  private readonly window: Float32Array;
+  private input = new Float32Array(0);
+  private readPos = 0;
+  private acc = new Float32Array(0);
+  private accWin = new Float32Array(0);
+  private emitted = 0;
+  private synthPos = 0;
+
+  constructor(stretch: number) {
+    this.analysisHop = Math.max(1, Math.round(this.synthHop / stretch));
+    this.window = hann(this.size);
+  }
+
+  private grow(needed: number) {
+    if (this.acc.length >= needed) return;
+    const next = new Float32Array(Math.max(needed, this.acc.length * 2 + this.size));
+    next.set(this.acc);
+    const nextWin = new Float32Array(next.length);
+    nextWin.set(this.accWin);
+    this.acc = next;
+    this.accWin = nextWin;
+  }
+
+  push(chunk: Float32Array): Float32Array {
+    const merged = new Float32Array(this.input.length - this.readPos + chunk.length);
+    merged.set(this.input.subarray(this.readPos));
+    merged.set(chunk, this.input.length - this.readPos);
+    this.input = merged;
+    this.readPos = 0;
+
+    while (this.readPos + this.size <= this.input.length) {
+      const offset = this.synthPos - this.emitted;
+      this.grow(offset + this.size);
+      for (let i = 0; i < this.size; i++) {
+        const w = this.window[i]!;
+        this.acc[offset + i] += this.input[this.readPos + i]! * w;
+        this.accWin[offset + i] += w * w;
+      }
+      this.synthPos += this.synthHop;
+      this.readPos += this.analysisHop;
+    }
+
+    const safe = this.synthPos - (this.size - this.synthHop) - this.emitted;
+    if (safe <= 0) return new Float32Array(0);
+    return this.take(safe);
+  }
+
+  private take(count: number) {
+    const out = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const w = this.accWin[i]!;
+      out[i] = w > 1e-6 ? this.acc[i]! / w : this.acc[i]!;
+    }
+    this.acc = this.acc.slice(count);
+    this.accWin = this.accWin.slice(count);
+    this.emitted += count;
+    return out;
+  }
+
+  flush(): Float32Array {
+    const remaining = this.synthPos - this.emitted;
+    return remaining > 0 ? this.take(remaining) : new Float32Array(0);
+  }
+}
+
 export type SpeakHandle = {
   stop: () => void;
   done: Promise<void>;
