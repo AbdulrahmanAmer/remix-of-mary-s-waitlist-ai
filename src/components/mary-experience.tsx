@@ -508,21 +508,22 @@ export function MaryExperience() {
               </div>
 
               <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
-                  <div className="mx-auto w-full max-w-3xl space-y-3 overflow-y-auto">
+                  <div className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto">
                     <AnimatePresence initial={false}>
-                      {history.map((line) => (
+                      {history.map((line, index) => (
                         <motion.div
                           key={line.id}
                           layout
-                          initial={{ opacity: 0, y: 8 }}
-                          animate={{ opacity: 1, y: 0 }}
-                          exit={{ opacity: 0 }}
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 0.35 + (index / Math.max(1, history.length)) * 0.5 }}
+                          exit={{ opacity: 0, y: -6 }}
+                          transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
                           className={
                             line.role === "user" ? "flex justify-end" : "flex justify-start"
                           }
                         >
                           <div
-                            className={`max-w-[88%] rounded-xl px-4 py-3 text-sm leading-relaxed ${line.role === "user" ? "rounded-br-sm bg-ink text-background" : "rounded-bl-sm bg-surface text-ink"}`}
+                            className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/90 text-background" : "bg-surface text-muted-foreground"}`}
                           >
                             {line.text}
                           </div>
