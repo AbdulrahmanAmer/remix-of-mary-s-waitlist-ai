@@ -71,10 +71,38 @@ type Sink = {
 };
 let sink: Sink | null = null;
 let degraded = false;
+/** Direct-to-speaker path, silent until the call route proves inaudible. */
+let directGain: GainNode | null = null;
+let directOn = false;
+/** performance.now() of the last frame where the element clock actually moved. */
+let lastElementProgressAt = 0;
 
 /** True when her voice is playing without the browser's echo canceller. */
 export function echoCancellationDegraded(): boolean {
   return degraded;
+}
+
+/**
+ * iPhone Safari mutes and mis-routes the "phone call" audio path (silent
+ * switch, earpiece). If the element clock stops moving while a line is
+ * playing, her voice also goes straight to the speakers: being heard beats
+ * the browser's echo canceller, and the local echo model covers the rest.
+ */
+function enableDirectOutput() {
+  if (directOn || !directGain) return;
+  directOn = true;
+  degraded = true;
+  try {
+    directGain.gain.value = 1;
+  } catch {
+    /* ignore */
+  }
+  trace({ type: "directOutput" });
+}
+
+/** True once her voice had to be pushed straight to the speakers. */
+export function directOutputEngaged(): boolean {
+  return directOn;
 }
 
 /** Sends a stream out and back through the browser's call engine. */
