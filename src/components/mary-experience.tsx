@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AnimatePresence, motion } from "motion/react";
-import { Mic, Square, Send, Sparkle, Volume2, VolumeX } from "lucide-react";
+import { AnimatePresence, motion, useReducedMotion } from "motion/react";
+import { ArrowRight, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
 
+import { AuroraBackground } from "./aurora-background";
+import { BrandLockup } from "./brand-lockup";
 import { MaryOrb, type OrbState } from "./mary-orb";
 import { ProgressConstellation } from "./progress-constellation";
-import { AuroraBackground } from "./aurora-background";
+import { Button } from "@/components/ui/button";
 import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
@@ -18,6 +20,8 @@ import {
 
 type Line = { id: string; role: "user" | "mary"; text: string };
 
+const MotionButton = motion.create(Button);
+
 const TYPING_LINES = [
   "Take your time writing what you have in mind — I'm right here with you.",
   "No rush at all, I'll wait while you type.",
@@ -28,11 +32,21 @@ const IDLE_NUDGES = [
   "I'm still here. Say the word, or type it if that's easier.",
 ];
 
+const FIELD_LABELS: Record<string, string> = {
+  name: "Name",
+  email: "Email",
+  phone: "Phone",
+  business: "Business",
+  industry: "Industry",
+  operations: "Operations",
+};
+
 function uid() {
   return Math.random().toString(36).slice(2);
 }
 
 export function MaryExperience() {
+  const reduced = useReducedMotion();
   const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
   const [collected, setCollected] = useState<Collected>({});
@@ -76,31 +90,29 @@ export function MaryExperience() {
   const say = useCallback(
     (text: string, opts: { record?: boolean } = { record: true }) => {
       const words = text.split(/\s+/).filter(Boolean).length;
-      if (opts.record !== false) {
-        setLines((prev) => [...prev, { id: uid(), role: "mary", text }]);
-      }
+      if (opts.record !== false) setLines((prev) => [...prev, { id: uid(), role: "mary", text }]);
       setReveal(0);
 
       const duration = Math.max(1400, words * 300);
       const start = performance.now();
       let raf = 0;
-      const animate = () => {
+      const animateWords = () => {
         const progress = Math.min(1, (performance.now() - start) / duration);
         setReveal(Math.ceil(progress * words));
-        if (progress < 1) raf = requestAnimationFrame(animate);
+        if (progress < 1) raf = requestAnimationFrame(animateWords);
       };
-      raf = requestAnimationFrame(animate);
+      raf = requestAnimationFrame(animateWords);
 
       if (mutedRef.current) {
         setOrbState("speaking");
-        const timer = setTimeout(() => setOrbState("idle"), duration);
-        return new Promise<void>((resolve) =>
-          setTimeout(() => {
-            clearTimeout(timer);
+        return new Promise<void>((resolve) => {
+          window.setTimeout(() => {
+            cancelAnimationFrame(raf);
+            setReveal(words);
             setOrbState("idle");
             resolve();
-          }, duration),
-        );
+          }, duration);
+        });
       }
 
       stopSpeaking();
@@ -110,7 +122,7 @@ export function MaryExperience() {
         onEnd: () => {
           cancelAnimationFrame(raf);
           setReveal(words);
-          setOrbState((s) => (s === "speaking" ? "idle" : s));
+          setOrbState((current) => (current === "speaking" ? "idle" : current));
         },
       });
       speakRef.current = handle;
@@ -121,10 +133,10 @@ export function MaryExperience() {
 
   const finalize = useCallback(async (finalCollected: Collected) => {
     const transcript = linesRef.current
-      .map((l) => `${l.role === "mary" ? "MARY" : "Guest"}: ${l.text}`)
+      .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
       .join("\n");
     try {
-      const res = await submitWaitlist({
+      const response = await submitWaitlist({
         data: {
           name: finalCollected.name ?? "",
           email: finalCollected.email ?? "",
@@ -135,7 +147,7 @@ export function MaryExperience() {
           transcript,
         },
       });
-      setResult({ position: res.position, message: res.message });
+      setResult({ position: response.position, message: response.message });
     } catch {
       setResult({ position: 0, message: "We captured your details." });
     }
@@ -150,9 +162,9 @@ export function MaryExperience() {
       try {
         const turn: MaryTurn = await maryTurn({
           data: {
-            messages: nextLines.map((l) => ({
-              role: l.role === "mary" ? ("assistant" as const) : ("user" as const),
-              content: l.text,
+            messages: nextLines.map((line) => ({
+              role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
+              content: line.text,
             })),
             collected: collectedRef.current as Record<string, string>,
           },
@@ -161,7 +173,7 @@ export function MaryExperience() {
         collectedRef.current = turn.collected;
         await say(turn.say);
         if (turn.complete || turn.declined) {
-          const allDone = WAITLIST_FIELDS.every((f) => turn.collected[f]);
+          const allDone = WAITLIST_FIELDS.every((field) => turn.collected[field]);
           if (turn.complete && allDone) await finalize(turn.collected);
         }
       } catch {
@@ -172,7 +184,7 @@ export function MaryExperience() {
         inputRef.current?.focus();
       }
     },
-    [say, finalize],
+    [finalize, say],
   );
 
   const sendUser = useCallback(
@@ -197,8 +209,6 @@ export function MaryExperience() {
     await runTurn([]);
   }, [runTurn]);
 
-  /* ---------- microphone ---------- */
-
   const startInterim = useCallback(() => {
     const Ctor =
       (window as unknown as { SpeechRecognition?: new () => never }).SpeechRecognition ??
@@ -209,9 +219,8 @@ export function MaryExperience() {
         continuous: boolean;
         interimResults: boolean;
         lang: string;
-        onresult: (e: {
-          resultIndex: number;
-          results: { [k: number]: { 0: { transcript: string } }; length: number };
+        onresult: (event: {
+          results: { [key: number]: { 0: { transcript: string } }; length: number };
         }) => void;
         start: () => void;
         stop: () => void;
@@ -221,15 +230,13 @@ export function MaryExperience() {
       recognition.lang = "en-US";
       recognition.onresult = (event) => {
         let text = "";
-        for (let i = 0; i < event.results.length; i++) {
-          text += event.results[i]![0].transcript;
-        }
+        for (let i = 0; i < event.results.length; i++) text += event.results[i]![0].transcript;
         setInterim(text.trim());
       };
       recognition.start();
       recognitionRef.current = recognition;
     } catch {
-      /* interim captions unavailable */
+      // Interim captions are optional.
     }
   }, []);
 
@@ -243,8 +250,7 @@ export function MaryExperience() {
       const recorder = recorderRef.current;
       recorderRef.current = null;
       if (!recorder) return;
-      const blob = await recorder.stop();
-      const spoken = await transcribe(blob);
+      const spoken = await transcribe(await recorder.stop());
       setInterim("");
       if (spoken) await sendUser(spoken);
       else {
@@ -256,56 +262,44 @@ export function MaryExperience() {
 
     stopSpeaking();
     try {
-      const recorder = await startRecording(setLevel);
-      recorderRef.current = recorder;
+      recorderRef.current = await startRecording(setLevel);
       setRecording(true);
       setMicError(null);
       setOrbState("listening");
       startInterim();
     } catch {
-      setMicError("Microphone blocked — no problem, you can type to me instead.");
+      setMicError("Microphone access is off. You can keep the conversation going by typing.");
       inputRef.current?.focus();
     }
-  }, [recording, sendUser, say, startInterim, stopSpeaking]);
-
-  /* ---------- typing awareness ---------- */
+  }, [recording, say, sendUser, startInterim, stopSpeaking]);
 
   const onDraftChange = useCallback(
     (value: string) => {
       const wasEmpty = draft.length === 0;
       setDraft(value);
       lastActivityRef.current = Date.now();
-      if (
-        wasEmpty &&
-        value.length > 0 &&
-        !busyRef.current &&
-        typingSaidRef.current < TYPING_LINES.length &&
-        stage === "live"
-      ) {
+      if (wasEmpty && value && !busyRef.current && typingSaidRef.current < TYPING_LINES.length && stage === "live") {
         stopSpeaking();
-        const line = TYPING_LINES[typingSaidRef.current]!;
+        const line = TYPING_LINES[typingSaidRef.current];
         typingSaidRef.current += 1;
-        void say(line);
+        if (line) void say(line);
       }
     },
     [draft.length, say, stage, stopSpeaking],
   );
 
-  /* ---------- idle nudges ---------- */
-
   useEffect(() => {
     if (stage !== "live") return;
-    const timer = setInterval(() => {
+    const timer = window.setInterval(() => {
       if (busyRef.current || recording || draft.length > 0) return;
-      if (Date.now() - lastActivityRef.current < 22000) return;
-      if (nudgeRef.current >= IDLE_NUDGES.length) return;
+      if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length) return;
       lastActivityRef.current = Date.now();
-      const line = IDLE_NUDGES[nudgeRef.current]!;
+      const line = IDLE_NUDGES[nudgeRef.current];
       nudgeRef.current += 1;
-      void say(line);
+      if (line) void say(line);
     }, 4000);
-    return () => clearInterval(timer);
-  }, [stage, recording, draft.length, say]);
+    return () => window.clearInterval(timer);
+  }, [draft.length, recording, say, stage]);
 
   useEffect(() => {
     return () => {
@@ -319,35 +313,30 @@ export function MaryExperience() {
     if (stage === "live") inputRef.current?.focus();
   }, [stage]);
 
-  const lastMary = [...lines].reverse().find((l) => l.role === "mary");
-  const history = lines.filter((l) => l.id !== lastMary?.id).slice(-4);
+  const lastMary = [...lines].reverse().find((line) => line.role === "mary");
+  const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
+  const pulseScale = 1 + Math.min(0.12, level * 0.1);
 
   return (
-    <div className="relative min-h-screen overflow-hidden">
-      <AuroraBackground intensity={level} />
-
-      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-5xl flex-col px-5 py-8 sm:px-8">
-        <header className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="grid size-9 place-items-center rounded-xl border border-white/15 bg-white/5">
-              <span className="font-display text-sm font-semibold">O</span>
-            </div>
-            <div className="leading-tight">
-              <p className="font-display text-sm font-semibold tracking-tight">OmniSuite</p>
-              <p className="text-[11px] text-white/45">AI-Native Revenue Infrastructure</p>
-            </div>
-          </div>
+    <main className="relative min-h-dvh overflow-hidden">
+      <AuroraBackground />
+      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-[78rem] flex-col px-5 py-5 sm:px-8 sm:py-6">
+        <header className="flex h-12 items-center justify-between gap-4">
+          <BrandLockup compact />
           {stage === "live" && (
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => {
-                setMuted((m) => !m);
+                setMuted((current) => !current);
                 if (!muted) stopSpeaking();
               }}
-              className="flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3.5 py-2 text-xs text-white/70 transition-colors hover:bg-white/10"
+              aria-label={muted ? "Turn MARY's voice on" : "Turn MARY's voice off"}
+              className="rounded-full bg-card"
             >
-              {muted ? <VolumeX className="size-3.5" /> : <Volume2 className="size-3.5" />}
-              {muted ? "Voice off" : "Voice on"}
-            </button>
+              {muted ? <VolumeX /> : <Volume2 />}
+              <span className="hidden sm:inline">{muted ? "Voice off" : "Voice on"}</span>
+            </Button>
           )}
         </header>
 
@@ -355,210 +344,178 @@ export function MaryExperience() {
           {stage === "landing" && (
             <motion.section
               key="landing"
-              initial={{ opacity: 0, y: 24 }}
+              initial={reduced ? false : { opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -24, filter: "blur(8px)" }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              className="flex flex-1 flex-col items-center justify-center gap-10 py-10 text-center"
+              exit={{ opacity: 0, y: -12 }}
+              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              className="grid flex-1 items-center gap-10 py-10 lg:grid-cols-[1.08fr_0.92fr] lg:py-14"
             >
-              <motion.div
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                transition={{ delay: 0.1, type: "spring", stiffness: 120, damping: 18 }}
-              >
-                <MaryOrb state="idle" level={0.14} size={230} />
-              </motion.div>
-
-              <div className="max-w-2xl space-y-5">
-                <motion.span
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.25 }}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/12 bg-white/5 px-3.5 py-1.5 text-[11px] uppercase tracking-[0.22em] text-white/60"
-                >
-                  <Sparkle className="size-3" /> Early access · Launching soon
-                </motion.span>
-                <motion.h1
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.32, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-                  className="text-balance text-5xl font-semibold leading-[1.05] sm:text-6xl"
-                >
-                  <span className="text-gradient">Meet MARY.</span>
-                  <br />
-                  She'll add you to the waitlist herself.
-                </motion.h1>
-                <motion.p
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.42 }}
-                  className="mx-auto max-w-xl text-pretty text-base text-white/60"
-                >
-                  A live conversation with the AI Revenue Concierge behind OmniSuite. Talk to her or
-                  type — she'll take it from there.
-                </motion.p>
+              <div className="max-w-2xl">
+                <p className="eyebrow">Early access · MARY is ready</p>
+                <h1 className="mt-5 text-balance text-5xl font-semibold leading-[1.02] text-ink sm:text-6xl lg:text-7xl">
+                  Meet the concierge who works the revenue you already have.
+                </h1>
+                <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
+                  Speak or type with MARY. She’ll learn about your business and personally add you to the OmniSuite launch waitlist.
+                </p>
+                <div className="mt-8 flex flex-wrap items-center gap-4">
+                  <MotionButton
+                    onClick={begin}
+                    size="lg"
+                    whileHover={reduced ? undefined : { y: -2 }}
+                    whileTap={reduced ? undefined : { y: 1 }}
+                    className="h-12 rounded-full px-7 shadow-soft"
+                  >
+                    Talk to MARY <ArrowRight />
+                  </MotionButton>
+                  <span className="text-sm text-muted-foreground">Voice or text · switch anytime</span>
+                </div>
+                <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-5 text-sm text-muted-foreground">
+                  <span><strong className="text-ink">Convert</strong> fresh demand</span>
+                  <span><strong className="text-ink">Cultivate</strong> your database</span>
+                  <span><strong className="text-ink">Recover</strong> missed opportunities</span>
+                </div>
               </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.52 }}
-                className="flex flex-col items-center gap-3"
-              >
-                <motion.button
-                  onClick={begin}
-                  whileHover={{ scale: 1.03 }}
-                  whileTap={{ scale: 0.97 }}
-                  className="group relative overflow-hidden rounded-full px-9 py-4 text-sm font-semibold text-[oklch(0.14_0.024_266)]"
-                  style={{
-                    background:
-                      "linear-gradient(100deg, oklch(0.88 0.11 200), oklch(0.8 0.15 262))",
-                    boxShadow: "0 18px 60px -18px var(--primary)",
-                  }}
-                >
-                  <span className="relative z-10">Talk to MARY</span>
-                  <motion.span
-                    className="absolute inset-0 opacity-0 group-hover:opacity-100"
-                    style={{
-                      background:
-                        "linear-gradient(100deg, oklch(0.92 0.1 320), oklch(0.85 0.13 200))",
-                    }}
-                    transition={{ duration: 0.4 }}
-                  />
-                </motion.button>
-                <p className="text-xs text-white/40">
-                  Prefer to type? She'll notice and follow your lead.
-                </p>
-              </motion.div>
+              <div className="relative mx-auto w-full max-w-md">
+                <div className="absolute -inset-4 -z-10 rounded-[2rem] bg-primary/8" />
+                <div className="rounded-2xl border border-border bg-card p-6 shadow-lift sm:p-8">
+                  <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent-text">Live concierge</p>
+                      <p className="mt-1 text-xl font-semibold text-ink">MARY</p>
+                    </div>
+                    <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-accent-text">
+                      <span className="size-1.5 rounded-full bg-primary" /> Online
+                    </span>
+                  </div>
+                  <div className="flex justify-center py-7">
+                    <MaryOrb state="idle" level={0} size={190} />
+                  </div>
+                  <div className="rounded-xl bg-surface px-4 py-3 text-sm leading-relaxed text-muted-foreground">
+                    “I work new leads, existing databases and missed opportunities — then bring the right conversations to your team.”
+                  </div>
+                </div>
+              </div>
             </motion.section>
           )}
 
           {stage === "live" && (
             <motion.section
               key="live"
-              initial={{ opacity: 0, y: 24 }}
+              initial={reduced ? false : { opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -24, filter: "blur(8px)" }}
-              transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="flex flex-1 flex-col items-center justify-center gap-10 py-8"
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              className="grid flex-1 gap-4 py-5 lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-5 lg:py-7"
             >
-              <div className="flex flex-col items-center gap-6">
-                <MaryOrb state={orbState} level={level} size={190} />
-                <ProgressConstellation collected={collected} />
-              </div>
+              <aside className="hidden rounded-2xl border border-border bg-card p-5 shadow-soft lg:flex lg:flex-col">
+                <div className="flex flex-col items-center border-b border-border pb-5">
+                  <MaryOrb state={orbState} level={level} size={164} />
+                  <p className="mt-4 text-center text-sm text-muted-foreground">AI Revenue Concierge</p>
+                </div>
+                <div className="mt-5 flex-1">
+                  <ProgressConstellation collected={collected} />
+                </div>
+                <p className="mt-5 text-xs leading-relaxed text-muted-foreground">Your conversation stays intact when you switch between speaking and typing.</p>
+              </aside>
 
-              <div className="w-full max-w-2xl space-y-3">
-                <div className="space-y-2">
-                  <AnimatePresence initial={false}>
-                    {history.map((line, i) => (
-                      <motion.p
-                        key={line.id}
-                        layout
-                        initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-                        animate={{
-                          opacity: 0.16 + i * 0.12,
-                          y: 0,
-                          filter: "blur(0.4px)",
-                        }}
-                        exit={{ opacity: 0, y: -8 }}
-                        className={`text-sm ${
-                          line.role === "user" ? "text-right text-white" : "text-white/80"
-                        }`}
-                      >
-                        {line.text}
-                      </motion.p>
-                    ))}
-                  </AnimatePresence>
+              <div className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col rounded-2xl border border-border bg-card shadow-lift lg:min-h-0">
+                <div className="flex items-center gap-3 border-b border-border px-4 py-3 lg:hidden">
+                  <MaryOrb state={orbState} level={level} size={74} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">MARY</p>
+                    <p className="truncate text-xs text-muted-foreground">AI Revenue Concierge</p>
+                  </div>
+                  <span className="text-xs text-muted-foreground">{Object.keys(collected).length}/6</span>
                 </div>
 
-                <motion.div layout className="min-h-[5.5rem]">
-                  {lastMary && (
-                    <p className="text-balance text-xl leading-snug sm:text-2xl">
-                      {lastMary.text.split(/\s+/).map((word, i) => (
-                        <motion.span
-                          key={`${lastMary.id}-${i}`}
-                          initial={{ opacity: 0.12, y: 6 }}
-                          animate={i < reveal ? { opacity: 1, y: 0 } : { opacity: 0.16, y: 3 }}
-                          transition={{ duration: 0.28 }}
-                          className="mr-[0.3em] inline-block"
+                <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
+                  <div className="mx-auto w-full max-w-3xl space-y-3 overflow-y-auto">
+                    <AnimatePresence initial={false}>
+                      {history.map((line) => (
+                        <motion.div
+                          key={line.id}
+                          layout
+                          initial={{ opacity: 0, y: 8 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          exit={{ opacity: 0 }}
+                          className={line.role === "user" ? "flex justify-end" : "flex justify-start"}
                         >
-                          {word}
-                        </motion.span>
+                          <div className={`max-w-[88%] rounded-xl px-4 py-3 text-sm leading-relaxed ${line.role === "user" ? "rounded-br-sm bg-ink text-background" : "rounded-bl-sm bg-surface text-ink"}`}>
+                            {line.text}
+                          </div>
+                        </motion.div>
                       ))}
-                    </p>
-                  )}
-                  {interim && (
-                    <p className="mt-3 text-right text-sm italic text-white/45">{interim}</p>
-                  )}
-                </motion.div>
-              </div>
+                    </AnimatePresence>
 
-              <div className="w-full max-w-2xl space-y-3">
-                {micError && (
-                  <motion.p
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="text-center text-xs text-white/50"
-                  >
-                    {micError}
-                  </motion.p>
-                )}
-                <motion.div layout className="glass-panel flex items-end gap-2 rounded-3xl p-2.5">
-                  <motion.button
-                    onClick={toggleMic}
-                    whileTap={{ scale: 0.94 }}
-                    aria-label={recording ? "Stop and send" : "Talk to MARY"}
-                    className="relative grid size-11 shrink-0 place-items-center rounded-2xl text-[oklch(0.14_0.024_266)]"
-                    style={{
-                      background: recording
-                        ? "linear-gradient(120deg, oklch(0.8 0.17 22), oklch(0.85 0.14 40))"
-                        : "linear-gradient(120deg, oklch(0.88 0.11 200), oklch(0.8 0.15 262))",
-                    }}
-                  >
-                    {recording ? (
-                      <Square className="size-4 fill-current" />
-                    ) : (
-                      <Mic className="size-4" />
+                    {lastMary && (
+                      <div className="rounded-2xl rounded-bl-sm border border-primary/25 bg-primary/8 p-4 sm:p-5">
+                        <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">MARY</p>
+                        <p className="text-pretty text-lg leading-relaxed text-ink sm:text-xl">
+                          {lastMary.text.split(/\s+/).map((word, index) => (
+                            <motion.span
+                              key={`${lastMary.id}-${index}`}
+                              initial={false}
+                              animate={index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }}
+                              transition={{ duration: 0.22 }}
+                              className="mr-[0.28em] inline-block"
+                            >
+                              {word}
+                            </motion.span>
+                          ))}
+                        </p>
+                      </div>
                     )}
-                    {recording && (
-                      <motion.span
-                        className="absolute inset-0 rounded-2xl border-2 border-white/60"
-                        animate={{ scale: [1, 1.35], opacity: [0.7, 0] }}
-                        transition={{ duration: 1.2, repeat: Infinity }}
-                      />
-                    )}
-                  </motion.button>
+                    {interim && <p className="text-right text-sm italic text-muted-foreground">{interim}</p>}
+                  </div>
+                </div>
 
-                  <textarea
-                    ref={inputRef}
-                    value={draft}
-                    onChange={(e) => onDraftChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
-                        e.preventDefault();
-                        void sendUser(draft);
-                      }
-                    }}
-                    rows={1}
-                    placeholder={recording ? "Listening…" : "Speak, or type your answer here"}
-                    className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-white outline-none placeholder:text-white/35"
-                  />
-
-                  <motion.button
-                    onClick={() => void sendUser(draft)}
-                    disabled={!draft.trim()}
-                    whileTap={{ scale: 0.94 }}
-                    aria-label="Send"
-                    className="grid size-11 shrink-0 place-items-center rounded-2xl border border-white/12 bg-white/5 text-white/80 transition-colors hover:bg-white/10 disabled:opacity-35"
+                <div className="border-t border-border bg-surface/70 p-3 sm:p-4">
+                  {micError && <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>}
+                  <motion.div
+                    animate={reduced ? false : recording || orbState === "speaking" ? { scale: pulseScale, borderColor: "var(--primary)" } : { scale: [1, 1.004, 1] }}
+                    transition={recording || orbState === "speaking" ? { type: "spring", stiffness: 240, damping: 24 } : { duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+                    className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
                   >
-                    <Send className="size-4" />
-                  </motion.button>
-                </motion.div>
-                <p className="text-center text-[11px] text-white/35">
-                  {recording
-                    ? "Tap the square when you're done speaking."
-                    : "Tap the mic to speak — or just start typing, MARY will wait."}
-                </p>
+                    <MotionButton
+                      onClick={toggleMic}
+                      whileTap={reduced ? undefined : { scale: 0.94 }}
+                      aria-label={recording ? "Stop and send" : "Talk to MARY"}
+                      size="icon"
+                      className={`relative size-11 shrink-0 rounded-lg ${recording ? "bg-destructive text-destructive-foreground hover:bg-destructive/90" : ""}`}
+                    >
+                      {recording ? <Square className="fill-current" /> : <Mic />}
+                    </MotionButton>
+                    <textarea
+                      ref={inputRef}
+                      value={draft}
+                      onChange={(event) => onDraftChange(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.shiftKey) {
+                          event.preventDefault();
+                          void sendUser(draft);
+                        }
+                      }}
+                      rows={1}
+                      placeholder={recording ? "Listening…" : "Speak or type your answer"}
+                      className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
+                    />
+                    <Button
+                      onClick={() => void sendUser(draft)}
+                      disabled={!draft.trim()}
+                      size="icon"
+                      variant="ghost"
+                      aria-label="Send"
+                      className="size-11 shrink-0 rounded-lg"
+                    >
+                      <Send />
+                    </Button>
+                  </motion.div>
+                  <p className="mt-2 text-center text-[0.68rem] text-muted-foreground">
+                    {recording ? "Tap stop when you’re done." : "MARY listens, reads, and follows your lead."}
+                  </p>
+                </div>
               </div>
             </motion.section>
           )}
@@ -566,57 +523,56 @@ export function MaryExperience() {
           {stage === "done" && (
             <motion.section
               key="done"
-              initial={{ opacity: 0, scale: 0.94 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
-              className="flex flex-1 flex-col items-center justify-center gap-8 py-10 text-center"
+              initial={reduced ? false : { opacity: 0, y: 18 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              className="grid flex-1 items-center gap-8 py-10 lg:grid-cols-[0.8fr_1.2fr]"
             >
-              <MaryOrb state="success" level={0.3} size={200} />
-              <div className="space-y-3">
-                <h2 className="text-balance text-4xl font-semibold sm:text-5xl">
-                  <span className="text-gradient">You're on the waitlist.</span>
-                </h2>
-                <p className="mx-auto max-w-lg text-white/60">
-                  Thanks for signing up — we'll be in touch the moment OmniSuite launches.
+              <div className="text-center lg:text-left">
+                <div className="flex justify-center lg:justify-start">
+                  <MaryOrb state="success" level={0.3} size={190} />
+                </div>
+                <p className="eyebrow mt-7">Early access confirmed</p>
+                <h1 className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink">You’re on the waitlist.</h1>
+                <p className="mt-4 max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground">
+                  Thanks for signing up — we’ll be in touch as soon as OmniSuite launches, a product by Omnikom.
                 </p>
-                {result && result.position > 0 && (
-                  <p className="text-sm text-white/45">Early access position #{result.position}</p>
-                )}
+                {result && result.position > 0 && <p className="mt-5 font-semibold text-accent-text">Early access position #{result.position}</p>}
               </div>
 
-              <motion.div
-                initial={{ opacity: 0, y: 16 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
-                className="glass-panel w-full max-w-xl rounded-3xl p-6 text-left"
-              >
-                <dl className="grid gap-4 sm:grid-cols-2">
-                  {WAITLIST_FIELDS.map((field, i) => (
+              <div className="rounded-2xl border border-border bg-card p-6 shadow-lift sm:p-8">
+                <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Registration</p>
+                    <p className="mt-1 text-xl font-semibold text-ink">Details confirmed</p>
+                  </div>
+                  <span className="rounded-full bg-primary/12 px-3 py-1.5 text-xs font-semibold text-accent-text">Complete</span>
+                </div>
+                <dl className="mt-6 grid gap-5 sm:grid-cols-2">
+                  {WAITLIST_FIELDS.map((field, index) => (
                     <motion.div
                       key={field}
-                      initial={{ opacity: 0, y: 10 }}
+                      initial={reduced ? false : { opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.25 + i * 0.06 }}
+                      transition={{ delay: 0.12 + index * 0.05 }}
                       className={field === "operations" ? "sm:col-span-2" : ""}
                     >
-                      <dt className="text-[11px] uppercase tracking-[0.18em] text-white/40">
-                        {field}
-                      </dt>
-                      <dd className="mt-1 text-sm text-white/85">{collected[field] || "—"}</dd>
+                      <dt className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{FIELD_LABELS[field]}</dt>
+                      <dd className="mt-1 text-sm font-medium text-ink">{collected[field] || "—"}</dd>
                     </motion.div>
                   ))}
                 </dl>
-              </motion.div>
-              {result && <p className="text-[11px] text-white/30">{result.message}</p>}
+                {result && <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">{result.message}</p>}
+              </div>
             </motion.section>
           )}
         </AnimatePresence>
 
-        <footer className="pt-8 text-center text-[11px] text-white/25">
-          MARY works new leads, your existing database and missed opportunities across voice, SMS
-          and email.
+        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border py-4 text-[0.68rem] text-muted-foreground">
+          <span>OmniSuite · AI-native revenue infrastructure</span>
+          <span>A product by <span className="wordmark text-ink">omnikom</span></span>
         </footer>
       </div>
-    </div>
+    </main>
   );
 }
