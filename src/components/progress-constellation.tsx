@@ -15,10 +15,15 @@ export function ProgressConstellation({ collected }: { collected: Collected }) {
   const completed = WAITLIST_FIELDS.filter((field) => collected[field]).length;
 
   return (
-    <div className="w-full" aria-label={`${completed} of ${WAITLIST_FIELDS.length} details captured`}>
+    <div
+      className="w-full"
+      aria-label={`${completed} of ${WAITLIST_FIELDS.length} details captured`}
+    >
       <div className="mb-3 flex items-center justify-between text-xs">
         <span className="font-semibold text-ink">Your details</span>
-        <span className="text-muted-foreground">{completed}/{WAITLIST_FIELDS.length}</span>
+        <span className="text-muted-foreground">
+          {completed}/{WAITLIST_FIELDS.length}
+        </span>
       </div>
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-2">
         {WAITLIST_FIELDS.map((field, i) => {
@@ -35,12 +40,18 @@ export function ProgressConstellation({ collected }: { collected: Collected }) {
               title={value ?? undefined}
             >
               <div className="flex items-center gap-2">
-                <span className={`grid size-4 place-items-center rounded-full ${value ? "bg-primary text-primary-foreground" : "border border-border-strong"}`}>
+                <span
+                  className={`grid size-4 place-items-center rounded-full ${value ? "bg-primary text-primary-foreground" : "border border-border-strong"}`}
+                >
                   {value && <Check className="size-2.5" />}
                 </span>
-                <span className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{LABELS[field]}</span>
+                <span className="text-[0.68rem] font-semibold uppercase tracking-[0.1em] text-muted-foreground">
+                  {LABELS[field]}
+                </span>
               </div>
-              <p className="mt-1.5 truncate text-xs font-medium text-ink">{value || "Not captured"}</p>
+              <p className="mt-1.5 truncate text-xs font-medium text-ink">
+                {value || "Not captured"}
+              </p>
             </motion.div>
           );
         })}

@@ -183,8 +183,17 @@ export type Recorder = {
   cancel: () => void;
 };
 
-/** Captures mic PCM and returns a complete 16k mono WAV blob on stop. */
-export async function startRecording(onLevel?: (level: number) => void): Promise<Recorder> {
+export type RecordingOptions = {
+  onLevel?: (level: number) => void;
+  onSpeechStart?: () => void;
+  onSilence?: () => void;
+  onMaxDuration?: () => void;
+  silenceMs?: number;
+  maxDurationMs?: number;
+};
+
+/** Captures mic PCM, detects a completed utterance, and returns a 16k mono WAV blob. */
+export async function startRecording(options: RecordingOptions = {}): Promise<Recorder> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true },
   });
@@ -204,22 +213,64 @@ export async function startRecording(onLevel?: (level: number) => void): Promise
   processor.connect(ctx.destination);
 
   const data = new Uint8Array(analyser.frequencyBinCount);
+  const startedAt = performance.now();
+  const calibrationMs = 550;
+  const silenceMs = options.silenceMs ?? 1050;
+  const maxDurationMs = options.maxDurationMs ?? 45000;
+  let noiseFloor = 0.008;
+  let speechCandidateAt = 0;
+  let lastSpeechAt = 0;
+  let speechDetected = false;
+  let completionFired = false;
+  let active = true;
   let raf = 0;
   const tick = () => {
+    if (!active) return;
     analyser.getByteTimeDomainData(data);
     let peak = 0;
     for (let i = 0; i < data.length; i++) {
       const v = Math.abs(data[i]! - 128) / 128;
       if (v > peak) peak = v;
     }
-    onLevel?.(Math.min(1, peak * 1.8));
-    raf = requestAnimationFrame(tick);
+    const now = performance.now();
+    const elapsed = now - startedAt;
+    options.onLevel?.(Math.min(1, peak * 1.8));
+
+    if (elapsed < calibrationMs) {
+      noiseFloor = noiseFloor * 0.88 + peak * 0.12;
+    } else if (!completionFired) {
+      const threshold = Math.min(0.22, Math.max(0.025, noiseFloor * 2.8 + 0.008));
+      if (peak >= threshold) {
+        if (!speechCandidateAt) speechCandidateAt = now;
+        lastSpeechAt = now;
+        if (!speechDetected && now - speechCandidateAt >= 140) {
+          speechDetected = true;
+          options.onSpeechStart?.();
+        }
+      } else {
+        if (!speechDetected) {
+          speechCandidateAt = 0;
+          noiseFloor = noiseFloor * 0.985 + peak * 0.015;
+        } else if (now - lastSpeechAt >= silenceMs) {
+          completionFired = true;
+          options.onSilence?.();
+        }
+      }
+
+      if (elapsed >= maxDurationMs) {
+        completionFired = true;
+        options.onMaxDuration?.();
+      }
+    }
+    if (active) raf = requestAnimationFrame(tick);
   };
   raf = requestAnimationFrame(tick);
 
   const teardown = () => {
+    if (!active) return;
+    active = false;
     cancelAnimationFrame(raf);
-    onLevel?.(0);
+    options.onLevel?.(0);
     processor.onaudioprocess = null;
     try {
       processor.disconnect();
