@@ -631,7 +631,6 @@ export function MaryExperience() {
                           : "Tap the microphone once for hands-free conversation, or type anytime."}
                   </p>
                 </div>
-              </div>
             </motion.section>
           )}
 
