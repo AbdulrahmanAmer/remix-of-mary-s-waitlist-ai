@@ -16,7 +16,8 @@ import {
   type TurnFlags,
 } from "@/lib/mary.functions";
 import { streamMaryTurn } from "@/lib/mary-stream";
-import { submitWaitlist } from "@/lib/waitlist.functions";
+import { WaitlistVault } from "./waitlist-vault";
+import { loadProgress, saveProgress, sessionId } from "@/lib/waitlist-store";
 import {
   speak,
   startMicSession,
