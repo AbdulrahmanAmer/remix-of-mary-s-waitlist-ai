@@ -625,7 +625,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               key="landing"
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -14, filter: "blur(4px)" }}
+              exit={{ opacity: 0, y: -90, filter: "blur(12px)" }}
               transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-4 text-center"
             >
@@ -633,7 +633,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.05 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.05 }}
                   className="eyebrow"
                 >
                   Early access · MARY is ready
@@ -641,7 +641,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 <motion.h1
                   initial={reduced ? false : { opacity: 0, y: 14 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.12 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.12 }}
                   className={`text-balance font-semibold leading-[0.98] text-ink ${compact ? "mt-3 text-4xl sm:text-5xl" : "mt-5 text-5xl sm:text-6xl lg:text-7xl"}`}
                 >
                   Meet <span className="text-muted-foreground">MARY.</span>
@@ -649,7 +649,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 12 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.2 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.2 }}
                   className={`max-w-xl text-pretty leading-relaxed text-muted-foreground ${compact ? "mt-3 text-base" : "mt-5 text-lg sm:text-xl"}`}
                 >
                   Your AI Revenue Concierge. She works the revenue you already have and personally
@@ -658,7 +658,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 <motion.div
                   initial={reduced ? false : { opacity: 0, scale: 0.94 }}
                   animate={{ opacity: 1, scale: 1 }}
-                  transition={{ ...SPRING, delay: 0.24 }}
+                  transition={{ ...SPRING, delay: introDelay + 0.24 }}
                   className={compact ? "mt-1" : "mt-3"}
                 >
                   <MaryPresence state="idle" level={0} height={landingOrb} />
@@ -668,7 +668,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   size="lg"
                   initial={reduced ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  transition={{ ...SOFT, delay: 0.32 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.32 }}
                   whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
                   className={`surface-raised group h-13 rounded-full px-8 ${compact ? "mt-4" : "mt-7"}`}
@@ -681,7 +681,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 <motion.div
                   initial={reduced ? false : { opacity: 0 }}
                   animate={{ opacity: 1 }}
-                  transition={{ ...SOFT, delay: 0.4 }}
+                  transition={{ ...SOFT, delay: introDelay + 0.4 }}
                   className={`flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm ${compact ? "mt-5" : "mt-10"}`}
                 >
                   <span>
