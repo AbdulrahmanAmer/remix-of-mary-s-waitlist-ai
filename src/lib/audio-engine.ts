@@ -16,6 +16,7 @@
  * Every export must be called from an effect or event handler, never at import.
  */
 import {
+  NearFieldModel,
   VOICE_INTERRUPT,
   VOICE_KEEP,
   VOICE_ONSET,
