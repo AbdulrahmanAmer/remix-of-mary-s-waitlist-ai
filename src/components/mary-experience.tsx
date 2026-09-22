@@ -459,9 +459,9 @@ export function MaryExperience() {
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
 
   return (
-    <main className="relative min-h-dvh overflow-hidden">
+    <main className="relative h-dvh overflow-hidden">
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
-      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
+      <div className="relative z-10 mx-auto flex h-dvh min-h-0 w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
         <motion.header
           layout
           transition={SPRING}
