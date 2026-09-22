@@ -76,8 +76,8 @@ const SHELLS: Shell[] = [
 /** Soft-tube stroke passes: one wide bloom, one body, one bright core. */
 const PASSES = [
   { k: 2.8, a: 0.075 },
-  { k: 1.3, a: 0.22 },
-  { k: 0.4, a: 0.62 },
+  { k: 1.3, a: 0.3 },
+  { k: 0.4, a: 0.88 },
 ];
 
 /** Smooth, eased alpha falloff — many stops so wide glows never step. */
@@ -306,7 +306,7 @@ export const MaryPresence = memo(function MaryPresence({
         cy + R * 0.3,
         R * 1.05,
       );
-      for (const [p, a] of falloffStops((0.08 + lv * 0.12) * cur.glow))
+      for (const [p, a] of falloffStops((0.045 + lv * 0.1) * cur.glow))
         inner.addColorStop(p, withAlpha(primary, a));
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
@@ -346,7 +346,7 @@ export const MaryPresence = memo(function MaryPresence({
       if (noise) {
         const d = R * (cur.halo + 0.4);
         ctx.save();
-        ctx.globalAlpha = 0.022;
+        ctx.globalAlpha = 0.012;
         ctx.fillStyle = noise;
         ctx.fillRect(cx - d, cy - d, d * 2, d * 2.2);
         ctx.restore();
