@@ -906,6 +906,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                           className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/85 text-background" : "text-muted-foreground"}`}
                         >
                           {line.text}
+                          {line.interrupted && <span aria-label="cut off">…</span>}
                         </div>
                       </motion.div>
                     ))}
@@ -938,6 +939,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                             {word}
                           </motion.span>
                         ))}
+                        {lastMary.interrupted && (
+                          <span aria-label="cut off" className="text-muted-foreground">
+                            …
+                          </span>
+                        )}
                       </p>
                     </motion.div>
                   )}
@@ -1040,26 +1046,28 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 <div className="mt-2 text-center text-[0.68rem] text-muted-foreground">
                   <AnimatePresence mode="wait" initial={false}>
                     <motion.p
-                      key={
-                        listeningPhase === "hearing" || listeningPhase === "finishing"
-                          ? listeningPhase
-                          : micMuted
-                            ? "muted"
-                            : "live"
-                      }
+                      key={statusKey}
                       initial={reduced ? false : { opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0, y: -4 }}
                       transition={{ duration: 0.24, ease: EASE }}
                     >
-                      {listeningPhase === "hearing"
-                        ? "Keep speaking — MARY replies when you finish."
-                        : listeningPhase === "finishing"
-                          ? "Got it. MARY is preparing her reply."
-                          : micMuted
-                            ? "Your microphone is muted. Unmute to keep talking, or type."
-                            : "MARY is listening. Just talk — she answers when you pause."}
+                      {statusText}
                     </motion.p>
+                  </AnimatePresence>
+                  <AnimatePresence>
+                    {echoHint && micLive && (
+                      <motion.p
+                        initial={reduced ? false : { opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={SOFT}
+                        className="mt-1.5 inline-flex items-center gap-1.5 text-accent-text"
+                      >
+                        <Headphones className="size-3" aria-hidden="true" />
+                        On speakers? Headphones make cutting in smoother.
+                      </motion.p>
+                    )}
                   </AnimatePresence>
                 </div>
               </div>
