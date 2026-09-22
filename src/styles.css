@@ -142,7 +142,8 @@
 }
 
 @utility brand-focus {
-  background: radial-gradient(circle, oklch(0.79 0.175 118 / 12%), transparent 68%);
+  /* Neutral paper — the lime lives on MARY, not on the whole page. */
+  background: none;
 }
 
 @utility paper-vignette {
