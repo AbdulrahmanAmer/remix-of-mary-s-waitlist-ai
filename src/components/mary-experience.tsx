@@ -733,8 +733,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             (turn.lanesDone && /cultivate/i.test(heardText) && /recover/i.test(heardText)),
           // The intro counts once she actually got who she is and what
           // OmniSuite is out loud — a cut-off welcome resumes next turn.
-          introDone:
-            flagsRef.current.introDone || (turn.introDone && /omnisuite/i.test(heardText)),
+          introDone: flagsRef.current.introDone || (turn.introDone && /omnisuite/i.test(heardText)),
           // Carried forward so the next turn knows where the conversation stands.
           wrapAsked: flagsRef.current.wrapAsked || turn.wrapAsked,
           callback: flagsRef.current.callback || turn.callbackRequested,
