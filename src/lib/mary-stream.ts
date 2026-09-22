@@ -1,12 +1,10 @@
-import { WAITLIST_FIELDS, maryTurn, type Collected, type MaryTurn } from "./mary.functions";
+import { maryTurn, type Collected, type MaryTurn, type TurnFlags } from "./mary.functions";
 
-type RawTurn = {
-  say: string;
-  followUp: string | null;
-  nextField: MaryTurn["nextField"];
-  complete: boolean;
-  declined: boolean;
-} & Partial<Record<(typeof WAITLIST_FIELDS)[number], string | null>>;
+export type TurnRequest = {
+  messages: { role: "user" | "assistant"; content: string }[];
+  collected: Collected;
+  flags: TurnFlags;
+};
 
 /**
  * Runs a turn against the streaming endpoint. `onSay` fires the moment MARY's
@@ -14,25 +12,23 @@ type RawTurn = {
  * so her voice can start while the model is still thinking about the question.
  */
 export async function streamMaryTurn(
-  input: { messages: { role: "user" | "assistant"; content: string }[]; collected: Collected },
+  input: TurnRequest,
   onSay: (text: string) => void,
 ): Promise<MaryTurn> {
+  const body = {
+    messages: input.messages,
+    collected: input.collected as Record<string, string>,
+    flags: input.flags,
+  };
+
   const response = await fetch("/api/turn", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      messages: input.messages,
-      collected: input.collected as Record<string, string>,
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!response.ok || !response.body) {
-    return maryTurn({
-      data: {
-        messages: input.messages,
-        collected: input.collected as Record<string, string>,
-      },
-    });
+    return maryTurn({ data: body });
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader();
@@ -42,7 +38,7 @@ export async function streamMaryTurn(
 
   const handle = (line: string) => {
     if (!line.trim()) return;
-    let event: { type: string; text?: string; turn?: RawTurn };
+    let event: { type: string; text?: string; turn?: MaryTurn };
     try {
       event = JSON.parse(line);
     } catch {
@@ -51,20 +47,7 @@ export async function streamMaryTurn(
     if (event.type === "say" && event.text) {
       onSay(event.text);
     } else if (event.type === "turn" && event.turn) {
-      const out = event.turn;
-      const collected: Collected = { ...input.collected };
-      for (const field of WAITLIST_FIELDS) {
-        const value = out[field];
-        if (value && value.trim()) collected[field] = value.trim();
-      }
-      turn = {
-        say: out.say.trim(),
-        followUp: out.followUp?.trim() ? out.followUp.trim() : null,
-        collected,
-        nextField: out.nextField,
-        complete: out.complete,
-        declined: out.declined,
-      };
+      turn = event.turn;
     } else if (event.type === "error") {
       failed = true;
     }
@@ -92,9 +75,10 @@ export async function streamMaryTurn(
       nextField: "none",
       complete: false,
       declined: false,
+      revealed: input.flags.revealed,
+      lanesDone: input.flags.lanesDone,
+      rejected: [],
     };
   }
-  return maryTurn({
-    data: { messages: input.messages, collected: input.collected as Record<string, string> },
-  });
+  return maryTurn({ data: body });
 }

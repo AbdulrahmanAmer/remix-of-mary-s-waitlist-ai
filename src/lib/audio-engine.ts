@@ -274,6 +274,8 @@ export function speak(
     resolveDone();
   };
 
+  let pendingFinish = false;
+
   const tick = () => {
     if (stopped) return;
     raf = requestAnimationFrame(tick);
@@ -300,17 +302,12 @@ export function speak(
       }
     }
 
-    if (streamDone && !paused && cursor >= total && active.length === 0) {
+    if (!pendingFinish && streamDone && !paused && cursor >= total && active.length === 0) {
       // Let the last buffer clear the output device before calling it done.
-      window.setTimeout(finish, Math.min(400, monitor.outputLatencyMs + 40));
-      stopped = true;
-      stopped = false;
-      cancelAnimationFrame(raf);
-      raf = 0;
       pendingFinish = true;
+      window.setTimeout(finish, Math.min(400, monitor.outputLatencyMs + 40));
     }
   };
-  let pendingFinish = false;
 
   const pause = () => {
     if (paused || stopped || pendingFinish) return;

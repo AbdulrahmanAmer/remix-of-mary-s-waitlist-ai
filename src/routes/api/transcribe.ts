@@ -14,7 +14,8 @@ export const Route = createFileRoute("/api/transcribe")({
         if (!(file instanceof File)) {
           return new Response("Missing audio file", { status: 400 });
         }
-        if (file.size < 2048) {
+        // 16 kHz mono 16-bit: anything under ~0.35 s cannot hold a word.
+        if (file.size < 44 + 16000 * 2 * 0.35) {
           return Response.json({ text: "" });
         }
         if (file.size > MAX_BYTES) {
@@ -23,6 +24,11 @@ export const Route = createFileRoute("/api/transcribe")({
 
         const upstream = new FormData();
         upstream.append("model", "google/gemini-3.5-transcribe");
+        upstream.append("language", "en");
+        upstream.append(
+          "prompt",
+          "A person speaking to a concierge on a live call. If there is no clear speech, return nothing.",
+        );
         upstream.append("file", file, "recording.wav");
 
         const response = await fetch("https://ai.gateway.lovable.dev/v1/audio/transcriptions", {

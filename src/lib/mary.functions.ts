@@ -16,6 +16,9 @@ export type WaitlistField = (typeof WAITLIST_FIELDS)[number];
 
 export type Collected = Partial<Record<WaitlistField, string>>;
 
+/** What MARY has actually finished saying — beats she was cut off in don't count. */
+export type TurnFlags = { revealed: boolean; lanesDone: boolean };
+
 export type MaryTurn = {
   say: string;
   followUp: string | null;
@@ -23,7 +26,21 @@ export type MaryTurn = {
   nextField: WaitlistField | "none";
   complete: boolean;
   declined: boolean;
+  revealed: boolean;
+  lanesDone: boolean;
+  /** Fields the model proposed without the person's words to back them. */
+  rejected: string[];
 };
+
+export const TurnInput = z.object({
+  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
+  collected: z.record(z.string(), z.string()).default({}),
+  flags: z
+    .object({ revealed: z.boolean(), lanesDone: z.boolean() })
+    .default({ revealed: false, lanesDone: false }),
+});
+
+export type TurnInputData = z.infer<typeof TurnInput>;
 
 /**
  * Non-streaming fallback. The live conversation uses /api/turn, which streams
@@ -31,26 +48,20 @@ export type MaryTurn = {
  * environments where streaming is unavailable.
  */
 export const maryTurn = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) =>
-    z
-      .object({
-        messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
-        collected: z.record(z.string(), z.string()).default({}),
-      })
-      .parse(input),
-  )
+  .inputValidator((input: unknown) => TurnInput.parse(input))
   .handler(async ({ data }): Promise<MaryTurn> => {
     const key = process.env["LOVABLE_API_KEY"];
     if (!key) throw new Error("Missing LOVABLE_API_KEY");
 
-    const { SYSTEM, TurnSchema, buildPrompt, gatewayConfig } = await import("./mary-prompt.server");
+    const { SYSTEM, TurnSchema, buildPrompt, finishTurn, gatewayConfig } =
+      await import("./mary-prompt.server");
     const lovable = createOpenAI(gatewayConfig(key));
 
     try {
       const result = streamText({
         model: lovable.responses("openai/gpt-6-astra"),
         system: SYSTEM,
-        prompt: buildPrompt(data.messages, data.collected),
+        prompt: buildPrompt(data.messages, data.collected, data.flags),
         output: Output.object({ schema: TurnSchema }),
         providerOptions: {
           openai: { forceReasoning: true, reasoningEffort: "low", store: false },
@@ -58,20 +69,7 @@ export const maryTurn = createServerFn({ method: "POST" })
       });
 
       const out = await result.output;
-      const collected: Collected = { ...(data.collected as Collected) };
-      for (const field of WAITLIST_FIELDS) {
-        const value = out[field];
-        if (value && value.trim()) collected[field] = value.trim();
-      }
-
-      return {
-        say: out.say.trim(),
-        followUp: out.followUp?.trim() ? out.followUp.trim() : null,
-        collected,
-        nextField: out.nextField,
-        complete: out.complete,
-        declined: out.declined,
-      };
+      return finishTurn(out, data);
     } catch (error) {
       if (NoObjectGeneratedError.isInstance(error)) {
         return {
@@ -81,6 +79,9 @@ export const maryTurn = createServerFn({ method: "POST" })
           nextField: "none",
           complete: false,
           declined: false,
+          revealed: data.flags.revealed,
+          lanesDone: data.flags.lanesDone,
+          rejected: [],
         };
       }
       throw error;
