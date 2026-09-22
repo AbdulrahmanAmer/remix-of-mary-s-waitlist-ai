@@ -388,14 +388,22 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       if (!mark) return;
       const r = mark.getBoundingClientRect();
       // Cap the growth at the mark's native width so it stays razor sharp.
-      const grown = Math.min(r.width * 2.7, Math.min(320, window.innerWidth * 0.62));
+      const grown = Math.min(r.width * 3.1, Math.min(380, window.innerWidth * 0.7));
       const grownH = (grown / r.width) * r.height;
+      // Resting place: the header's left edge, at the compact mark height.
+      const header = headerRef.current?.getBoundingClientRect();
+      const restW = r.width * (28 / r.height);
       setFlight({
         from: { x: r.left, y: r.top, w: r.width },
         mid: {
           x: window.innerWidth / 2 - grown / 2,
           y: window.innerHeight / 2 - grownH / 2,
           w: grown,
+        },
+        to: {
+          x: header?.left ?? r.left,
+          y: (header?.top ?? r.top) + Math.max(0, ((header?.height ?? 48) - 28) / 2),
+          w: restW,
         },
       });
     }, 420);
