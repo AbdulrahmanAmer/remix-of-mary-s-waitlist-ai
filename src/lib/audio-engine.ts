@@ -914,12 +914,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     const speaking = assistantActive();
     if (speaking && !recognitionQuarantined) quarantineRecognition();
-    if (
-      !speaking &&
-      recognitionQuarantined &&
-      now >= recognitionReopenAt &&
-      !withinTail()
-    ) {
+    if (!speaking && recognitionQuarantined && now >= recognitionReopenAt && !withinTail()) {
       reopenRecognition();
     }
     const baseThreshold = Math.min(0.3, Math.max(0.02, noiseFloor * 2.8 + 0.008));
