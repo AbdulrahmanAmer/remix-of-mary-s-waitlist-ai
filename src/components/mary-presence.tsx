@@ -79,7 +79,8 @@ export const MaryPresence = memo(function MaryPresence({
 
     const styles = getComputedStyle(canvas);
     const primary = styles.getPropertyValue("--primary") || "oklch(0.79 0.175 118)";
-    const ink = styles.getPropertyValue("--ink") || "oklch(0.15 0.01 110)";
+    const accent =
+      styles.getPropertyValue("--secondary") || styles.getPropertyValue("--ink") || primary;
 
     let width = 0;
     let boxHeight = 0;
@@ -109,35 +110,78 @@ export const MaryPresence = memo(function MaryPresence({
 
     const lerp = (a: number, b: number, k: number) => a + (b - a) * k;
 
-    /** Radius modulation at angle `a` — layered harmonics plus the audio term. */
-    const shape = (a: number, breath: number) => {
-      const w = cur.wobble + lv * 0.22;
-      const n =
-        Math.sin(a * 2 + t * 0.7) * 0.55 +
-        Math.sin(a * 3 - t * 0.53 + 1.7) * 0.32 +
-        Math.sin(a * 5 + t * 0.91 + 3.1) * 0.18 +
-        Math.sin(a * 7 - t * 1.23 + 0.6) * 0.1;
-      const ripple = Math.sin(a * 4 - t * 3.4) * lv * 0.16;
-      return breath * (1 + n * w + ripple);
-    };
+    /** Ribbons of light swirling around the sphere: near-frontal, slowly rolling arcs. */
+    const RINGS = [
+      { r: 1.0, tilt: 0.45, roll: 0.1, speed: 0.22, weight: 3.2, accent: false },
+      { r: 0.93, tilt: -0.62, roll: 1.2, speed: -0.17, weight: 2.6, accent: false },
+      { r: 0.98, tilt: 0.78, roll: 2.4, speed: 0.13, weight: 2.2, accent: false },
+      { r: 0.86, tilt: -0.4, roll: 3.6, speed: -0.29, weight: 1.8, accent: true },
+      { r: 0.8, tilt: 0.6, roll: 5.0, speed: 0.34, weight: 1.5, accent: false },
+    ];
 
-    const traceBlob = (cx: number, cy: number, radius: number, breath: number) => {
-      const pts: Array<[number, number]> = [];
-      for (let i = 0; i < POINTS; i++) {
-        const a = (i / POINTS) * Math.PI * 2;
-        const r = radius * shape(a, breath);
-        pts.push([cx + Math.cos(a) * r, cy + Math.sin(a) * r]);
+    const SPARKS = Array.from({ length: 16 }, (_, i) => {
+      const a = i * 2.399;
+      const d = 0.18 + ((i * 37) % 60) / 100;
+      return { x: Math.cos(a) * d, y: Math.sin(a) * d * 0.9 + 0.12, p: i * 1.7 };
+    });
+
+    const SEGMENTS = 72;
+
+    const drawRing = (
+      cx: number,
+      cy: number,
+      radius: number,
+      ring: (typeof RINGS)[number],
+      roll: number,
+      color: string,
+    ) => {
+      const st = Math.sin(ring.tilt);
+      const ct = Math.cos(ring.tilt);
+      const sr = Math.sin(roll);
+      const cr = Math.cos(roll);
+      const ox = Math.cos(roll * 0.7) * radius * 0.05;
+      const oy = Math.sin(roll * 0.7) * radius * 0.05;
+
+      let prevX = 0;
+      let prevY = 0;
+      let prevD = 0;
+
+      for (let i = 0; i <= SEGMENTS; i++) {
+        const u = (i / SEGMENTS) * Math.PI * 2;
+        const wob = 1 + Math.sin(u * 3 + t * 2.2 + ring.roll) * (0.02 + lv * 0.08);
+        const rr = radius * ring.r * wob * (1 + lv * 0.07);
+        // A circle tilted away from the viewer, then rolled in the picture plane.
+        const x0 = Math.cos(u) * rr;
+        const y0 = Math.sin(u) * rr * ct;
+        const z0 = Math.sin(u) * rr * st;
+        const px = cx + ox + (x0 * cr - y0 * sr);
+        const py = cy + oy + (x0 * sr + y0 * cr);
+        const depth = z0 / Math.max(1, rr); // -1 back .. 1 front
+
+        if (i > 0) {
+          const front = ((prevD + depth) / 2 + 1) / 2;
+          const a = Math.min(1, (0.1 + front * front * 0.95) * cur.glow * (0.8 + lv * 0.4));
+          const w = ring.weight * (0.45 + front * 0.9) * (radius / 70);
+          ctx.lineCap = "round";
+          // soft bloom pass
+          ctx.strokeStyle = withAlpha(color, a * 0.2);
+          ctx.lineWidth = w * 3.6;
+          ctx.beginPath();
+          ctx.moveTo(prevX, prevY);
+          ctx.lineTo(px, py);
+          ctx.stroke();
+          // bright core pass
+          ctx.strokeStyle = withAlpha(color, a);
+          ctx.lineWidth = w;
+          ctx.beginPath();
+          ctx.moveTo(prevX, prevY);
+          ctx.lineTo(px, py);
+          ctx.stroke();
+        }
+        prevX = px;
+        prevY = py;
+        prevD = depth;
       }
-      ctx.beginPath();
-      const first = pts[0]!;
-      const lastPt = pts[POINTS - 1]!;
-      ctx.moveTo((lastPt[0] + first[0]) / 2, (lastPt[1] + first[1]) / 2);
-      for (let i = 0; i < POINTS; i++) {
-        const p = pts[i]!;
-        const q = pts[(i + 1) % POINTS]!;
-        ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
-      }
-      ctx.closePath();
     };
 
     const draw = (animated: boolean) => {
@@ -147,81 +191,64 @@ export const MaryPresence = memo(function MaryPresence({
       const radius = Math.min(boxHeight * 0.34, width * 0.22);
       if (radius <= 0) return;
 
-      const breath = animated ? 1 + Math.sin(t * 1.1) * 0.03 + lv * 0.07 + bloom * 0.09 : 1;
+      const breath = animated ? 1 + Math.sin(t * 1.1) * 0.025 + lv * 0.06 + bloom * 0.08 : 1;
+      const R = radius * breath;
 
-      // Halo.
-      const haloR = radius * (cur.halo + lv * 0.5 + bloom * 0.6);
-      const halo = ctx.createRadialGradient(cx, cy, radius * 0.5, cx, cy, haloR);
-      halo.addColorStop(0, withAlpha(primary, 0.3 + lv * 0.2));
-      halo.addColorStop(0.55, withAlpha(primary, 0.08 + lv * 0.06));
+      // Outer halo.
+      const haloR = R * (cur.halo + lv * 0.5 + bloom * 0.6);
+      const halo = ctx.createRadialGradient(cx, cy, R * 0.45, cx, cy, haloR);
+      halo.addColorStop(0, withAlpha(primary, 0.22 + lv * 0.16));
+      halo.addColorStop(0.5, withAlpha(primary, 0.07 + lv * 0.05));
       halo.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = halo;
       ctx.beginPath();
       ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
       ctx.fill();
 
-      // Liquid body.
+      // Interior: hollow at the top, light pooling toward the bottom.
       ctx.save();
-      traceBlob(cx, cy, radius, breath);
+      ctx.beginPath();
+      ctx.arc(cx, cy, R * 0.99, 0, Math.PI * 2);
       ctx.clip();
-
-      const base = ctx.createRadialGradient(
-        cx - radius * 0.2,
-        cy - radius * 0.24,
-        radius * 0.05,
+      const pool = ctx.createRadialGradient(
         cx,
-        cy,
-        radius * 1.25,
+        cy + R * 0.45,
+        R * 0.05,
+        cx,
+        cy + R * 0.25,
+        R * 1.15,
       );
-      base.addColorStop(0, withAlpha(primary, 0.92 * cur.glow));
-      base.addColorStop(0.62, withAlpha(primary, 0.62 * cur.glow));
-      base.addColorStop(1, withAlpha(primary, 0.22));
-      ctx.fillStyle = base;
-      ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
+      pool.addColorStop(0, withAlpha(primary, (0.3 + lv * 0.26) * cur.glow));
+      pool.addColorStop(0.3, withAlpha(primary, 0.09 * cur.glow));
+      pool.addColorStop(0.75, withAlpha(primary, 0.02));
+      pool.addColorStop(1, withAlpha(primary, 0));
+      ctx.fillStyle = pool;
+      ctx.fillRect(cx - R * 1.2, cy - R * 1.2, R * 2.4, R * 2.4);
 
-      // Drifting inner blooms.
-      const blooms: Array<[number, number, number, number]> = [
-        [0.42, swirlPhase * 0.9, 0.72, 0.78],
-        [0.5, -swirlPhase * 0.62 + 2.2, 0.56, 0.6],
-        [0.3, swirlPhase * 1.4 + 4.1, 0.42, 0.48],
-      ];
-      for (const [dist, phase, size, strength] of blooms) {
-        const bx = cx + Math.cos(phase) * radius * dist;
-        const by = cy + Math.sin(phase * 0.8) * radius * dist * 0.8;
-        const g = ctx.createRadialGradient(bx, by, 0, bx, by, radius * size);
-        g.addColorStop(0, withAlpha(primary, strength * cur.glow * (0.8 + lv * 0.5)));
-        g.addColorStop(1, withAlpha(primary, 0));
-        ctx.fillStyle = g;
-        ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
+      // Drifting sparks suspended inside.
+      for (const s of SPARKS) {
+        const tw = 0.25 + 0.75 * Math.abs(Math.sin(t * 1.3 + s.p));
+        const sx = cx + s.x * R + Math.sin(t * 0.5 + s.p) * R * 0.03;
+        const sy = cy + s.y * R + Math.cos(t * 0.42 + s.p) * R * 0.03;
+        ctx.fillStyle = withAlpha(primary, tw * (0.28 + lv * 0.3));
+        ctx.beginPath();
+        ctx.arc(sx, sy, Math.max(0.6, R * 0.012), 0, Math.PI * 2);
+        ctx.fill();
       }
-
-      // Inner rim shading for depth.
-      const rim = ctx.createRadialGradient(cx, cy, radius * 0.55, cx, cy, radius * 1.02);
-      rim.addColorStop(0, withAlpha(primary, 0));
-      rim.addColorStop(1, withAlpha(ink, 0.22));
-      ctx.fillStyle = rim;
-      ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
-
-      // Specular highlight.
-      const hx = cx - radius * 0.3 + Math.cos(swirlPhase * 0.4) * radius * 0.08;
-      const hy = cy - radius * 0.36 + Math.sin(swirlPhase * 0.33) * radius * 0.06;
-      const spec = ctx.createRadialGradient(hx, hy, 0, hx, hy, radius * 0.52);
-      spec.addColorStop(0, "rgb(255 255 255 / 0.55)");
-      spec.addColorStop(1, "rgb(255 255 255 / 0)");
-      ctx.fillStyle = spec;
-      ctx.fillRect(cx - radius * 2, cy - radius * 2, radius * 4, radius * 4);
       ctx.restore();
 
-      // Surface edge.
-      traceBlob(cx, cy, radius, breath);
-      ctx.strokeStyle = withAlpha(primary, 0.6 + lv * 0.3);
-      ctx.lineWidth = 1.2;
-      ctx.stroke();
+      // Ribbons of light.
+      RINGS.forEach((ring) => {
+        const roll = ring.roll + swirlPhase * ring.speed;
+        drawRing(cx, cy, R, ring, roll, ring.accent ? accent : primary);
+      });
 
+      // Completion bloom.
       if (bloom > 0.01) {
-        traceBlob(cx, cy, radius * (1 + (1 - bloom) * 0.9), breath);
-        ctx.strokeStyle = withAlpha(primary, bloom * 0.5);
+        ctx.strokeStyle = withAlpha(primary, bloom * 0.45);
         ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, R * (1 + (1 - bloom) * 0.9), 0, Math.PI * 2);
         ctx.stroke();
       }
     };
