@@ -547,9 +547,14 @@ export function speak(
     cancelled: boolean;
   };
   const active: Piece[] = [];
-  const LOOKAHEAD = 0.4;
+  // Runway kept ahead of the speaker. Generous, so a slow moment on the
+  // network or a long drawing frame is absorbed instead of heard.
+  const LOOKAHEAD = 1.2;
   const SLICE = Math.round(RATE * 0.2);
   const MIN_SLICE = Math.round(RATE * 0.06);
+  // Collected before the very first sample is scheduled; small enough not to
+  // feel laggy, long enough to survive a hiccup right after the first bytes.
+  const PREBUFFER = Math.round(RATE * 0.25);
   let completed = 0;
   let cursor = 0;
   let scheduledEnd = 0;
@@ -559,6 +564,7 @@ export function speak(
   let progress = 0;
   let frozenFraction: number | null = null;
   let raf = 0;
+  let pump = 0;
   let resolveDone: () => void = () => {};
   const done = new Promise<void>((resolve) => {
     resolveDone = resolve;
@@ -578,8 +584,19 @@ export function speak(
 
   const schedule = () => {
     if (paused || stopped) return;
+    // Wait for the head start before the first word leaves; after that, play
+    // whatever has arrived.
+    if (!firstAudioFired && total < PREBUFFER && !streamDone) return;
     const now = ctx.currentTime;
-    if (scheduledEnd < now + 0.01) scheduledEnd = now + 0.04;
+    // A discontinuity: either the very first piece, or the speaker ran dry
+    // while waiting on the network. Resume from where the clock actually is
+    // and fade the joint in, so the seam is inaudible rather than a click.
+    let discontinuity = false;
+    if (scheduledEnd < now + 0.01) {
+      if (firstAudioFired) trace({ type: "speak-underrun" });
+      scheduledEnd = now + 0.04;
+      discontinuity = true;
+    }
     while (scheduledEnd - now < LOOKAHEAD && cursor < total) {
       const remaining = total - cursor;
       if (remaining < MIN_SLICE && !streamDone) break;
@@ -588,7 +605,18 @@ export function speak(
       buffer.copyToChannel(pcm.slice(cursor, cursor + take), 0);
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(gain);
+      if (discontinuity) {
+        // 5ms fade-in on the seam only; mid-stream pieces are sample-contiguous
+        // and must pass through untouched.
+        const joint = ctx.createGain();
+        joint.gain.setValueAtTime(0, scheduledEnd);
+        joint.gain.linearRampToValueAtTime(1, scheduledEnd + 0.005);
+        source.connect(joint);
+        joint.connect(gain);
+        discontinuity = false;
+      } else {
+        source.connect(gain);
+      }
       const piece: Piece = { source, startAt: scheduledEnd, length: take, cancelled: false };
       source.onended = () => {
         const index = active.indexOf(piece);
@@ -605,6 +633,17 @@ export function speak(
       }
     }
   };
+
+  // Her voice is fed out on its own clock. Nothing on screen — a heavy frame,
+  // a resize, a backgrounded tab — can starve the speaker.
+  pump = window.setInterval(() => {
+    if (stopped) {
+      window.clearInterval(pump);
+      return;
+    }
+    schedule();
+  }, 50);
+
 
   const finish = () => {
     if (stopped) return;
