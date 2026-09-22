@@ -9,6 +9,7 @@ import { ProgressConstellation } from "./progress-constellation";
 import { Button } from "@/components/ui/button";
 import lockupAsset from "@/assets/omnisuite-lockup.png.asset.json";
 import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
+import { streamMaryTurn } from "@/lib/mary-stream";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
   speak,
