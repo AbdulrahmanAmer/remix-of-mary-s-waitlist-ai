@@ -237,9 +237,9 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.restore();
 
       // Ribbons of light.
-      RINGS.forEach((ring, i) => {
-        const phase = swirlPhase * ring.speed + i * 0.9;
-        drawRing(cx, cy, R, ring, phase, ring.accent ? accent : primary);
+      RINGS.forEach((ring) => {
+        const roll = ring.roll + swirlPhase * ring.speed;
+        drawRing(cx, cy, R, ring, roll, ring.accent ? accent : primary);
       });
 
       // Completion bloom.
