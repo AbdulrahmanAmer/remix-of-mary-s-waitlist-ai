@@ -69,7 +69,7 @@ type Shell = {
 const SHELLS: Shell[] = [
   { r: 1.0, w: 0.085, speed: 0.55, phase: 0.0, squash: 0.995, accent: false, alpha: 1.0 },
   { r: 0.955, w: 0.062, speed: -0.38, phase: 2.1, squash: 0.97, accent: false, alpha: 0.85 },
-  { r: 1.025, w: 0.045, speed: 0.78, phase: 4.3, squash: 1.012, accent: true, alpha: 0.55 },
+  { r: 1.008, w: 0.05, speed: 0.78, phase: 4.3, squash: 1.006, accent: true, alpha: 0.3 },
   { r: 0.915, w: 0.032, speed: -0.95, phase: 5.6, squash: 0.95, accent: false, alpha: 0.7 },
 ];
 
