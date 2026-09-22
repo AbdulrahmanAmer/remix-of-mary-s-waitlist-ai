@@ -116,31 +116,27 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const [collected, setCollected] = useState<Collected>({});
   const [presence, setPresenceState] = useState<PresenceState>("idle");
   const [level, setLevel] = useState(0);
-  const [reveal, setReveal] = useState(0);
+  const [reveal, setReveal] = useState<{ id: string; count: number }>({ id: "", count: 0 });
   const [interim, setInterim] = useState("");
   const [draft, setDraft] = useState("");
-  const [recording, setRecording] = useState(false);
-  const [handsFree, setHandsFree] = useState(false);
+  const [micMuted, setMicMuted] = useState(false);
+  const [micLive, setMicLive] = useState(false);
   const [listeningPhase, setListeningPhase] = useState<ListeningPhase>("idle");
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [result, setResult] = useState<{ position: number; message: string } | null>(null);
 
   const speakRef = useRef<SpeakHandle | null>(null);
-  const recorderRef = useRef<Recorder | null>(null);
-  const recognitionRef = useRef<{ stop: () => void } | null>(null);
-  const interimRef = useRef("");
+  const sessionRef = useRef<MicSession | null>(null);
   const typingSaidRef = useRef(0);
   const nudgeRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
   const busyRef = useRef(false);
   const interruptRef = useRef(false);
-  const handsFreeRef = useRef(false);
-  const completingRef = useRef(false);
+  const micMutedRef = useRef(false);
   const sessionFinishedRef = useRef(false);
-  const startListeningRef = useRef<() => Promise<void>>(async () => {});
-  const armBargeInRef = useRef<() => Promise<void>>(async () => {});
-  const finishListeningRef = useRef<() => Promise<void>>(async () => {});
+  const pendingRef = useRef<string[]>([]);
+  const drainRef = useRef<() => void>(() => {});
   const mutedRef = useRef(false);
   const collectedRef = useRef<Collected>({});
   const linesRef = useRef<Line[]>([]);
@@ -150,22 +146,20 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     mutedRef.current = muted;
   }, [muted]);
   useEffect(() => {
+    micMutedRef.current = micMuted;
+  }, [micMuted]);
+  useEffect(() => {
     collectedRef.current = collected;
   }, [collected]);
   useEffect(() => {
     linesRef.current = lines;
   }, [lines]);
 
-  const setHandsFreeMode = useCallback((active: boolean) => {
-    handsFreeRef.current = active;
-    setHandsFree(active);
-    if (!active) setListeningPhase("paused");
-  }, []);
-
   const stopSpeaking = useCallback(() => {
     speakRef.current?.stop();
     speakRef.current = null;
   }, []);
+
 
   const say = useCallback(
     (text: string, opts: { record?: boolean } = { record: true }) => {
