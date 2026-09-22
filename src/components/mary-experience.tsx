@@ -933,9 +933,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         setMicLive(true);
         setMicError(null);
         setListeningPhase(micMutedRef.current ? "paused" : "listening");
-      } catch {
+      } catch (error) {
+        if (cancelled) return;
         setMicLive(false);
-        setMicError("Microphone access is off. You can keep the conversation going by typing.");
+        setMicError(micMessage(error));
+        setListeningPhase("paused");
         inputRef.current?.focus();
       }
     })();
