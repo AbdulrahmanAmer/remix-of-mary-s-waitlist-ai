@@ -1640,13 +1640,24 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     const threshold = withinTail() ? echoThreshold : baseThreshold;
 
-    if (peak >= threshold && stillVoiced) {
+    if (peak >= threshold && stillVoiced && nearHere) {
       lastSpeechAt = now;
-      // A frame that really sounds like a person. Steady noise never gets here,
-      // so it can neither open a turn nor hold one open.
-      if (voiced) lastRealSpeechAt = now;
+      // A frame that really sounds like the person on the microphone. Steady
+      // noise and voices across the room never get here, so neither can open a
+      // turn nor hold one open.
+      if (voiced) {
+        lastRealSpeechAt = now;
+        nearFrames += 1;
+      }
       cleanPeak = Math.max(cleanPeak, peak);
-      if (scoreLoud(voiced) >= TIMINGS.onsetFrames && !capturing) {
+      // A run of near-field voice that has also held together for a moment:
+      // scattered fragments from around the room never manage both.
+      if (
+        scoreLoud(voiced) >= TIMINGS.onsetFrames &&
+        speechCandidateAt &&
+        now - speechCandidateAt >= TIMINGS.onsetHoldMs &&
+        !capturing
+      ) {
         startCapture(now, false);
         cleanPeak = peak;
         options.onSpeechStart?.();
