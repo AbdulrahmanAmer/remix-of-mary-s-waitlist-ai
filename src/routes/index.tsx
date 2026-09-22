@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ClientOnly } from "@tanstack/react-router";
 import { MaryExperience } from "@/components/mary-experience";
-import { AuroraBackground } from "@/components/aurora-background";
+import { MaryBoot } from "@/components/mary-boot";
 
 const title = "Join the OmniSuite Waitlist — Talk to MARY by Omnikom";
 const description =
@@ -23,18 +23,7 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <ClientOnly
-      fallback={
-        <div className="relative h-dvh overflow-hidden">
-          <AuroraBackground />
-          <div className="relative z-10 grid h-dvh place-items-center">
-            <p className="text-sm font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-              Waking MARY
-            </p>
-          </div>
-        </div>
-      }
-    >
+    <ClientOnly fallback={<MaryBoot />}>
       <MaryExperience />
     </ClientOnly>
   );
