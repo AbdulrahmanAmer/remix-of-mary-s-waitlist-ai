@@ -4,7 +4,7 @@ import { ArrowRight, Mic, Send, Square, Volume2, VolumeX } from "lucide-react";
 
 import { AuroraBackground } from "./aurora-background";
 import { BrandLockup } from "./brand-lockup";
-import { MaryOrb, type OrbState } from "./mary-orb";
+import { MaryPresence, PRESENCE_LABEL, type PresenceState } from "./mary-presence";
 import { ProgressConstellation } from "./progress-constellation";
 import { Button } from "@/components/ui/button";
 import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
