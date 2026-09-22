@@ -264,9 +264,9 @@ export function MaryExperience() {
           nextLines
             .filter((line) => line.role === "user")
             .at(-1)
-            ?.text.split(/\s+/).filter(Boolean).length ?? 0;
-        const beat =
-          420 + Math.min(650, lastUserWords * 45) + Math.floor(Math.random() * 260);
+            ?.text.split(/\s+/)
+            .filter(Boolean).length ?? 0;
+        const beat = 420 + Math.min(650, lastUserWords * 45) + Math.floor(Math.random() * 260);
         await new Promise<void>((resolve) => window.setTimeout(resolve, beat));
 
         await say(turn.say);
