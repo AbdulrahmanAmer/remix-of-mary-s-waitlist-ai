@@ -961,12 +961,18 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           onInterruptConfirmed: () => {
             pendingInterruptRef.current = false;
             holdRef.current = true;
+            holdSinceRef.current = Date.now();
           },
           // Her own voice in the room, or a passing noise: she carries on.
-          onInterruptCancelled: () => {
+          // `heldFirst` means she had already gone quiet for it and nothing
+          // usable came of it — that hold has to be lifted here, or she waits
+          // for a sentence that will never arrive.
+          onInterruptCancelled: (heldFirst) => {
             pendingInterruptRef.current = false;
             falseInterruptsRef.current += 1;
-            if (!holdRef.current) {
+            if (heldFirst) {
+              releaseHold();
+            } else if (!holdRef.current) {
               const handle = speakRef.current;
               if (handle?.isPaused()) handle.resume();
               setPresenceState(handle ? "speaking" : "idle");
