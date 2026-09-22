@@ -51,7 +51,7 @@ export function MaryExperience() {
   const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
   const [collected, setCollected] = useState<Collected>({});
-  const [orbState, setOrbState] = useState<OrbState>("idle");
+  const [orbState, setPresenceState] = useState<PresenceState>("idle");
   const [level, setLevel] = useState(0);
   const [reveal, setReveal] = useState(0);
   const [interim, setInterim] = useState("");
@@ -118,25 +118,25 @@ export function MaryExperience() {
       raf = requestAnimationFrame(animateWords);
 
       if (mutedRef.current) {
-        setOrbState("speaking");
+        setPresenceState("speaking");
         return new Promise<void>((resolve) => {
           window.setTimeout(() => {
             cancelAnimationFrame(raf);
             setReveal(words);
-            setOrbState("idle");
+            setPresenceState("idle");
             resolve();
           }, duration);
         });
       }
 
       stopSpeaking();
-      setOrbState("speaking");
+      setPresenceState("speaking");
       const handle = speak(text, {
         onLevel: setLevel,
         onEnd: () => {
           cancelAnimationFrame(raf);
           setReveal(words);
-          setOrbState((current) => (current === "speaking" ? "idle" : current));
+          setPresenceState((current) => (current === "speaking" ? "idle" : current));
         },
       });
       speakRef.current = handle;
@@ -169,13 +169,13 @@ export function MaryExperience() {
       setResult({ position: 0, message: "We captured your details." });
     }
     setStage("done");
-    setOrbState("success");
+    setPresenceState("success");
   }, []);
 
   const runTurn = useCallback(
     async (nextLines: Line[]) => {
       busyRef.current = true;
-      setOrbState("thinking");
+      setPresenceState("thinking");
       try {
         const turn: MaryTurn = await maryTurn({
           data: {
@@ -230,7 +230,7 @@ export function MaryExperience() {
     recorderRef.current = null;
     setRecording(false);
     setListeningPhase("finishing");
-    setOrbState("thinking");
+    setPresenceState("thinking");
     recognitionRef.current?.stop();
     recognitionRef.current = null;
 
@@ -240,7 +240,7 @@ export function MaryExperience() {
       if (spoken) {
         await sendUser(spoken);
       } else if (handsFreeRef.current && !sessionFinishedRef.current) {
-        setOrbState("idle");
+        setPresenceState("idle");
         setListeningPhase("listening");
         window.setTimeout(() => void startListeningRef.current(), 350);
       }
@@ -306,7 +306,7 @@ export function MaryExperience() {
         onLevel: setLevel,
         onSpeechStart: () => {
           setListeningPhase("hearing");
-          setOrbState("listening");
+          setPresenceState("listening");
         },
         onSilence: () => void finishListeningRef.current(),
         onMaxDuration: () => void finishListeningRef.current(),
@@ -319,7 +319,7 @@ export function MaryExperience() {
       setRecording(true);
       setMicError(null);
       setListeningPhase("listening");
-      setOrbState("listening");
+      setPresenceState("listening");
       startInterim();
     } catch {
       setHandsFreeMode(false);
@@ -335,7 +335,7 @@ export function MaryExperience() {
     if (handsFreeRef.current) {
       setHandsFreeMode(false);
       setRecording(false);
-      setOrbState("idle");
+      setPresenceState("idle");
       recognitionRef.current?.stop();
       recognitionRef.current = null;
       const recorder = recorderRef.current;
@@ -362,7 +362,7 @@ export function MaryExperience() {
         setRecording(false);
         setInterim("");
         setListeningPhase("paused");
-        setOrbState("idle");
+        setPresenceState("idle");
       }
       if (
         wasEmpty &&
