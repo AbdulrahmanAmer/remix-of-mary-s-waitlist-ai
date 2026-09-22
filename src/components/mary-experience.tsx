@@ -558,7 +558,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       const recorder = recorderRef.current;
       recorderRef.current = null;
       recorder?.cancel();
-      interimRef.current = ""; setInterim("");
+      interimRef.current = "";
+      setInterim("");
       return;
     }
 
@@ -577,7 +578,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         recognitionRef.current?.stop();
         recognitionRef.current = null;
         setRecording(false);
-        interimRef.current = ""; setInterim("");
+        interimRef.current = "";
+        setInterim("");
         setListeningPhase("paused");
         setPresenceState("idle");
       }
