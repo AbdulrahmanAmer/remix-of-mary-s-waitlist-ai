@@ -279,8 +279,11 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.translate(cx, gy);
       ctx.scale(1, 0.2);
       ctx.translate(-cx, -gy);
-      const shadow = ctx.createRadialGradient(cx, gy, 0, cx, gy, R * 1.05);
-      for (const [p, a] of falloffStops(0.1)) shadow.addColorStop(p, withAlpha(ink, a));
+      const shadow = cachedGradient(`sh:${q(R, 1)}:${q(gy, 1)}`, () => {
+        const g = ctx.createRadialGradient(cx, gy, 0, cx, gy, R * 1.05);
+        for (const [p, a] of falloffStops(0.1)) g.addColorStop(p, withAlpha(ink, a));
+        return g;
+      });
       ctx.fillStyle = shadow;
       ctx.beginPath();
       ctx.arc(cx, gy, R * 1.05, 0, Math.PI * 2);
@@ -289,9 +292,15 @@ export const MaryPresence = memo(function MaryPresence({
 
       // Outer halo.
       const haloR = R * (cur.halo + lv * 0.22 + bloom * 0.35);
-      const halo = ctx.createRadialGradient(cx, cy, R * 0.86, cx, cy, haloR);
-      for (const [p, a] of falloffStops((0.12 + lv * 0.13) * cur.glow))
-        halo.addColorStop(p, withAlpha(primary, a));
+      const haloPeak = (0.12 + lv * 0.13) * cur.glow;
+      const halo = cachedGradient(
+        `ha:${q(R, 1)}:${q(haloR, 1)}:${q(haloPeak, 0.004).toFixed(3)}`,
+        () => {
+          const g = ctx.createRadialGradient(cx, cy, R * 0.86, cx, cy, haloR);
+          for (const [p, a] of falloffStops(haloPeak)) g.addColorStop(p, withAlpha(primary, a));
+          return g;
+        },
+      );
       ctx.fillStyle = halo;
       ctx.beginPath();
       ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
@@ -302,18 +311,15 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.beginPath();
       ctx.arc(cx, cy, R * 0.97, 0, Math.PI * 2);
       ctx.clip();
-      const inner = ctx.createRadialGradient(
-        cx,
-        cy + R * 0.55,
-        R * 0.03,
-        cx,
-        cy + R * 0.3,
-        R * 1.05,
-      );
-      for (const [p, a] of falloffStops((0.045 + lv * 0.1) * cur.glow))
-        inner.addColorStop(p, withAlpha(primary, a));
+      const innerPeak = (0.045 + lv * 0.1) * cur.glow;
+      const inner = cachedGradient(`in:${q(R, 1)}:${q(innerPeak, 0.004).toFixed(3)}`, () => {
+        const g = ctx.createRadialGradient(cx, cy + R * 0.55, R * 0.03, cx, cy + R * 0.3, R * 1.05);
+        for (const [p, a] of falloffStops(innerPeak)) g.addColorStop(p, withAlpha(primary, a));
+        return g;
+      });
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
+
       for (const m of MOTES) {
         const tw = 0.25 + 0.75 * Math.abs(Math.sin(t * 1.1 + m.p));
         const sx = cx + m.x * R + Math.sin(t * 0.4 + m.p) * R * 0.035;
