@@ -1170,7 +1170,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-4 text-center"
             >
-              <div className="mx-auto flex max-w-3xl flex-col items-center">
+              <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col items-center">
                 <motion.p
                   initial={reduced ? false : { opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
