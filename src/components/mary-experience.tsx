@@ -389,8 +389,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       if (!mark || !header) return;
       const r = mark.getBoundingClientRect();
       const hr = header.getBoundingClientRect();
-      const grown = r.width * 2.7;
-      const grownH = r.height * 2.7;
+      // Cap the growth at the mark's native width so it stays razor sharp.
+      const grown = Math.min(r.width * 2.7, Math.min(320, window.innerWidth * 0.62));
+      const grownH = (grown / r.width) * r.height;
       const restW = r.width * (28 / r.height);
       setFlight({
         from: { x: r.left, y: r.top, w: r.width },
