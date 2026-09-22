@@ -217,8 +217,12 @@
 }
 
 @keyframes mary-boot-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 .mary-boot-glow {
@@ -233,9 +237,18 @@
 }
 
 @keyframes mary-boot-glow {
-  0% { opacity: 0; transform: scale(0.55); }
-  55% { opacity: 1; transform: scale(1.04); }
-  100% { opacity: 1; transform: scale(1); }
+  0% {
+    opacity: 0;
+    transform: scale(0.55);
+  }
+  55% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 .mary-boot-orb {
@@ -246,15 +259,31 @@
 }
 
 @keyframes mary-boot-orb-in {
-  0% { opacity: 0; transform: scale(0.62); filter: blur(14px); }
-  60% { opacity: 1; transform: scale(1.03); filter: blur(0px); }
-  100% { opacity: 1; transform: scale(1); filter: blur(0px); }
+  0% {
+    opacity: 0;
+    transform: scale(0.62);
+    filter: blur(14px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.03);
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+    filter: blur(0px);
+  }
 }
 
 .mary-boot-ring {
   position: absolute;
   border-radius: 9999px;
-  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
+  -webkit-mask: radial-gradient(
+    farthest-side,
+    transparent calc(100% - 3.5px),
+    #000 calc(100% - 3px)
+  );
   mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
   animation: mary-boot-spin linear infinite;
 }
@@ -295,7 +324,9 @@
 }
 
 @keyframes mary-boot-spin {
-  to { transform: rotate(360deg); }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .mary-boot-core {
@@ -314,8 +345,15 @@
 }
 
 @keyframes mary-boot-core {
-  0%, 100% { transform: scale(1); opacity: 0.85; }
-  50% { transform: scale(1.05); opacity: 1; }
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.85;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
 }
 
 .mary-boot-shadow {
@@ -325,14 +363,25 @@
   top: 108%;
   height: 12px;
   border-radius: 9999px;
-  background: radial-gradient(50% 100% at 50% 50%, color-mix(in oklab, var(--ink) 16%, transparent), transparent 75%);
+  background: radial-gradient(
+    50% 100% at 50% 50%,
+    color-mix(in oklab, var(--ink) 16%, transparent),
+    transparent 75%
+  );
   filter: blur(3px);
   animation: mary-boot-shadow 2.2s ease-in-out 0.5s infinite;
 }
 
 @keyframes mary-boot-shadow {
-  0%, 100% { transform: scaleX(1); opacity: 0.8; }
-  50% { transform: scaleX(1.08); opacity: 1; }
+  0%,
+  100% {
+    transform: scaleX(1);
+    opacity: 0.8;
+  }
+  50% {
+    transform: scaleX(1.08);
+    opacity: 1;
+  }
 }
 
 .mary-boot-word span {
@@ -342,8 +391,16 @@
 }
 
 @keyframes mary-boot-letter {
-  from { opacity: 0; transform: translateY(10px); filter: blur(6px); }
-  to { opacity: 1; transform: translateY(0); filter: blur(0px); }
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+    filter: blur(0px);
+  }
 }
 
 .mary-boot-line {
@@ -362,8 +419,14 @@
 }
 
 @keyframes mary-boot-line {
-  from { transform: scaleX(0); opacity: 0; }
-  to { transform: scaleX(1); opacity: 1; }
+  from {
+    transform: scaleX(0);
+    opacity: 0;
+  }
+  to {
+    transform: scaleX(1);
+    opacity: 1;
+  }
 }
 
 .mary-boot-caption {
@@ -372,8 +435,14 @@
 }
 
 @keyframes mary-boot-caption {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
