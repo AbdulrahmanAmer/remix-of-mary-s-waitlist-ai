@@ -19,6 +19,7 @@ import {
 } from "@/lib/audio-engine";
 
 type Line = { id: string; role: "user" | "mary"; text: string };
+type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 
 const MotionButton = motion.create(Button);
 
@@ -56,6 +57,8 @@ export function MaryExperience() {
   const [interim, setInterim] = useState("");
   const [draft, setDraft] = useState("");
   const [recording, setRecording] = useState(false);
+  const [handsFree, setHandsFree] = useState(false);
+  const [listeningPhase, setListeningPhase] = useState<ListeningPhase>("idle");
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
   const [result, setResult] = useState<{ position: number; message: string } | null>(null);
@@ -67,6 +70,11 @@ export function MaryExperience() {
   const nudgeRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
   const busyRef = useRef(false);
+  const handsFreeRef = useRef(false);
+  const completingRef = useRef(false);
+  const sessionFinishedRef = useRef(false);
+  const startListeningRef = useRef<() => Promise<void>>(async () => {});
+  const finishListeningRef = useRef<() => Promise<void>>(async () => {});
   const mutedRef = useRef(false);
   const collectedRef = useRef<Collected>({});
   const linesRef = useRef<Line[]>([]);
@@ -81,6 +89,12 @@ export function MaryExperience() {
   useEffect(() => {
     linesRef.current = lines;
   }, [lines]);
+
+  const setHandsFreeMode = useCallback((active: boolean) => {
+    handsFreeRef.current = active;
+    setHandsFree(active);
+    if (!active) setListeningPhase("paused");
+  }, []);
 
   const stopSpeaking = useCallback(() => {
     speakRef.current?.stop();
@@ -132,6 +146,9 @@ export function MaryExperience() {
   );
 
   const finalize = useCallback(async (finalCollected: Collected) => {
+    sessionFinishedRef.current = true;
+    handsFreeRef.current = false;
+    setHandsFree(false);
     const transcript = linesRef.current
       .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
       .join("\n");
@@ -182,6 +199,9 @@ export function MaryExperience() {
         busyRef.current = false;
         lastActivityRef.current = Date.now();
         inputRef.current?.focus();
+        if (handsFreeRef.current && !sessionFinishedRef.current) {
+          window.setTimeout(() => void startListeningRef.current(), 180);
+        }
       }
     },
     [finalize, say],
@@ -201,6 +221,35 @@ export function MaryExperience() {
     },
     [runTurn, stopSpeaking],
   );
+
+  const finishListening = useCallback(async () => {
+    if (completingRef.current) return;
+    const recorder = recorderRef.current;
+    if (!recorder) return;
+    completingRef.current = true;
+    recorderRef.current = null;
+    setRecording(false);
+    setListeningPhase("finishing");
+    setOrbState("thinking");
+    recognitionRef.current?.stop();
+    recognitionRef.current = null;
+
+    try {
+      const spoken = await transcribe(await recorder.stop());
+      setInterim("");
+      if (spoken) {
+        await sendUser(spoken);
+      } else if (handsFreeRef.current && !sessionFinishedRef.current) {
+        setOrbState("idle");
+        setListeningPhase("listening");
+        window.setTimeout(() => void startListeningRef.current(), 350);
+      }
+    } finally {
+      completingRef.current = false;
+    }
+  }, [sendUser]);
+
+  finishListeningRef.current = finishListening;
 
   const begin = useCallback(async () => {
     setStage("live");
@@ -240,44 +289,81 @@ export function MaryExperience() {
     }
   }, []);
 
-  const toggleMic = useCallback(async () => {
-    lastActivityRef.current = Date.now();
-    if (recording) {
-      setRecording(false);
-      setOrbState("thinking");
-      recognitionRef.current?.stop();
-      recognitionRef.current = null;
-      const recorder = recorderRef.current;
-      recorderRef.current = null;
-      if (!recorder) return;
-      const spoken = await transcribe(await recorder.stop());
-      setInterim("");
-      if (spoken) await sendUser(spoken);
-      else {
-        setOrbState("idle");
-        await say("I didn't quite catch that — try again, or type it for me.");
-      }
+  const startListening = useCallback(async () => {
+    if (
+      !handsFreeRef.current ||
+      busyRef.current ||
+      sessionFinishedRef.current ||
+      recorderRef.current ||
+      completingRef.current
+    ) {
       return;
     }
 
     stopSpeaking();
     try {
-      recorderRef.current = await startRecording(setLevel);
+      const recorder = await startRecording({
+        onLevel: setLevel,
+        onSpeechStart: () => {
+          setListeningPhase("hearing");
+          setOrbState("listening");
+        },
+        onSilence: () => void finishListeningRef.current(),
+        onMaxDuration: () => void finishListeningRef.current(),
+      });
+      if (!handsFreeRef.current || sessionFinishedRef.current) {
+        recorder.cancel();
+        return;
+      }
+      recorderRef.current = recorder;
       setRecording(true);
       setMicError(null);
+      setListeningPhase("listening");
       setOrbState("listening");
       startInterim();
     } catch {
+      setHandsFreeMode(false);
       setMicError("Microphone access is off. You can keep the conversation going by typing.");
       inputRef.current?.focus();
     }
-  }, [recording, say, sendUser, startInterim, stopSpeaking]);
+  }, [setHandsFreeMode, startInterim, stopSpeaking]);
+
+  startListeningRef.current = startListening;
+
+  const toggleMic = useCallback(async () => {
+    lastActivityRef.current = Date.now();
+    if (handsFreeRef.current) {
+      setHandsFreeMode(false);
+      setRecording(false);
+      setOrbState("idle");
+      recognitionRef.current?.stop();
+      recognitionRef.current = null;
+      const recorder = recorderRef.current;
+      recorderRef.current = null;
+      recorder?.cancel();
+      setInterim("");
+      return;
+    }
+
+    setHandsFreeMode(true);
+    await startListening();
+  }, [setHandsFreeMode, startListening]);
 
   const onDraftChange = useCallback(
     (value: string) => {
       const wasEmpty = draft.length === 0;
       setDraft(value);
       lastActivityRef.current = Date.now();
+      if (wasEmpty && value && recorderRef.current) {
+        recorderRef.current.cancel();
+        recorderRef.current = null;
+        recognitionRef.current?.stop();
+        recognitionRef.current = null;
+        setRecording(false);
+        setInterim("");
+        setListeningPhase("paused");
+        setOrbState("idle");
+      }
       if (wasEmpty && value && !busyRef.current && typingSaidRef.current < TYPING_LINES.length && stage === "live") {
         stopSpeaking();
         const line = TYPING_LINES[typingSaidRef.current];
@@ -291,7 +377,7 @@ export function MaryExperience() {
   useEffect(() => {
     if (stage !== "live") return;
     const timer = window.setInterval(() => {
-      if (busyRef.current || recording || draft.length > 0) return;
+      if (busyRef.current || recording || handsFree || draft.length > 0) return;
       if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length) return;
       lastActivityRef.current = Date.now();
       const line = IDLE_NUDGES[nudgeRef.current];
@@ -299,7 +385,7 @@ export function MaryExperience() {
       if (line) void say(line);
     }, 4000);
     return () => window.clearInterval(timer);
-  }, [draft.length, recording, say, stage]);
+  }, [draft.length, handsFree, recording, say, stage]);
 
   useEffect(() => {
     return () => {
