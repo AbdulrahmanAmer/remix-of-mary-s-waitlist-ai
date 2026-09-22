@@ -454,9 +454,8 @@ export function MaryExperience() {
                   Your AI Revenue Concierge. She works the revenue you already have and personally
                   welcomes you to the OmniSuite launch waitlist.
                 </p>
-                <div className="relative mt-8">
-                  <div className="absolute inset-5 -z-10 rounded-full bg-primary/10" />
-                  <MaryOrb state="idle" level={0} size={176} />
+                <div className="mt-6 w-full max-w-md">
+                  <MaryPresence state="idle" level={0} height={200} />
                 </div>
                 <MotionButton
                   onClick={begin}
