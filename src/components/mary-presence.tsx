@@ -67,20 +67,20 @@ type Shell = {
 };
 
 const SHELLS: Shell[] = [
-  { r: 1.0, w: 0.3, speed: 0.55, phase: 0.0, squash: 0.995, accent: false, alpha: 1.0 },
-  { r: 0.96, w: 0.22, speed: -0.38, phase: 2.1, squash: 0.97, accent: false, alpha: 0.8 },
-  { r: 1.02, w: 0.16, speed: 0.78, phase: 4.3, squash: 1.01, accent: true, alpha: 0.5 },
-  { r: 0.93, w: 0.11, speed: -0.95, phase: 5.6, squash: 0.955, accent: false, alpha: 0.6 },
+  { r: 1.0, w: 0.085, speed: 0.55, phase: 0.0, squash: 0.995, accent: false, alpha: 1.0 },
+  { r: 0.955, w: 0.062, speed: -0.38, phase: 2.1, squash: 0.97, accent: false, alpha: 0.85 },
+  { r: 1.025, w: 0.045, speed: 0.78, phase: 4.3, squash: 1.012, accent: true, alpha: 0.55 },
+  { r: 0.915, w: 0.032, speed: -0.95, phase: 5.6, squash: 0.95, accent: false, alpha: 0.7 },
 ];
 
 /** Soft-tube stroke passes: wide + faint through narrow + bright. */
 const PASSES = [
-  { k: 3.1, a: 0.05 },
-  { k: 2.3, a: 0.07 },
-  { k: 1.7, a: 0.1 },
-  { k: 1.15, a: 0.14 },
-  { k: 0.72, a: 0.2 },
-  { k: 0.38, a: 0.3 },
+  { k: 3.4, a: 0.035 },
+  { k: 2.4, a: 0.055 },
+  { k: 1.7, a: 0.09 },
+  { k: 1.15, a: 0.16 },
+  { k: 0.7, a: 0.3 },
+  { k: 0.34, a: 0.55 },
 ];
 
 /**
@@ -256,8 +256,8 @@ export const MaryPresence = memo(function MaryPresence({
       // Outer halo.
       const haloR = R * (cur.halo + lv * 0.22 + bloom * 0.35);
       const halo = ctx.createRadialGradient(cx, cy, R * 0.55, cx, cy, haloR);
-      halo.addColorStop(0, withAlpha(primary, (0.2 + lv * 0.14) * cur.glow));
-      halo.addColorStop(0.5, withAlpha(primary, (0.07 + lv * 0.05) * cur.glow));
+      halo.addColorStop(0, withAlpha(primary, (0.11 + lv * 0.12) * cur.glow));
+      halo.addColorStop(0.5, withAlpha(primary, (0.035 + lv * 0.045) * cur.glow));
       halo.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = halo;
       ctx.beginPath();
@@ -277,8 +277,8 @@ export const MaryPresence = memo(function MaryPresence({
         cy + R * 0.3,
         R * 1.05,
       );
-      inner.addColorStop(0, withAlpha(primary, (0.26 + lv * 0.24) * cur.glow));
-      inner.addColorStop(0.32, withAlpha(primary, 0.08 * cur.glow));
+      inner.addColorStop(0, withAlpha(primary, (0.12 + lv * 0.16) * cur.glow));
+      inner.addColorStop(0.32, withAlpha(primary, 0.035 * cur.glow));
       inner.addColorStop(1, withAlpha(primary, 0));
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);

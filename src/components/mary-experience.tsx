@@ -611,7 +611,7 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
               transition={STAGE_IN}
-              className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-6 py-3 sm:px-0 lg:py-5"
+              className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col px-6 py-3 sm:px-0 lg:py-5"
             >
               <MaryPresence state={presence} level={level} height={liveOrb} />
               <div className="mt-1 flex items-center justify-between gap-4 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -652,7 +652,7 @@ export function MaryExperience() {
                 <motion.div
                   layout
                   transition={SPRING}
-                  className="no-scrollbar mx-auto w-full max-w-2xl space-y-2.5"
+                  className="no-scrollbar mx-auto w-full max-w-xl space-y-2.5"
                 >
                   <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
@@ -748,7 +748,7 @@ export function MaryExperience() {
                         : { scale: 1 }
                   }
                   transition={SPRING}
-                  className="surface-floating mx-auto flex w-full max-w-2xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
+                  className="surface-floating mx-auto flex w-full max-w-xl items-end gap-1 rounded-full bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
                     onClick={toggleMic}
