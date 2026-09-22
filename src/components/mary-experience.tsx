@@ -848,7 +848,7 @@ export function MaryExperience() {
                   initial={reduced ? false : { opacity: 0, scale: 0.92 }}
                   animate={{ opacity: 1, scale: 1 }}
                   transition={SPRING}
-                  className="mx-auto w-full max-w-md"
+                  className="mx-auto"
                 >
                   <MaryPresence state="done" level={0} height={landingOrb} />
                 </motion.div>
