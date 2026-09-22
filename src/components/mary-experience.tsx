@@ -166,8 +166,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const say = useCallback(
     (text: string, opts: { record?: boolean } = { record: true }) => {
       const words = text.split(/\s+/).filter(Boolean).length;
-      if (opts.record !== false) setLines((prev) => [...prev, { id: uid(), role: "mary", text }]);
-      setReveal(0);
+      const id = uid();
+      if (opts.record !== false) setLines((prev) => [...prev, { id, role: "mary", text }]);
+      setReveal({ id, count: 0 });
 
       // Rough spoken length, used only as a floor while the audio stream fills.
       const approx = Math.max(1.4, words * 0.42);
@@ -178,7 +179,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         let raf = 0;
         const animateWords = () => {
           const progress = Math.min(1, (performance.now() - start) / duration);
-          setReveal(Math.ceil(progress * words));
+          setReveal({ id, count: Math.ceil(progress * words) });
           if (progress < 1) raf = requestAnimationFrame(animateWords);
         };
         raf = requestAnimationFrame(animateWords);
@@ -186,7 +187,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         return new Promise<void>((resolve) => {
           window.setTimeout(() => {
             cancelAnimationFrame(raf);
-            setReveal(words);
+            setReveal({ id, count: words });
             setPresenceState("idle");
             resolve();
           }, duration);
@@ -195,13 +196,16 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
       stopSpeaking();
       setPresenceState("speaking");
+      // Her own voice in the room must not read as an interruption.
+      sessionRef.current?.setEchoGuard(true);
       const handle = speak(text, {
         onLevel: setLevel,
         approxDurationSec: approx,
         // Words land in step with the voice that is actually playing.
-        onProgress: (progress) => setReveal(Math.ceil(progress * words)),
+        onProgress: (progress) => setReveal({ id, count: Math.ceil(progress * words) }),
         onEnd: () => {
-          setReveal(words);
+          setReveal({ id, count: words });
+          sessionRef.current?.setEchoGuard(false);
           setPresenceState((current) => (current === "speaking" ? "idle" : current));
         },
       });
@@ -210,6 +214,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     },
     [stopSpeaking],
   );
+
 
   const finalize = useCallback(async (finalCollected: Collected) => {
     sessionFinishedRef.current = true;
