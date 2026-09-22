@@ -352,6 +352,8 @@ export function speak(
   monitor.active = true;
   monitor.paused = false;
   monitor.lines = [...monitor.lines.slice(-7), text];
+  lastSpokenText = text;
+  watchOutput();
   trace({ type: "speak", text });
   monitor.outputLatencyMs = Math.round(
     (((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) ||
