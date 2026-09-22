@@ -13,10 +13,15 @@ type SheetStatus =
 
 type Tab = "entries" | "notes";
 
+/** Fired by the hidden gesture (five quick taps on "omnikom" in the footer). */
+export const OWNER_VIEW_EVENT = "mary:owner-view";
+
 /**
  * Owner-only view: what this device has collected, whether the Google Sheet
  * is connected, and the field notes MARY has written for herself.
- * Opens with Ctrl/Cmd + Shift + W, closes with the same keys or Escape.
+ * Opens with Ctrl/Cmd + Shift + O (Ctrl/Cmd + Shift + W is a browser
+ * shortcut that closes the window, so it cannot be relied on), or five quick
+ * taps on the "omnikom" wordmark in the footer on a phone. Escape closes.
  */
 export function WaitlistVault() {
   const [open, setOpen] = useState(false);
@@ -31,13 +36,19 @@ export function WaitlistVault() {
         setOpen(false);
         return;
       }
-      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === "w") {
+      const key = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && (key === "o" || key === "w")) {
         event.preventDefault();
         setOpen((value) => !value);
       }
     };
+    const onGesture = () => setOpen((value) => !value);
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    window.addEventListener(OWNER_VIEW_EVENT, onGesture);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      window.removeEventListener(OWNER_VIEW_EVENT, onGesture);
+    };
   }, []);
 
   useEffect(() => {
