@@ -675,7 +675,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   whileTap={reduced ? {} : { scale: 0.98 }}
                   className={`surface-raised h-13 rounded-full bg-primary px-8 text-white ${compact ? "mt-4" : "mt-7"}`}
                 >
-                  Talk to MARY <ArrowRight />
+                  Join The Waitlist <ArrowRight />
                 </MotionButton>
                 <span className="mt-3 text-sm text-muted-foreground">
                   Voice or text · switch anytime
