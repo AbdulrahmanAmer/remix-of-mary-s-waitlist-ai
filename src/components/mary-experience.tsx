@@ -435,6 +435,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
           lanesDone:
             flagsRef.current.lanesDone ||
             (turn.lanesDone && /cultivate/i.test(heardText) && /recover/i.test(heardText)),
+          // Carried forward so the next turn knows where the conversation stands.
+          wrapAsked: flagsRef.current.wrapAsked || turn.wrapAsked,
+          callback: flagsRef.current.callback || turn.callbackRequested,
+          mode: turn.mode,
+          rejected: turn.rejected,
         };
 
         // They asked to be called back: the request is saved as soon as there
