@@ -643,7 +643,6 @@ export function MaryExperience() {
                 </span>
                 <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
               </div>
-              <ProgressConstellation collected={collected} />
 
               <div
                 ref={trailRef}
