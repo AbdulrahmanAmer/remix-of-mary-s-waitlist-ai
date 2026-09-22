@@ -33,11 +33,13 @@ import {
   type LeadPayload,
 } from "@/lib/lead-sync";
 import {
+  isInAppBrowser,
   MicUnavailableError,
   speak,
   startMicSession,
   transcribe,
   unlockAudio,
+  type MicFailure,
   type MicSession,
   type SpeakHandle,
   type Utterance,
@@ -45,21 +47,33 @@ import {
 
 /** Plain words for every way a microphone can fail to open. */
 function micMessage(error: unknown): string {
-  const reason = error instanceof MicUnavailableError ? error.reason : "unknown";
+  const reason: MicFailure = error instanceof MicUnavailableError ? error.reason : "unknown";
+  // Inside Instagram, LinkedIn or WhatsApp there is no address bar and no
+  // setting to change — the only real fix is opening the link properly.
+  if (isInAppBrowser() && (reason === "denied" || reason === "unsupported")) {
+    return "This is an in-app browser, so it won't hand me the microphone. Tap the ⋯ menu and choose “Open in browser” for voice — or just type here.";
+  }
   switch (reason) {
     case "denied":
-      return "Microphone is blocked. Allow it in your browser's address bar, or just type — I'm reading either way.";
+      return "I couldn't get the microphone. Tap the mic button to ask again, allow it, or just type — I'm reading either way.";
     case "no-device":
       return "I can't find a microphone on this device. Typing works perfectly.";
     case "busy":
-      return "Another app is using your microphone. Close it and reload, or keep going by typing.";
+      return "Another app is using your microphone. Close it, then tap the mic button to try again — or keep going by typing.";
     case "insecure":
       return "This page needs a secure (https) address to use the microphone. You can still type to me.";
     case "unsupported":
       return "This browser won't let me listen — Safari, Chrome or Edge will. Typing works here.";
     default:
-      return "I couldn't open the microphone. You can keep the conversation going by typing.";
+      return "I couldn't open the microphone. Tap the mic button to try again, or keep going by typing.";
   }
+}
+
+/** The line dropped mid-call — say what happened and how to get it back. */
+function micLostMessage(reason: MicFailure): string {
+  if (reason === "busy")
+    return "Something else took the microphone. Tap the mic button to pick the line back up, or carry on by typing.";
+  return "The microphone disconnected — a headset unplugged, maybe. Tap the mic button to reopen the line, or keep typing.";
 }
 import {
   CUT_OFF_MARK,
