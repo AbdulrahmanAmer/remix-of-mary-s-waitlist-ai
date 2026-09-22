@@ -543,8 +543,11 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     node.scrollTop = node.scrollHeight;
   }, [lines, interim, stage, viewportHeight]);
 
-  const lastMary = [...lines].reverse().find((line) => line.role === "mary");
-  const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
+  // The centre holds her latest line; everything before it stays in order above.
+  const last = lines[lines.length - 1];
+  const lastMary = last?.role === "mary" ? last : undefined;
+  const history = (lastMary ? lines.slice(0, -1) : lines).slice(-6);
+
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
   const tight = viewportHeight < 620;
