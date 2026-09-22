@@ -133,6 +133,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const nudgeRef = useRef(0);
   const lastActivityRef = useRef(Date.now());
   const busyRef = useRef(false);
+  const interruptRef = useRef(false);
   const handsFreeRef = useRef(false);
   const completingRef = useRef(false);
   const sessionFinishedRef = useRef(false);
@@ -243,6 +244,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const runTurn = useCallback(
     async (nextLines: Line[]) => {
       busyRef.current = true;
+      interruptRef.current = false;
       setPresenceState("thinking");
       try {
         const messages = nextLines.map((line) => ({
@@ -295,7 +297,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         if (firstBeat) await firstBeat;
         else await say(turn.say);
 
-        if (turn.followUp) {
+        if (turn.followUp && !interruptRef.current) {
           // Second beat: a short breath, then the question lands as its own moment.
           await new Promise<void>((resolve) => window.setTimeout(resolve, 260));
           await say(turn.followUp);
@@ -322,6 +324,9 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     async (text: string) => {
       const clean = text.trim();
       if (!clean) return;
+      // Talking (or typing) over her ends her turn immediately.
+      interruptRef.current = true;
+      stopSpeaking();
       // If MARY is mid-turn, wait for her to finish rather than dropping the message.
       while (busyRef.current) {
         await new Promise((resolve) => window.setTimeout(resolve, 120));
