@@ -96,12 +96,16 @@ function uid() {
   return Math.random().toString(36).slice(2);
 }
 
-export function MaryExperience() {
+export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const reduced = useReducedMotion();
   const shellRef = useRef<HTMLElement | null>(null);
   const viewportHeight = useStageHeight(shellRef);
   const trailRef = useRef<HTMLDivElement | null>(null);
-  const [stage, setStage] = useState<"landing" | "live" | "done">("landing");
+  const headerRef = useRef<HTMLElement | null>(null);
+  const lockupRef = useRef<HTMLDivElement | null>(null);
+  const introRef = useRef(false);
+  const [flight, setFlight] = useState<Flight | null>(null);
+  const [stage, setStage] = useState<"landing" | "intro" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
   const [collected, setCollected] = useState<Collected>({});
   const [presence, setPresenceState] = useState<PresenceState>("idle");
