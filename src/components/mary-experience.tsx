@@ -47,18 +47,29 @@ const STAGE_IN = { duration: 0.6, ease: EASE } as const;
 const SOFT = { duration: 0.42, ease: EASE } as const;
 const SPRING = { type: "spring", stiffness: 210, damping: 26, mass: 0.9 } as const;
 
-// Tracks the live viewport height so the single-screen layout can shrink
-// instead of spilling over on short windows.
-function useViewportHeight(): number {
+// Measures the stage element itself rather than the window, so browser zoom
+// (which changes the CSS-pixel space without changing window.innerHeight)
+// scales the composition just like a resize does.
+function useStageHeight(ref: React.RefObject<HTMLElement | null>): number {
   const [height, setHeight] = useState(() =>
     typeof window === "undefined" ? 900 : window.innerHeight,
   );
   useEffect(() => {
-    const update = () => setHeight(window.innerHeight);
+    const node = ref.current;
+    if (!node) return;
+    const update = () => {
+      const measured = node.clientHeight || node.getBoundingClientRect().height;
+      if (measured > 0) setHeight(measured);
+    };
     update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+    const observer = new ResizeObserver(update);
+    observer.observe(node);
+    window.visualViewport?.addEventListener("resize", update);
+    return () => {
+      observer.disconnect();
+      window.visualViewport?.removeEventListener("resize", update);
+    };
+  }, [ref]);
   return height;
 }
 
