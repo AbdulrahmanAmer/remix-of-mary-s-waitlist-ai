@@ -107,10 +107,17 @@ export const maryTurn = createServerFn({ method: "POST" })
       .join("\n");
 
     const capturedCount = WAITLIST_FIELDS.filter((f) => (data.collected as Collected)[f]).length;
+    const allCaptured = capturedCount >= WAITLIST_FIELDS.length;
+    const lastAssistant = [...data.messages].reverse().find((m) => m.role === "assistant")?.content;
+    // The wrap question has already gone out if MARY's last line asked something
+    // once everything was captured — only then may she close.
+    const wrapAsked = Boolean(lastAssistant && lastAssistant.includes("?"));
     const phase = !history
       ? "WELCOME — the conversation is just starting; this is your one and only welcome."
-      : capturedCount >= WAITLIST_FIELDS.length
-        ? "CLOSE — everything is captured; deliver the closing line exactly once."
+      : allCaptured
+        ? wrapAsked
+          ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the closing line and set complete true."
+          : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false."
         : "COLLECT — the welcome already happened. Do NOT mention the waitlist offer or first access again. Acknowledge what they just said, then ask the next missing detail.";
 
     const prompt = `Current phase: ${phase}\n\nAlready captured:\n${known || "(nothing yet)"}\n\nConversation so far:\n${
