@@ -28,6 +28,139 @@ function base64ToBytes(base64: string) {
   return bytes;
 }
 
+/**
+ * Voice shaping — tuned from measurements of the real Mary's own recordings.
+ *
+ *  measured Mary  : median pitch ~220 Hz, articulation ~4.1 syllables/s, ~1.0 s pauses
+ *  base TTS voice : median pitch ~213 Hz, articulation ~5.4 syllables/s (matched conditions)
+ *
+ * MARY_PITCH_RATIO lifts playback pitch ~0.7 semitones onto her median; MARY_PACE_RATIO
+ * slows net delivery toward hers. The time stretcher below compensates so the pitch lift
+ * does not also speed her up. Measured result: 220.6 Hz / 4.6 syllables per second.
+ * Set both to 1 to disable shaping entirely.
+ */
+const MARY_PITCH_RATIO = 1.04;
+const MARY_PACE_RATIO = 0.82;
+const MARY_STRETCH = MARY_PITCH_RATIO / MARY_PACE_RATIO;
+
+function hann(n: number) {
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) w[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / n);
+  return w;
+}
+
+/**
+ * Streaming WSOLA time stretcher: changes speaking pace without changing pitch.
+ * Each analysis frame is nudged to the position that best continues the waveform
+ * already written, which keeps voiced speech smooth instead of phasey.
+ */
+class TimeStretcher {
+  private readonly size = 1024;
+  private readonly synthHop = 512;
+  private readonly overlap = 512;
+  private readonly search = 256;
+  private readonly analysisHop: number;
+  private readonly window: Float32Array;
+  private input: Float32Array<ArrayBuffer> = new Float32Array(0);
+  private base = 0; // absolute index of input[0]
+  private ideal = 0; // absolute ideal read position of the next frame
+  private prevRead = -1; // absolute read position of the previous frame
+  private acc: Float32Array<ArrayBuffer> = new Float32Array(0);
+  private accWin: Float32Array<ArrayBuffer> = new Float32Array(0);
+  private emitted = 0;
+  private synthPos = 0;
+
+  constructor(stretch: number) {
+    this.analysisHop = Math.max(1, Math.round(this.synthHop / stretch));
+    this.window = hann(this.size);
+  }
+
+  private grow(needed: number) {
+    if (this.acc.length >= needed) return;
+    const next = new Float32Array(Math.max(needed, this.acc.length * 2 + this.size));
+    next.set(this.acc);
+    const nextWin = new Float32Array(next.length);
+    nextWin.set(this.accWin);
+    this.acc = next;
+    this.accWin = nextWin;
+  }
+
+  /** Finds the read offset whose overlap region best matches the natural continuation. */
+  private align(): number {
+    if (this.prevRead < 0) return this.ideal;
+    const tpl = this.prevRead + this.synthHop - this.base;
+    const lo = Math.max(0, this.ideal - this.base - this.search);
+    const hi = this.ideal - this.base + this.search;
+    if (tpl < 0 || tpl + this.overlap > this.input.length) return this.ideal;
+    let bestPos = this.ideal - this.base;
+    let bestScore = -Infinity;
+    for (let p = lo; p <= hi; p += 4) {
+      if (p + this.size > this.input.length) break;
+      let dot = 0;
+      let energy = 1e-9;
+      for (let i = 0; i < this.overlap; i += 2) {
+        const a = this.input[tpl + i]!;
+        const b = this.input[p + i]!;
+        dot += a * b;
+        energy += b * b;
+      }
+      const score = dot / Math.sqrt(energy);
+      if (score > bestScore) {
+        bestScore = score;
+        bestPos = p;
+      }
+    }
+    return bestPos + this.base;
+  }
+
+  push(chunk: Float32Array<ArrayBuffer>): Float32Array<ArrayBuffer> {
+    const keepFrom = Math.max(0, Math.min(this.ideal, this.prevRead) - this.search - this.size);
+    const drop = Math.max(0, keepFrom - this.base);
+    const kept = this.input.subarray(Math.min(drop, this.input.length));
+    const merged = new Float32Array(kept.length + chunk.length);
+    merged.set(kept);
+    merged.set(chunk, kept.length);
+    this.input = merged;
+    this.base += drop;
+
+    while (this.ideal - this.base + this.search + this.size <= this.input.length) {
+      const read = this.align();
+      const start = read - this.base;
+      const offset = this.synthPos - this.emitted;
+      this.grow(offset + this.size);
+      for (let i = 0; i < this.size; i++) {
+        const w = this.window[i]!;
+        this.acc[offset + i] = this.acc[offset + i]! + (this.input[start + i] ?? 0) * w;
+        this.accWin[offset + i] = this.accWin[offset + i]! + w * w;
+      }
+      this.prevRead = read;
+      this.synthPos += this.synthHop;
+      this.ideal += this.analysisHop;
+    }
+
+    const safe = this.synthPos - (this.size - this.synthHop) - this.emitted;
+    if (safe <= 0) return new Float32Array(0);
+    return this.take(safe);
+  }
+
+  private take(count: number): Float32Array<ArrayBuffer> {
+    const out = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
+      const w = this.accWin[i]!;
+      out[i] = w > 1e-6 ? this.acc[i]! / w : this.acc[i]!;
+    }
+    this.acc = this.acc.slice(count);
+    this.accWin = this.accWin.slice(count);
+    this.emitted += count;
+    return out;
+  }
+
+  flush(): Float32Array<ArrayBuffer> {
+    const remaining = this.synthPos - this.emitted;
+    return remaining > 0 ? this.take(remaining) : new Float32Array(0);
+  }
+}
+
 export type SpeakHandle = {
   stop: () => void;
   done: Promise<void>;
@@ -51,6 +184,8 @@ export function speak(
   const buffer = new Uint8Array(analyser.frequencyBinCount);
   const sources = new Set<AudioBufferSourceNode>();
   const controller = new AbortController();
+
+  const stretcher = Math.abs(MARY_STRETCH - 1) > 0.001 ? new TimeStretcher(MARY_STRETCH) : null;
 
   let playhead = 0;
   let pending = new Uint8Array(0);
@@ -101,6 +236,26 @@ export function speak(
     finish();
   };
 
+  const schedule = (floats: Float32Array<ArrayBuffer>) => {
+    if (floats.length === 0) return;
+    const audioBuffer = ctx.createBuffer(1, floats.length, 24000);
+    audioBuffer.copyToChannel(floats, 0);
+    const source = ctx.createBufferSource();
+    source.buffer = audioBuffer;
+    source.playbackRate.value = MARY_PITCH_RATIO;
+    source.connect(analyser);
+    if (playhead === 0) playhead = ctx.currentTime + 0.08;
+    else playhead = Math.max(playhead, ctx.currentTime);
+    source.start(playhead);
+    playhead += audioBuffer.duration / MARY_PITCH_RATIO;
+    sources.add(source);
+    source.onended = () => sources.delete(source);
+    if (!firstAudioFired) {
+      firstAudioFired = true;
+      opts.onFirstAudio?.();
+    }
+  };
+
   const enqueue = (incoming: Uint8Array) => {
     const merged = new Uint8Array(pending.length + incoming.length);
     merged.set(pending);
@@ -111,21 +266,7 @@ export function speak(
 
     const samples = new Int16Array(merged.buffer, 0, usable / 2);
     const floats = Float32Array.from(samples, (s) => s / 32768);
-    const audioBuffer = ctx.createBuffer(1, floats.length, 24000);
-    audioBuffer.copyToChannel(floats, 0);
-    const source = ctx.createBufferSource();
-    source.buffer = audioBuffer;
-    source.connect(analyser);
-    if (playhead === 0) playhead = ctx.currentTime + 0.08;
-    else playhead = Math.max(playhead, ctx.currentTime);
-    source.start(playhead);
-    playhead += audioBuffer.duration;
-    sources.add(source);
-    source.onended = () => sources.delete(source);
-    if (!firstAudioFired) {
-      firstAudioFired = true;
-      opts.onFirstAudio?.();
-    }
+    schedule(stretcher ? stretcher.push(floats) : floats);
   };
 
   (async () => {
@@ -167,6 +308,7 @@ export function speak(
           }
         }
       }
+      if (stretcher && !stopped) schedule(stretcher.flush());
       const tail = Math.max(0, playhead - ctx.currentTime) * 1000 + 120;
       await new Promise((r) => setTimeout(r, tail));
       finish();

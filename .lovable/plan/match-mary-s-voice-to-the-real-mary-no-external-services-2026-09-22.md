@@ -2,44 +2,54 @@
 
 ## Goal
 
-Make MARY's spoken voice sound like the real Mary from the user's recordings, without using any cloning service (no ElevenLabs, no third-party accounts). Technique: measure the real voice's characteristics from the recordings, then reproduce those characteristics through model choice, delivery steering, and playback-level tuning. This approximates pitch, pace, and delivery — it is not an exact timbre clone. The user has been told this limitation plainly.  
-samples  are in uploaded files 3 voice records 
+Make MARY's spoken voice sound like the real Mary from the three recordings, without any cloning service or new account. Technique: measure the real voice's characteristics, then reproduce them through voice choice, delivery steering, and playback tuning. This approximates pitch, pace, and delivery — it is not an exact timbre copy. That limit is unavoidable without a cloning service and the real person's consent.
 
-## Prerequisite
+## The recordings
 
-The user attaches 3 recordings (4–8 min each, conversations featuring Mary) to the chat. Copy them from /mnt/user-uploads/ into /tmp for analysis. Never place recordings in the project bundle.
+All three have arrived and are available for analysis:
 
-## Step 1 — Analyze the recordings
+- `REc5e84945123fc684f416564be1d00f58.wav`
+- `20260226_1714_3305711455.mp3`
+- `Call recording of (925) 366-6092 at 2026-04-21 02-08-32.mp3`
 
-In /tmp with ffmpeg + Python (numpy/scipy, no new heavy deps):
+They are used for measurement only — copied to a temporary working folder, never added to the website or shared anywhere.
 
-- Estimate Mary's fundamental frequency (F0) distribution: median, range, and variability (autocorrelation-based pitch tracking on speech-active frames).
-- Estimate speaking rate: speech-energy on/off patterns → words-per-minute approximation, average pause lengths.
-- Note delivery style: warmth/energy level, typical sentence-final intonation (falling/rising), and any consistent verbal rhythm.
-Output: a small measurement report used in every later step.
+## Step 1 — Separate Mary from the other speaker
 
-## Step 2 — Measure candidate voices
+These are two-person conversations, so the analysis has to isolate her voice first. Speech segments are grouped into two speaker clusters by voice characteristics. If it is not obvious which cluster is Mary, a short sample of each is played back for confirmation before going further.
 
-Synthesize the same set of test sentences with the built-in voices via the Lovable AI Gateway (`/v1/audio/speech`, already wired in `src/routes/api/speech.ts`):
+## Step 2 — Measure her voice
 
-- Gemini prebuilt voices that fit a warm female concierge: Kore (current), Leda, Aoede, Autonoe, Despina, Sulafat.
-- If none lands close, also test `openai/gpt-4o-mini-tts` voices (it supports `instructions` steering and a `speed` parameter).
-Measure each candidate's F0 and pace with the same script as Step 1, and rank them against Mary's measurements.
+From her segments only:
 
-## Step 3 — Match and tune
+- Pitch: median, range, and how much it moves while she talks.
+- Pace: speaking rate and typical pause lengths between phrases.
+- Delivery: energy level, warmth, and how she tends to end sentences.
 
-- Pick the base voice with the closest pitch and pace profile.
-- Rewrite the steering prefix in `src/routes/api/speech.ts` (currently "Say this warmly, calmly and confidently...") to encode Mary's actual delivery from the analysis.
-- If her natural pitch sits above or below the chosen voice, add a small pitch correction in `src/lib/audio-engine.ts` playback (playbackRate shift with speed compensation on the TTS request, or a light phase-vocoder pitch shift). Keep it subtle and optional behind a constant, so it can be dialed to 1.0 easily. Respect existing playback architecture (shared AudioContext, chunk scheduling).
-- If pace needs adjusting and the chosen model lacks a speed control, switch the base to `openai/gpt-4o-mini-tts` for its `speed` + `instructions` support.
+This produces a short profile used in every later step.
 
-## Step 4 — Verify
+## Step 3 — Find the closest available voice
 
-- Re-run the measurement script on MARY's generated audio; confirm median F0 and pace land within a close band of the real Mary's.
-- Playwright pass on the live experience: voice session still works end-to-end, no console errors, hands-free flow unaffected.
-- `bunx tsgo --noEmit` clean.
+The same test sentences are generated with each candidate built-in voice (Kore — the current one, Leda, Aoede, Autonoe, Despina, Sulafat), then measured with the same method and ranked against Mary's profile. If none lands close enough, an alternative speech model with finer speed and delivery control is tested too.
 
-## Out of scope / noted
+## Step 4 — Match and tune
 
-- Exact timbre cloning requires a cloning service plus the recorded person's consent; if the user ever wants that, revisit ElevenLabs.
-- Recordings stay in /tmp for analysis only — never bundled, uploaded, or stored.
+- Switch MARY to the closest base voice.
+- Rewrite her delivery instructions so the generated speech carries Mary's actual pacing, warmth, and phrasing rhythm.
+- If her natural pitch sits above or below that voice, apply a small, subtle pitch correction during playback — adjustable, and easy to switch off.
+- Adjust speaking speed to match her measured pace.
+
+## Step 5 — Verify
+
+- Re-measure MARY's generated speech and confirm pitch and pace land close to the real Mary's.
+- Run through a full live voice session to confirm hands-free conversation, typing, and the pulsing composer all still work with no errors.
+
+## Technical notes
+
+- Analysis runs in `/tmp` with ffmpeg plus numpy/scipy: energy-gated speech masking, autocorrelation F0 with parabolic interpolation, MFCC-style clustering for the two-speaker split, pause/run statistics for pace.
+- Voice steering lives in the speech prefix in `src/routes/api/speech.ts`; playback pitch/rate correction goes in `src/lib/audio-engine.ts` behind a named constant defaulting to a subtle value.
+- Candidate synthesis goes through the existing Lovable AI Gateway speech route; no new dependencies and no new services.
+
+## Out of scope
+
+- Exact timbre cloning — that needs a cloning service and the recorded person's explicit consent.
