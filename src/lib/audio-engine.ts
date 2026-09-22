@@ -1197,6 +1197,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let utteranceOverAssistant = false;
   /** Loudest frame of this utterance recorded while she was NOT audible. */
   let cleanPeak = 0;
+  /** Frames of this utterance that were the person on the microphone. */
+  let nearFrames = 0;
   let lastFinalAt = 0;
   let lastCouplingReport = 0;
   let raf = 0;
