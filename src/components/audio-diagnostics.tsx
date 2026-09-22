@@ -75,7 +75,10 @@ export function AudioDiagnostics() {
       </div>
       <dl className="divide-y divide-border rounded-2xl border border-border">
         {rows.map((row) => (
-          <div key={row.label} className="flex items-center justify-between gap-4 px-4 py-2 text-sm">
+          <div
+            key={row.label}
+            className="flex items-center justify-between gap-4 px-4 py-2 text-sm"
+          >
             <dt className="text-muted-foreground">{row.label}</dt>
             <dd
               className={

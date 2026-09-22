@@ -891,7 +891,6 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   }
   activeMicTrack = stream.getAudioTracks()[0] ?? null;
 
-
   const Ctor =
     window.AudioContext ??
     (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
