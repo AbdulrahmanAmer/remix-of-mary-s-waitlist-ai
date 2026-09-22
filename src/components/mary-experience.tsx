@@ -361,12 +361,51 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
   finishListeningRef.current = finishListening;
 
-  const begin = useCallback(async () => {
+  const enterLive = useCallback(async () => {
     setStage("live");
-    await unlockAudio();
     lastActivityRef.current = Date.now();
     await runTurn([]);
   }, [runTurn]);
+
+  // Talk to MARY: the attribution wipes back behind the divider, the page
+  // scrolls away under a blur, and the mark flies to centre, blooms, then
+  // pops up to its resting place in the corner.
+  const begin = useCallback(async () => {
+    if (introRef.current) return;
+    introRef.current = true;
+    await unlockAudio();
+
+    if (reduced) {
+      await enterLive();
+      return;
+    }
+
+    setStage("intro");
+
+    window.setTimeout(() => {
+      const mark = lockupRef.current?.querySelector("img");
+      const header = headerRef.current;
+      if (!mark || !header) return;
+      const r = mark.getBoundingClientRect();
+      const hr = header.getBoundingClientRect();
+      const grown = r.width * 2.7;
+      const grownH = r.height * 2.7;
+      const restW = r.width * (28 / r.height);
+      setFlight({
+        from: { x: r.left, y: r.top, w: r.width },
+        mid: {
+          x: window.innerWidth / 2 - grown / 2,
+          y: window.innerHeight / 2 - grownH / 2,
+          w: grown,
+        },
+        to: { x: hr.left, y: hr.top + (hr.height - 28) / 2, w: restW },
+      });
+    }, 420);
+
+    window.setTimeout(() => {
+      void enterLive();
+    }, 1500);
+  }, [enterLive, reduced]);
 
   const startInterim = useCallback(() => {
     const Ctor =
