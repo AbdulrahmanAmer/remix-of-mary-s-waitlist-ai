@@ -98,15 +98,23 @@ function ensureSink(ctx: AudioContext): Sink {
   element.autoplay = true;
   const created: Sink = { node, element, ok: false, ready: Promise.resolve(false) };
   created.ready = loopback(node.stream)
-    .catch(() => node.stream)
     .then(async (out) => {
       element.srcObject = out;
       document.body.appendChild(element);
       await element.play();
       created.ok = true;
+      trace({ type: "sinkReady" });
       return true;
     })
-    .catch(() => false);
+    .catch(() => {
+      created.ok = false;
+      element.pause();
+      element.srcObject = null;
+      element.remove();
+      if (sink === created) sink = null;
+      trace({ type: "sinkFailed" });
+      return false;
+    });
   sink = created;
   return created;
 }
@@ -115,7 +123,13 @@ function ensureSink(ctx: AudioContext): Sink {
 export async function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
-  await ensureSink(ctx).ready;
+  // A transient autoplay/WebRTC failure gets one clean rebuild. We never fall
+  // back to direct AudioContext output because the microphone cannot reliably
+  // remove that path from the room.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const current = ensureSink(ctx);
+    if (await current.ready) return;
+  }
 }
 
 function outputNode(ctx: AudioContext): AudioNode {
@@ -123,9 +137,15 @@ function outputNode(ctx: AudioContext): AudioNode {
   if (s.ok && s.element.paused) {
     s.element.play().catch(() => {
       s.ok = false;
+      s.element.srcObject = null;
+      s.element.remove();
+      if (sink === s) sink = null;
+      trace({ type: "sinkLost" });
     });
   }
-  return s.ok ? s.node : ctx.destination;
+  // Silent is safer than direct playback: direct output is not a browser call
+  // path, so its words can return through the microphone as if the user spoke.
+  return s.node;
 }
 
 // ---------------------------------------------------------------------------
@@ -630,6 +650,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   // interruption is detected by the local level/echo model first, then the
   // recognizer is reopened after playback has paused.
   let recognitionQuarantined = false;
+  /** Earliest time a fresh recognizer may open after MARY pauses. */
+  let recognitionReopenAt = 0;
 
   const emitInterim = () => {
     const live = `${committed} ${interim}`.trim();
@@ -639,7 +661,16 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   const wordsSayInterrupt = (text: string) => transcriptConfirmsInterrupt(text, assistantLines());
 
   const startRecognition = () => {
-    if (recognition || !alive || muted || recognitionFatal) return;
+    if (
+      recognition ||
+      !alive ||
+      muted ||
+      recognitionFatal ||
+      recognitionQuarantined ||
+      assistantActive() ||
+      performance.now() < recognitionReopenAt
+    )
+      return;
     const Ctor = recognitionCtor();
     if (!Ctor) return;
     try {
@@ -738,10 +769,18 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     options.onInterim?.("");
     stopRecognition();
     recognitionQuarantined = true;
+    recognitionReopenAt = Infinity;
   };
 
   const reopenRecognition = () => {
-    if (!recognitionQuarantined || !alive || muted) return;
+    if (
+      !recognitionQuarantined ||
+      !alive ||
+      muted ||
+      assistantActive() ||
+      performance.now() < recognitionReopenAt
+    )
+      return;
     recognitionQuarantined = false;
     committed = "";
     interim = "";
@@ -780,7 +819,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     options.onInterruptCandidate?.();
     // onInterruptCandidate pauses MARY synchronously. Start a fresh recognition
     // session, so none of her pre-pause transcript can be delivered as the user.
-    window.setTimeout(reopenRecognition, monitor.outputLatencyMs + 80);
+    recognitionReopenAt = now + monitor.outputLatencyMs + 180;
+    window.setTimeout(reopenRecognition, monitor.outputLatencyMs + 190);
   }
 
   const confirmInterrupt = () => {
@@ -894,7 +934,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     const speaking = assistantActive();
     if (speaking && !recognitionQuarantined) quarantineRecognition();
-    if (!speaking && recognitionQuarantined && (pending || holding || !withinTail())) {
+    if (!speaking && recognitionQuarantined && now >= recognitionReopenAt && !withinTail()) {
       reopenRecognition();
     }
     const baseThreshold = Math.min(0.3, Math.max(0.02, noiseFloor * 2.8 + 0.008));
@@ -996,7 +1036,17 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   startRecognition();
   // Belt and braces: if recognition quietly died, bring it back.
   const watchdog = window.setInterval(() => {
-    if (alive && !muted && !recognitionRunning && !recognition && !recognitionFatal) {
+    if (
+      alive &&
+      !muted &&
+      !recognitionRunning &&
+      !recognition &&
+      !recognitionFatal &&
+      !recognitionQuarantined &&
+      !assistantActive() &&
+      !withinTail() &&
+      performance.now() >= recognitionReopenAt
+    ) {
       startRecognition();
     }
   }, 2500);
@@ -1017,7 +1067,11 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       options.onLevel?.(0);
       options.onInterim?.("");
       if (next) stopRecognition();
-      else if (!assistantActive() && !withinTail()) startRecognition();
+      else if (!assistantActive() && !withinTail()) {
+        recognitionQuarantined = false;
+        recognitionReopenAt = 0;
+        startRecognition();
+      }
     },
     close: () => {
       if (!alive) return;

@@ -5,6 +5,8 @@
 - [ ] Scripted /api/turn conversations for the edge cases (ambiguous "a shop", one-word "consulting", guess-correction) as a repeatable check
 
 ## Done
+- [x] Remove unsafe direct-speaker fallback; protected WebRTC playback now retries after failure and otherwise stays silent instead of entering the microphone
+- [x] Close the caption watchdog race: no restart can bypass MARY's playback quarantine, and interruption captions reopen only after her measured output tail clears
 - [x] Hard-stop browser live captioning while MARY is audible; reopen a fresh captioning session only after playback pauses or its echo tail clears
 - [x] Research (25 parallel investigations): browser echo cancellation, barge-in design, transcript echo rejection, VAD, prompt grounding
 - [x] Stop MARY hearing herself: playback-aware echo model (peak-hold coupling, learned only from echo-like frames), tail guard after playback, transcript-vs-her-lines echo stripping with garble tolerance, short/hallucinated transcript rejection
