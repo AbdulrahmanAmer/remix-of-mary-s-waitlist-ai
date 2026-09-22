@@ -119,7 +119,7 @@ export const MaryPresence = memo(function MaryPresence({
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
-    const ctx = canvas.getContext("2d");
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
     const styles = getComputedStyle(canvas);
@@ -136,8 +136,10 @@ export const MaryPresence = memo(function MaryPresence({
       width = Math.max(1, rect.width);
       boxHeight = Math.max(1, rect.height);
       small = width < 360;
-      // Supersample: soft glows need >= 2x pixels or they step, whatever the screen reports.
-      const raw = window.devicePixelRatio || 1;
+      // Supersample: soft glows need >= 2x pixels or they step, whatever the screen
+      // reports. Browser zoom changes the effective ratio, so recompute it too.
+      const zoom = window.visualViewport?.scale ?? 1;
+      const raw = (window.devicePixelRatio || 1) * (zoom > 1 ? zoom : 1);
       const dpr = small ? 2 : Math.min(3, Math.max(2, raw));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(boxHeight * dpr);
@@ -146,6 +148,7 @@ export const MaryPresence = memo(function MaryPresence({
     resize();
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
+    window.visualViewport?.addEventListener("resize", resize);
 
     let raf = 0;
     let t = 0;
