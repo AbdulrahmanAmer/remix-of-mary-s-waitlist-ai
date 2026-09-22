@@ -1,13 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { createOpenAI } from "@ai-sdk/openai";
 import { streamText, Output } from "ai";
-import { z } from "zod";
-import { SYSTEM, TurnSchema, buildPrompt, gatewayConfig } from "@/lib/mary-prompt.server";
-
-const Body = z.object({
-  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
-  collected: z.record(z.string(), z.string()).default({}),
-});
+import type { z } from "zod";
+import {
+  SYSTEM,
+  TurnSchema,
+  buildPrompt,
+  finishTurn,
+  gatewayConfig,
+} from "@/lib/mary-prompt.server";
+import { TurnInput } from "@/lib/mary.functions";
 
 /**
  * Streams MARY's turn as it is written, so her first beat can start playing
@@ -15,7 +17,7 @@ const Body = z.object({
  *
  * Emits newline-delimited JSON:
  *   { "type": "say", "text": "..." }    — the first beat, final
- *   { "type": "turn", "turn": { ... } } — the complete turn
+ *   { "type": "turn", "turn": { ... } } — the complete, grounded turn
  *   { "type": "error" }
  */
 export const Route = createFileRoute("/api/turn")({
@@ -25,9 +27,9 @@ export const Route = createFileRoute("/api/turn")({
         const key = process.env["LOVABLE_API_KEY"];
         if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
-        let data: z.infer<typeof Body>;
+        let data: z.infer<typeof TurnInput>;
         try {
-          data = Body.parse(await request.json());
+          data = TurnInput.parse(await request.json());
         } catch {
           return new Response("Invalid body", { status: 400 });
         }
@@ -36,7 +38,7 @@ export const Route = createFileRoute("/api/turn")({
         const result = streamText({
           model: lovable.responses("openai/gpt-6-astra"),
           system: SYSTEM,
-          prompt: buildPrompt(data.messages, data.collected),
+          prompt: buildPrompt(data.messages, data.collected, data.flags),
           output: Output.object({ schema: TurnSchema }),
           providerOptions: {
             openai: { forceReasoning: true, reasoningEffort: "low", store: false },
@@ -57,7 +59,7 @@ export const Route = createFileRoute("/api/turn")({
                 const sayDone =
                   typeof part.say === "string" &&
                   part.say.trim().length > 0 &&
-                  (part.followUp !== undefined || part.nextField !== undefined);
+                  (part.followUp !== undefined || part.name !== undefined);
                 if (!saidSent && sayDone) {
                   saidSent = true;
                   send({ type: "say", text: part.say!.trim() });
@@ -65,7 +67,11 @@ export const Route = createFileRoute("/api/turn")({
               }
               const out = await result.output;
               if (!saidSent) send({ type: "say", text: out.say.trim() });
-              send({ type: "turn", turn: out });
+              const turn = finishTurn(out, data);
+              if (turn.rejected.length && process.env["NODE_ENV"] !== "production") {
+                console.info("[mary] ungrounded fields dropped:", turn.rejected.join(", "));
+              }
+              send({ type: "turn", turn });
             } catch (error) {
               console.error("turn stream failed", error);
               send({ type: "error" });
