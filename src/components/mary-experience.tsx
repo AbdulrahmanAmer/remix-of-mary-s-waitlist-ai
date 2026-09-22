@@ -561,7 +561,7 @@ export function MaryExperience() {
                   transition={{ ...SOFT, delay: 0.32 }}
                   whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
-                  className="mt-7 h-13 rounded-full px-8 shadow-soft"
+                  className={`h-13 rounded-full px-8 shadow-soft ${compact ? "mt-4" : "mt-7"}`}
                 >
                   Talk to MARY <ArrowRight />
                 </MotionButton>
