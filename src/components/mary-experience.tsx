@@ -23,6 +23,24 @@ type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 
 const MotionButton = motion.create(Button);
 
+// Word-overlap check: catches MARY re-saying a line she already delivered.
+function isNearRepeat(previous: string, next: string): boolean {
+  const words = (text: string) =>
+    new Set(
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .split(/\s+/)
+        .filter(Boolean),
+    );
+  const a = words(previous);
+  const b = words(next);
+  if (!a.size || !b.size) return false;
+  let overlap = 0;
+  for (const word of a) if (b.has(word)) overlap += 1;
+  return overlap / Math.min(a.size, b.size) >= 0.8;
+}
+
 // One motion vocabulary for the whole experience.
 const EASE = [0.22, 1, 0.36, 1] as const;
 const STAGE_IN = { duration: 0.6, ease: EASE } as const;
@@ -183,15 +201,39 @@ export function MaryExperience() {
       busyRef.current = true;
       setPresenceState("thinking");
       try {
-        const turn: MaryTurn = await maryTurn({
-          data: {
-            messages: nextLines.map((line) => ({
-              role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
-              content: line.text,
-            })),
-            collected: collectedRef.current as Record<string, string>,
-          },
+        const messages = nextLines.map((line) => ({
+          role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
+          content: line.text,
+        }));
+        let turn: MaryTurn = await maryTurn({
+          data: { messages, collected: collectedRef.current as Record<string, string> },
         });
+
+        // Safety net: if MARY nearly repeats a line she already said, ask for a fresh take once.
+        const previous = nextLines.filter((line) => line.role === "mary").map((line) => line.text);
+        if (previous.some((prev) => isNearRepeat(prev, turn.say)) && !turn.complete) {
+          try {
+            const fresh = await maryTurn({
+              data: {
+                messages: [
+                  ...messages,
+                  { role: "assistant" as const, content: turn.say },
+                  {
+                    role: "user" as const,
+                    content:
+                      "(You just repeated yourself. Say something completely different that reacts to me and moves us forward.)",
+                  },
+                ],
+                collected: collectedRef.current as Record<string, string>,
+              },
+            });
+            if (!isNearRepeat(turn.say, fresh.say))
+              turn = { ...fresh, collected: { ...turn.collected, ...fresh.collected } };
+          } catch {
+            // keep the original line if the retry fails
+          }
+        }
+
         setCollected(turn.collected);
         collectedRef.current = turn.collected;
         await say(turn.say);
