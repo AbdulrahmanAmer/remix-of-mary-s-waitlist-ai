@@ -1021,7 +1021,20 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       setMicLive(false);
       session?.close();
     };
-  }, [maybeShowEchoHint, micAttempt, stage]);
+  }, [maybeShowEchoHint, micAttempt, releaseHold, stage]);
+
+  // Last line of defence: whatever went wrong, she never stays frozen waiting
+  // for a sentence. Nobody should have to mute themselves to get her back.
+  useEffect(() => {
+    if (stage !== "live") return;
+    const timer = window.setInterval(() => {
+      if (!holdRef.current || busyRef.current) return;
+      if (Date.now() - holdSinceRef.current < 5000) return;
+      releaseHold();
+      setListeningPhase("listening");
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [releaseHold, stage]);
 
   // If her voice ever had to be forced to the speakers, the phone's ring
   // switch is the usual culprit — say so plainly, once.
