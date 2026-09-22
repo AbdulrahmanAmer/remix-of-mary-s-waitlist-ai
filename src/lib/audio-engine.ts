@@ -725,8 +725,12 @@ export type MicSessionOptions = {
   onInterruptCandidate?: () => void;
   /** It really is you — she should stay quiet until your words have been handled. */
   onInterruptConfirmed?: () => void;
-  /** It was her own voice in the room or a passing noise — she can carry on. */
-  onInterruptCancelled?: () => void;
+  /**
+   * It was her own voice in the room or a passing noise — she can carry on.
+   * `heldFirst` means she had already decided it was a real cut-in and went
+   * quiet for it; nothing usable came of it, so the hold must be lifted too.
+   */
+  onInterruptCancelled?: (heldFirst: boolean) => void;
   /** How loudly the microphone hears her (0 = headphones, ~0.3+ = laptop speakers). */
   onEchoCoupling?: (coupling: number) => void;
   /** The microphone went away mid-call: headset unplugged, another app took it. */
