@@ -918,7 +918,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       !speaking &&
       recognitionQuarantined &&
       now >= recognitionReopenAt &&
-      ((pending || holding) ? !withinTail() : !withinTail())
+      !withinTail()
     ) {
       reopenRecognition();
     }
