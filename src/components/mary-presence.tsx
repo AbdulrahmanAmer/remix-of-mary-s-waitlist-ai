@@ -140,7 +140,7 @@ export const MaryPresence = memo(function MaryPresence({
       // reports. Browser zoom changes the effective ratio, so recompute it too.
       const zoom = window.visualViewport?.scale ?? 1;
       const raw = (window.devicePixelRatio || 1) * (zoom > 1 ? zoom : 1);
-      const dpr = small ? 2 : Math.min(3, Math.max(2, raw));
+      const dpr = small ? 2.5 : Math.min(4, Math.max(3, raw));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(boxHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -166,49 +166,6 @@ export const MaryPresence = memo(function MaryPresence({
       const d = 0.2 + ((i * 41) % 55) / 100;
       return { x: Math.cos(a) * d * 0.72, y: Math.sin(a) * d * 0.6 + 0.14, p: i * 1.7 };
     });
-
-    /**
-     * Imperceptible grain that breaks up residual gradient banding. It is
-     * radially faded to nothing so it can never leave a visible square patch
-     * of tinted paper around the sphere.
-     */
-    let grain: HTMLCanvasElement | null = null;
-    let grainSize = 0;
-    const grainFor = (d: number) => {
-      const size = Math.max(16, Math.round(d * 2));
-      if (grain && Math.abs(size - grainSize) < 8) return grain;
-      const off = document.createElement("canvas");
-      off.width = size;
-      off.height = size;
-      const octx = off.getContext("2d");
-      if (!octx) return null;
-      const img = octx.createImageData(size, size);
-      for (let i = 0; i < img.data.length; i += 4) {
-        const v = Math.random() < 0.5 ? 0 : 255;
-        img.data[i] = v;
-        img.data[i + 1] = v;
-        img.data[i + 2] = v;
-        img.data[i + 3] = 255;
-      }
-      octx.putImageData(img, 0, 0);
-      octx.globalCompositeOperation = "destination-in";
-      const mask = octx.createRadialGradient(
-        size / 2,
-        size / 2,
-        size * 0.06,
-        size / 2,
-        size / 2,
-        size / 2,
-      );
-      mask.addColorStop(0, "rgba(0,0,0,1)");
-      mask.addColorStop(0.6, "rgba(0,0,0,0.55)");
-      mask.addColorStop(1, "rgba(0,0,0,0)");
-      octx.fillStyle = mask;
-      octx.fillRect(0, 0, size, size);
-      grain = off;
-      grainSize = size;
-      return grain;
-    };
 
     /** Sweeping brightness around the tube — bright at the front, faint behind. */
     const sweepGradient = (cx: number, cy: number, R: number, angle: number, color: string) => {
@@ -242,7 +199,7 @@ export const MaryPresence = memo(function MaryPresence({
 
     /** One soft tube: a gently folded closed curve stroked from wide-faint to narrow-bright. */
     const drawShell = (cx: number, cy: number, R: number, shell: Shell) => {
-      const segments = small ? 60 : 96;
+      const segments = small ? 96 : 168;
       const rr = R * shell.r;
       ctx.beginPath();
       let prev: { x: number; y: number } | null = null;
@@ -367,17 +324,6 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.lineCap = "round";
       ctx.lineWidth = Math.max(0.6, R * 0.014);
       ctx.stroke();
-
-      // Sub-perceptual dither over the glow area — kills residual gradient banding.
-      // Radially faded so it never leaves a visible square patch on the paper.
-      const d = R * (cur.halo + 0.4);
-      const g = grainFor(d);
-      if (g) {
-        ctx.save();
-        ctx.globalAlpha = 0.012;
-        ctx.drawImage(g, cx - d, cy - d, d * 2, d * 2);
-        ctx.restore();
-      }
 
       // Completion bloom.
       if (bloom > 0.01) {
