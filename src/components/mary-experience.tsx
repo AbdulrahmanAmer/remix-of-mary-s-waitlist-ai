@@ -655,39 +655,10 @@ export function MaryExperience() {
               className="mx-auto flex min-h-0 w-full max-w-xl flex-1 flex-col px-6 py-3 sm:px-0 lg:py-5"
             >
               <MaryPresence state={presence} level={level} height={liveOrb} />
-              <div className="mt-1 flex items-center justify-between gap-4 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                <span className="inline-flex items-center gap-2">
-                  <motion.span
-                    animate={
-                      reduced || !handsFree
-                        ? { opacity: 1, scale: 1 }
-                        : { opacity: [0.45, 1, 0.45], scale: [1, 1.25, 1] }
-                    }
-                    transition={{
-                      duration: 2.4,
-                      repeat: handsFree && !reduced ? Infinity : 0,
-                      ease: "easeInOut",
-                    }}
-                    className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
-                  />
-                  <AnimatePresence mode="wait" initial={false}>
-                    <motion.span
-                      key={handsFree ? "handsfree" : presence}
-                      initial={reduced ? false : { opacity: 0, y: 4 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -4 }}
-                      transition={{ duration: 0.22, ease: EASE }}
-                    >
-                      {handsFree ? "Hands-free" : PRESENCE_LABEL[presence]}
-                    </motion.span>
-                  </AnimatePresence>
-                </span>
-                <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
-              </div>
 
               <div
                 ref={trailRef}
-                className="no-scrollbar mt-3 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-y-auto"
+                className="no-scrollbar mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-y-auto"
               >
                 <motion.div
                   layout
