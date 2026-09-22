@@ -20,6 +20,8 @@ export type Collected = Partial<Record<WaitlistField, string>>;
 export type TurnFlags = {
   revealed: boolean;
   lanesDone: boolean;
+  /** The intro (hello, who she is, what OmniSuite is) was heard in full. */
+  introDone?: boolean | undefined;
   /** The wrap question has been asked, so CLOSE is reachable. */
   wrapAsked?: boolean | undefined;
   /** They asked for a callback; the sales sequence is over. */
@@ -59,6 +61,7 @@ export type MaryTurn = {
   wrapAsked: boolean;
   revealed: boolean;
   lanesDone: boolean;
+  introDone: boolean;
   /** Fields the model proposed without the person's words to back them. */
   rejected: string[];
 };
@@ -90,6 +93,7 @@ export const TurnInput = z.object({
     .object({
       revealed: z.boolean(),
       lanesDone: z.boolean(),
+      introDone: z.boolean().optional(),
       wrapAsked: z.boolean().optional(),
       callback: z.boolean().optional(),
       mode: z.enum(["neutral", "rushed", "skeptical", "guarded", "warm"]).optional(),
@@ -147,6 +151,7 @@ export const maryTurn = createServerFn({ method: "POST" })
           wrapAsked: false,
           revealed: data.flags.revealed,
           lanesDone: data.flags.lanesDone,
+          introDone: data.flags.introDone ?? false,
           rejected: [],
         };
       }

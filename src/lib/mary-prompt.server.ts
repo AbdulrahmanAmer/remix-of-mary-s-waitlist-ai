@@ -63,6 +63,7 @@ export const TurnSchema = z.object({
   ]),
   revealed: z.boolean(),
   lanesDone: z.boolean(),
+  introDone: z.boolean(),
 });
 
 export type TurnObject = z.infer<typeof TurnSchema>;
@@ -93,6 +94,9 @@ export function buildPrompt(
   // a beat she was cut off in does not count — so nothing is replayed or skipped.
   const revealed = flags.revealed;
   const lanesDone = flags.lanesDone;
+  // The intro is a milestone like the reveal: it only counts once it was
+  // fully heard, so an interrupted welcome resumes instead of vanishing.
+  const introDone = Boolean(flags.introDone);
   const discoveryDone = Boolean(
     collected["name"] && collected["business"] && collected["industry"] && collected["operations"],
   );
@@ -107,8 +111,10 @@ export function buildPrompt(
     ? callbackHasBoth
       ? 'CALLBACK, FINAL TURN — you now have their name and a number. Do not ask for anything else. "say" confirms plainly, using their name, that the request is with the team and they will be reached on that number — no day, no time window. "followUp" is a short warm goodbye, or null. Set callbackRequested true and phase CALLBACK. Nothing after this.'
       : "CALLBACK — they asked to be called back. The sales sequence is over: do not pitch, do not run discovery. You need only their name and a number, one ask per turn, skipping anything you already have. Promise nothing about timing — say the request goes straight to the team. Set callbackRequested true every turn from here. If they give you both in one message, confirm and say goodbye in that same turn."
-    : !history
-      ? "WELCOME — the very first thing you say. Greet them like a person first (a short hello on its own), then say who you are in one plain line, then what OmniSuite is in one plain line. Three short beats maximum, no stacking. No personal question at all this turn — end with something easy to respond to, not an intake question. Vary the wording; never use the same opener twice."
+    : !introDone
+      ? !history
+        ? 'WELCOME — the very first thing you say. Greet them like a person first (a short hello on its own), then say who you are in one plain line, then what OmniSuite is in one plain line. Three short beats maximum, no stacking, no pitch yet. "followUp" is exactly one thing: asking what you should call them, woven in naturally ("…and what should I call you?") — the name arrives as part of the hello, never as an intake question, and nothing else rides along with it. Vary the wording; never use the same opener twice. Set introDone true.'
+        : 'WELCOME, RESUMED — your introduction was cut off before they heard all of it. "say" reacts to what they just said first, warmly and briefly — never ignore it — then folds in the parts of the intro they have not heard yet (who you are, what OmniSuite is), without restarting from the top or repeating wording they already heard. "followUp" is exactly one thing: asking what you should call them, woven in naturally. Set introDone true only once the greeting, who you are and what OmniSuite is have all actually been said by the end of this turn.'
       : !discoveryDone
         ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question. If you still do not have their name and the conversation has warmth, ask for it lightly and naturally ('Sorry — I got ahead of myself. Who am I speaking with?'). If they have no business at all, or they clearly want to go, switch to EXIT: one warm line, no pitch, set declined true and phase EXIT."
         : !revealed
@@ -155,7 +161,7 @@ export function buildPrompt(
 
   return `Current phase: ${phase}\n\nReveal already delivered: ${revealed ? "yes" : "no"}\nLanes already explained: ${lanesDone ? "yes" : "no"}\n\nAlready captured (do not change these unless the person just corrected them):\n${known || "(nothing yet)"}\n\nConversation so far:\n${
     history || "(the conversation is just starting)"
-  }${gate}${cutOff}${rejectedNote}${modeNote}${intentRule}${driveRule}${experience}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move — a real question or a specific step, and it is null only on a closing, exit or final callback turn. Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
+  }${gate}${cutOff}${rejectedNote}${modeNote}${intentRule}${driveRule}${experience}\n\nProduce MARY's next spoken turn as two beats: "say" reacts to them first, "followUp" carries the one next move — a real question or a specific step, and it is null only on a closing, exit or final callback turn. Neither beat may repeat anything you already said.\n\nCapturing details: for name, business, industry and operations, set a value ONLY when the person stated it in their own words or clearly said yes to a guess you made, and copy the exact words of theirs that support it into the matching Evidence field (2–12 words, verbatim from a Person line). A guess you offered that they have not answered yet is NOT captured — leave the value and its evidence null and hold the question. Values without matching evidence are discarded. A vague answer ("a shop", "consulting", "a bit of everything") is not an industry — react, then narrow it with one specific question. Never default anyone to real estate or mortgages.\n\nSet "phase" to the phase above, "introDone" to whether your introduction (a greeting, who you are, and what OmniSuite is) has been fully said by the end of this turn, "revealed" to whether the reveal is delivered by the end of this turn, and "lanesDone" to whether both Cultivate and Recover have been explained by the end of this turn.`;
 }
 
 /**
@@ -234,6 +240,7 @@ export function finishTurn(
     wrapAsked: Boolean(input.flags.wrapAsked) || out.wrapAsked,
     revealed: input.flags.revealed || out.revealed,
     lanesDone: input.flags.lanesDone || out.lanesDone,
+    introDone: Boolean(input.flags.introDone) || out.introDone,
     rejected: grounded.rejected,
   };
 }
