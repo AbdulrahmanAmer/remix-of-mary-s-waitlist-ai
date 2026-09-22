@@ -520,15 +520,22 @@ export function MaryExperience() {
   const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
-  // The presence now sizes itself from its box including halo + ground shadow,
+  const tight = viewportHeight < 620;
+  // The presence sizes itself from its box including halo + ground shadow,
   // so it gets a taller stage and still never touches the edges.
-  const landingOrb = Math.max(140, Math.min(260, Math.round(viewportHeight * 0.26)));
-  const liveOrb = Math.max(110, Math.min(180, Math.round(viewportHeight * 0.19)));
+  const landingOrb = Math.max(
+    tight ? 104 : 140,
+    Math.min(260, Math.round(viewportHeight * (tight ? 0.22 : 0.26))),
+  );
+  const liveOrb = Math.max(
+    tight ? 88 : 110,
+    Math.min(180, Math.round(viewportHeight * (tight ? 0.16 : 0.19))),
+  );
 
   return (
-    <main className="relative h-dvh overflow-hidden">
+    <main ref={shellRef} className="no-scrollbar relative min-h-dvh overflow-y-auto">
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
-      <div className="relative z-10 mx-auto flex h-dvh min-h-0 w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
+      <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-4 sm:px-8 sm:py-5">
         <motion.header
           layout
           transition={SPRING}
