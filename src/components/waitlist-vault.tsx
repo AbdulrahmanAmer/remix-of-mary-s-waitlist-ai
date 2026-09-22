@@ -11,7 +11,7 @@ type SheetStatus =
   | { state: "on"; leads: number; lessons: number; version: string }
   | { state: "error"; error: string };
 
-type Tab = "entries" | "notes";
+type Tab = "entries" | "notes" | "audio";
 
 /** Fired by the hidden gesture (five quick taps on "omnikom" in the footer). */
 export const OWNER_VIEW_EVENT = "mary:owner-view";
