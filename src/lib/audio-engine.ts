@@ -518,6 +518,15 @@ export function speak(
     await unlockAudio();
     raf = requestAnimationFrame(tick);
     const pending = { bytes: new Uint8Array(0) };
+    // Conference wifi: if her voice never starts arriving, she must not sit
+    // silently "speaking" forever — cut the request and show the line instead.
+    const firstByteGuard = window.setTimeout(() => {
+      if (!stopped && total === 0) controller.abort();
+    }, 9000);
+    // And a whole line can never take longer than this, however bad the line is.
+    const wholeLineGuard = window.setTimeout(() => {
+      if (!stopped && !streamDone) controller.abort();
+    }, 60000);
     try {
       const res = await fetch("/api/speech", {
         method: "POST",
