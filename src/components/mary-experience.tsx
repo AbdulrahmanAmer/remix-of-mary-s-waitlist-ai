@@ -471,6 +471,13 @@ export function MaryExperience() {
     if (stage === "live") inputRef.current?.focus();
   }, [stage]);
 
+  // Keep the newest turn in view without ever showing a scrollbar.
+  useEffect(() => {
+    const node = trailRef.current;
+    if (!node) return;
+    node.scrollTop = node.scrollHeight;
+  }, [lines, interim, stage, viewportHeight]);
+
   const lastMary = [...lines].reverse().find((line) => line.role === "mary");
   const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
