@@ -64,7 +64,13 @@ export const TurnInput = z.object({
   messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
   collected: z.record(z.string(), z.string()).default({}),
   flags: z
-    .object({ revealed: z.boolean(), lanesDone: z.boolean() })
+    .object({
+      revealed: z.boolean(),
+      lanesDone: z.boolean(),
+      wrapAsked: z.boolean().optional(),
+      callback: z.boolean().optional(),
+      mode: z.enum(["neutral", "rushed", "skeptical", "guarded", "warm"]).optional(),
+    })
     .default({ revealed: false, lanesDone: false }),
 });
 
