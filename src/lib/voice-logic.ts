@@ -356,7 +356,11 @@ export class EchoTracker {
   /** Highest coupling seen this session — the "are they on speakers?" signal. */
   peakCoupling = 0;
 
-  update(mic: number, playback: number, now: number) {
+  /**
+   * @param learn false while the mic is already above the echo threshold —
+   * a rising voice must never be learned as "the room got louder".
+   */
+  update(mic: number, playback: number, now: number, learn = true) {
     this.history.push({ t: now, playback });
     while (this.history.length && now - this.history[0]!.t > 600) this.history.shift();
 
@@ -377,10 +381,10 @@ export class EchoTracker {
     // coupling is a person, not the room — that is never learned as echo.
     if (lagged > 0.06) {
       const instant = Math.min(2.5, mic / lagged);
-      const plausible = instant <= this.coupling * 2 + 0.15;
-      if (plausible && instant > this.coupling) {
-        this.coupling += 0.35 * (instant - this.coupling);
-      } else {
+      const plausible = instant <= this.coupling * 1.6 + 0.08;
+      if (learn && plausible && instant > this.coupling) {
+        this.coupling += 0.12 * (instant - this.coupling);
+      } else if (instant <= this.coupling) {
         // ~8% a second, so a room that got quieter is noticed within a beat or two.
         this.coupling = Math.max(0.1, this.coupling * 0.9986);
       }
