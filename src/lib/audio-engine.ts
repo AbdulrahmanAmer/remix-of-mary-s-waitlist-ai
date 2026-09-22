@@ -73,6 +73,8 @@ let sink: Sink | null = null;
 let degraded = false;
 /** Direct-to-speaker path, silent until the call route proves inaudible. */
 let directGain: GainNode | null = null;
+/** Everything she says passes through here before it splits to both routes. */
+let hub: GainNode | null = null;
 let directOn = false;
 /** performance.now() of the last frame where the element clock actually moved. */
 let lastElementProgressAt = 0;
