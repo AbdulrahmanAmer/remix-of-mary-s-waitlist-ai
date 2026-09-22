@@ -610,15 +610,13 @@ export function MaryExperience() {
                 </span>
                 <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
               </div>
-              <div className="mt-3">
-                <ProgressConstellation collected={collected} />
-              </div>
+              <ProgressConstellation collected={collected} />
 
               <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
                 <motion.div
                   layout
                   transition={SPRING}
-                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto"
+                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto pr-7 md:pr-0"
                 >
                   <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
