@@ -33,6 +33,7 @@ import {
   type LeadPayload,
 } from "@/lib/lead-sync";
 import {
+  MicUnavailableError,
   speak,
   startMicSession,
   transcribe,
@@ -41,6 +42,25 @@ import {
   type SpeakHandle,
   type Utterance,
 } from "@/lib/audio-engine";
+
+/** Plain words for every way a microphone can fail to open. */
+function micMessage(error: unknown): string {
+  const reason = error instanceof MicUnavailableError ? error.reason : "unknown";
+  switch (reason) {
+    case "denied":
+      return "Microphone is blocked. Allow it in your browser's address bar, or just type — I'm reading either way.";
+    case "no-device":
+      return "I can't find a microphone on this device. Typing works perfectly.";
+    case "busy":
+      return "Another app is using your microphone. Close it and reload, or keep going by typing.";
+    case "insecure":
+      return "This page needs a secure (https) address to use the microphone. You can still type to me.";
+    case "unsupported":
+      return "This browser won't let me listen — Safari, Chrome or Edge will. Typing works here.";
+    default:
+      return "I couldn't open the microphone. You can keep the conversation going by typing.";
+  }
+}
 import {
   CUT_OFF_MARK,
   isEchoOfAssistant,
