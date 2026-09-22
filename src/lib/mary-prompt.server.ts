@@ -94,22 +94,27 @@ export function buildPrompt(
   const discoveryDone = Boolean(
     collected["name"] && collected["business"] && collected["industry"] && collected["operations"],
   );
-  const wrapAsked = Boolean(lastAssistant && lastAssistant.includes("?"));
+  // The wrap question is marked explicitly by the turn that asked it — no
+  // guessing from punctuation, which stalled whenever a line was cut off.
+  const wrapAsked = Boolean(flags.wrapAsked);
   const wasCutOff = Boolean(lastAssistant && lastAssistant.includes(CUT_OFF_MARK));
+  const callback = Boolean(flags.callback);
 
-  const phase = !history
-    ? "WELCOME — the conversation is just starting. One sentence on who you are and what OmniSuite does, then ask if they want first access. No personal question yet."
-    : !discoveryDone
-      ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question."
-      : !revealed
-        ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn. Set revealed true."
-        : !lanesDone
-          ? "LANES — immediately tie Cultivate and Recover to their own situation, one short beat each, then land that it is three lanes in one system. No questions here. Set lanesDone true."
-          : !allCaptured
-            ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
-            : wrapAsked
-              ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the exact closing line and set complete true."
-              : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false.";
+  const phase = callback
+    ? "CALLBACK — they asked to be called back. The sales sequence is over: do not pitch, do not run discovery. You need only their name and a number, one ask per turn, skipping anything you already have. Promise nothing about timing — say the request goes straight to the team. Set callbackRequested true every turn from here."
+    : !history
+      ? "WELCOME — the very first thing you say. Greet them like a person first (a short hello on its own), then say who you are in one plain line, then what OmniSuite is in one plain line. Three short beats maximum, no stacking. No personal question at all this turn — end with something easy to respond to, not an intake question. Vary the wording; never use the same opener twice."
+      : !discoveryDone
+        ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question. If you still do not have their name and the conversation has warmth, ask for it lightly and naturally ('Sorry — I got ahead of myself. Who am I speaking with?'). If they have no business at all, say so is fine, mark declined and wind down warmly instead of continuing the ladder."
+        : !revealed
+          ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn. Set revealed true."
+          : !lanesDone
+            ? "LANES — immediately tie Cultivate and Recover to their own situation, one short beat each, then land that it is three lanes in one system. No questions here. Set lanesDone true."
+            : !allCaptured
+              ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
+              : wrapAsked
+                ? "CLOSE — they've answered your wrap question. Answer anything they asked in one sentence, then deliver the exact closing line and set complete true."
+                : "WRAP — everything is captured, but do NOT close yet. Tell them they're all set and ask if they have questions or want you to finalise their spot. Keep complete false and set wrapAsked true on the turn where you ask it.";
 
   const missing = requiredFields.filter((f) => !collected[f]);
   const gate = missing.length
