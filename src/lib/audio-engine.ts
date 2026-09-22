@@ -1163,6 +1163,13 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   startRecognition();
   // Belt and braces: if recognition quietly died, bring it back.
   const watchdog = window.setInterval(() => {
+    // Phones suspend audio when the screen locks or the tab goes away; both
+    // ends of the call have to be woken or she goes silent and deaf.
+    if (alive && ctx.state === "suspended") void ctx.resume().catch(() => {});
+    if (alive) {
+      const playback = getAudioContext();
+      if (playback.state === "suspended") void playback.resume().catch(() => {});
+    }
     if (
       alive &&
       !muted &&

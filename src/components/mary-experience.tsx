@@ -109,12 +109,17 @@ function useStageHeight(ref: React.RefObject<HTMLElement | null>): number {
       if (measured > 0) setHeight(measured);
     };
     update();
-    const observer = new ResizeObserver(update);
-    observer.observe(node);
+    // Older browsers without ResizeObserver still get window-driven updates.
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(node);
     window.visualViewport?.addEventListener("resize", update);
+    window.addEventListener("resize", update);
+    window.addEventListener("orientationchange", update);
     return () => {
-      observer.disconnect();
+      observer?.disconnect();
       window.visualViewport?.removeEventListener("resize", update);
+      window.removeEventListener("resize", update);
+      window.removeEventListener("orientationchange", update);
     };
   }, [ref]);
   return height;
