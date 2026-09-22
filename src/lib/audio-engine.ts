@@ -1547,6 +1547,19 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const voiced = voice.score >= VOICE_ONSET;
     const stillVoiced = voice.score >= VOICE_KEEP;
 
+    // ---- is this the person on the microphone, or somebody near them? ----
+    // Everybody in a hall has a human voice; only the person holding the device
+    // is centimetres from the microphone. Voice-shaped sound that sits close to
+    // the room's own voices is other people, and it teaches the room profile
+    // rather than opening a turn.
+    const nearHere = nearField.isNearField(peak, TIMINGS.nearFieldMarginDb);
+    if (stillVoiced && !nearHere && !speaking && !withinTail()) nearField.learnAmbient(peak);
+    nearFieldSnapshot = {
+      own: nearField.ownLevel,
+      ambient: nearField.ambientLevel,
+      marginDb: nearField.marginDb(peak),
+    };
+
     // A hold can never outlive the sentence it was waiting for. If she has been
     // quiet for a cut-in this long with nothing closing it, close it here.
     if (holding && now - holdingSince > TIMINGS.holdMaxMs) {
