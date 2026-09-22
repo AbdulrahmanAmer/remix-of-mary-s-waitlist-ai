@@ -33,6 +33,10 @@ function trace(event: Record<string, unknown>) {
 }
 
 let sharedContext: AudioContext | null = null;
+/** The live microphone track, kept for the on-phone diagnostics panel. */
+let activeMicTrack: MediaStreamTrack | null = null;
+/** A stream captured during the tap, handed to the session so iOS sees a gesture. */
+let primedStream: MediaStream | null = null;
 
 /** Thrown when the device/browser simply cannot do live audio at all. */
 export class AudioUnsupportedError extends Error {}
