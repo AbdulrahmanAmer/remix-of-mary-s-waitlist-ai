@@ -486,8 +486,10 @@ export function MaryExperience() {
   const history = lines.filter((line) => line.id !== lastMary?.id).slice(-6);
   const pulseScale = 1 + Math.min(0.12, level * 0.1);
   const compact = viewportHeight < 780;
-  const landingOrb = Math.max(110, Math.min(200, Math.round(viewportHeight * 0.2)));
-  const liveOrb = Math.max(84, Math.min(132, Math.round(viewportHeight * 0.14)));
+  // The presence now sizes itself from its box including halo + ground shadow,
+  // so it gets a taller stage and still never touches the edges.
+  const landingOrb = Math.max(140, Math.min(260, Math.round(viewportHeight * 0.26)));
+  const liveOrb = Math.max(110, Math.min(180, Math.round(viewportHeight * 0.19)));
 
   return (
     <main className="relative h-dvh overflow-hidden">
