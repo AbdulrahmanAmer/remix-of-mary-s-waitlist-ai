@@ -611,7 +611,7 @@ export function MaryExperience() {
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
               transition={STAGE_IN}
-              className="mx-auto flex min-h-0 w-full max-w-4xl flex-1 flex-col py-3 pr-10 md:pr-44 lg:py-5"
+              className="mx-auto flex min-h-0 w-full max-w-2xl flex-1 flex-col px-6 py-3 sm:px-0 lg:py-5"
             >
               <MaryPresence state={presence} level={level} height={liveOrb} />
               <div className="mt-1 flex items-center justify-between gap-4 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
