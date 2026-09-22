@@ -34,6 +34,7 @@ import {
 } from "@/lib/lead-sync";
 import {
   isInAppBrowser,
+  micPermissionState,
   MicUnavailableError,
   speak,
   startMicSession,
