@@ -276,8 +276,7 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.scale(1, 0.2);
       ctx.translate(-cx, -gy);
       const shadow = ctx.createRadialGradient(cx, gy, 0, cx, gy, R * 1.05);
-      shadow.addColorStop(0, withAlpha(ink, 0.09));
-      shadow.addColorStop(1, withAlpha(ink, 0));
+      for (const [p, a] of falloffStops(0.1)) shadow.addColorStop(p, withAlpha(ink, a));
       ctx.fillStyle = shadow;
       ctx.beginPath();
       ctx.arc(cx, gy, R * 1.05, 0, Math.PI * 2);
