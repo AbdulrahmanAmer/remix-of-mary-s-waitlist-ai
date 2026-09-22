@@ -1373,14 +1373,30 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       options.onLevel?.(0);
       return;
     }
-    options.onLevel?.(Math.min(1, peak * 1.8));
+
+    const speaking = assistantActive();
+
+    // ---- is this a voice, or is it the room? ----
+    // The room profile is only allowed to grow on frames where nobody can be
+    // talking: she is silent, her echo has drained, and nothing is being
+    // captured. Everything else is judged against it.
+    const learnRoom = !speaking && !capturing && !pending && !holding && !withinTail();
+    const voice: VoiceReading = detector.update(
+      (analyser.getByteFrequencyData(spectrum), spectrum),
+      ctx.sampleRate,
+      analyser.fftSize,
+      learnRoom,
+    );
+    voiceReading = voice;
+    // The meter follows the voice, not the room: a fan no longer lights her up.
+    options.onLevel?.(Math.min(1, peak * 1.8 * (0.25 + 0.75 * voice.score)));
+    options.onVoice?.(voice);
 
     if (now - openedAt < calibrationMs) {
       noiseFloor = noiseFloor * 0.88 + peak * 0.12;
       return;
     }
 
-    const speaking = assistantActive();
     if (speaking && !recognitionQuarantined) quarantineRecognition();
     if (!speaking && recognitionQuarantined && now >= recognitionReopenAt && !withinTail()) {
       reopenRecognition();
@@ -1391,43 +1407,49 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       Math.max(baseThreshold, echo.expectedEcho * 1.7 + baseThreshold),
     );
 
+    // Loud enough AND voice-shaped. Either one on its own is the room.
+    const voiced = voice.score >= VOICE_ONSET;
+    const stillVoiced = voice.score >= VOICE_KEEP;
+
     // A hold can never outlive the sentence it was waiting for. If she has been
     // quiet for a cut-in this long with nothing closing it, close it here.
-    if (holding && now - holdingSince > 4000) {
+    if (holding && now - holdingSince > TIMINGS.holdMaxMs) {
       flush();
       return;
     }
 
     // ---- she is paused: was that really you? ----
     // Her voice takes a moment to drain out of the room after the pause, so
-    // the first stretch is ignored; after that, a mic that stays loud with
-    // nothing playing can only be a person. The check always ends in a
-    // decision, one way or the other.
+    // the first stretch is ignored; after that it takes a run of frames that
+    // both clear the echo model and sound like a person. The check always ends
+    // in a decision, one way or the other.
     if (pending) {
       const age = now - pending.at;
-      const settle = 180 + monitor.outputLatencyMs;
+      const settle = TIMINGS.cutInSettleMs + monitor.outputLatencyMs;
+      if (voice.score > pending.voice) pending.voice = voice.score;
       if (age > settle) {
         pending.frames += 1;
-        // Her voice is still draining out of the room, so the bar stays at
-        // the echo model, not the plain noise floor.
-        if (peak >= Math.max(baseThreshold * 1.15, echoThreshold)) {
+        if (peak >= Math.max(baseThreshold * 1.15, echoThreshold) && stillVoiced) {
           pending.loud += 1;
           cleanPeak = Math.max(cleanPeak, peak);
           lastSpeechAt = now;
+          lastRealSpeechAt = now;
         }
       }
-      if (pending.words || pending.loud >= 6) {
+      if (pending.words || pending.loud >= TIMINGS.interruptFrames) {
         confirmInterrupt();
-      } else if (age >= settle + 520) {
+      } else if (age >= settle + TIMINGS.cutInDecideMs) {
         cancelInterrupt();
       }
       return;
     }
 
     // Speech is bursty: a syllable gap must not reset the clock, so onset is a
-    // running score that climbs on loud frames and eases off on quiet ones.
+    // running score that climbs on voice-like frames and eases off on the rest.
+    // Non-voice frames cost two, so intermittent clatter can never accumulate
+    // its way into a turn the way a run of syllables does.
     const scoreLoud = (loud: boolean) => {
-      loudScore = loud ? Math.min(10, loudScore + 1) : Math.max(0, loudScore - 1);
+      loudScore = loud ? Math.min(10, loudScore + 1) : Math.max(0, loudScore - 2);
       if (loud && !speechCandidateAt) speechCandidateAt = now;
       if (loudScore === 0) speechCandidateAt = 0;
       return loudScore;
@@ -1444,14 +1466,20 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
         confirmInterrupt();
         return;
       }
-      // Her own voice must clear the echo model before it counts as you.
-      if (scoreLoud(peak >= echoThreshold) >= 6) {
+      // Cutting in over her has to look like a person: past the echo model and
+      // clearly voice-shaped. A door, a clatter or her own voice never is.
+      if (
+        scoreLoud(peak >= echoThreshold && voice.score >= VOICE_INTERRUPT) >=
+        TIMINGS.interruptFrames
+      ) {
         speechCandidateAt = 0;
         loudScore = 0;
         trace({
           type: "energy",
           peak: Number(peak.toFixed(3)),
           threshold: Number(echoThreshold.toFixed(3)),
+          voice: Number(voice.score.toFixed(2)),
+          snr: Number(voice.snrDb.toFixed(1)),
           expected: Number(echo.expectedEcho.toFixed(3)),
           coupling: Number(echo.coupling.toFixed(2)),
           playback: Number(monitor.level.toFixed(3)),
@@ -1463,19 +1491,21 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
 
     const threshold = withinTail() ? echoThreshold : baseThreshold;
 
-    if (peak >= threshold) {
+    if (peak >= threshold && stillVoiced) {
       lastSpeechAt = now;
-      // Clearly above the room, not just over the line: this is what stops a
-      // noisy café from holding a recording open until the 45-second cap.
-      if (peak >= threshold * 1.6) lastRealSpeechAt = now;
+      // A frame that really sounds like a person. Steady noise never gets here,
+      // so it can neither open a turn nor hold one open.
+      if (voiced) lastRealSpeechAt = now;
       cleanPeak = Math.max(cleanPeak, peak);
-      if (scoreLoud(true) >= 7 && !capturing) {
+      if (scoreLoud(voiced) >= TIMINGS.onsetFrames && !capturing) {
         startCapture(now, false);
         cleanPeak = peak;
         options.onSpeechStart?.();
       }
     } else if (!capturing) {
       scoreLoud(false);
+      // Room learning happens in the detector; this keeps the older level
+      // model in step with it for the echo comparisons above.
       if (!withinTail()) noiseFloor = noiseFloor * 0.985 + peak * 0.015;
       // Words the level detector missed (a quiet talker) still make a turn.
       if (committed && now - lastFinalAt > 450) flush();
@@ -1485,9 +1515,9 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       // A final result after the last sound is a strong "they're done".
       if (lastFinalAt > lastSpeechAt && liveText) wait = Math.min(wait, 380);
       if (now - lastSpeechAt >= wait) flush();
-      // Steady room noise can keep refreshing the silence clock; nothing that
-      // actually sounds like speech for this long means the turn is over.
-      else if (now - lastRealSpeechAt >= 2500) flush();
+      // Nothing that sounds like a person for this long means the turn is over,
+      // however loud the room behind them is.
+      else if (now - lastRealSpeechAt >= TIMINGS.noVoiceEndpointMs) flush();
     }
 
     if (capturing && now - utteranceStartedAt >= maxUtteranceMs) flush();
