@@ -268,7 +268,8 @@ export async function startRecording(options: RecordingOptions = {}): Promise<Re
     if (elapsed < calibrationMs) {
       noiseFloor = noiseFloor * 0.88 + peak * 0.12;
     } else if (!completionFired) {
-      const threshold = Math.min(0.22, Math.max(0.025, noiseFloor * 2.8 + 0.008));
+      const scale = options.thresholdScale ?? 1;
+      const threshold = Math.min(0.3, Math.max(0.025, noiseFloor * 2.8 + 0.008) * scale);
       if (peak >= threshold) {
         if (!speechCandidateAt) speechCandidateAt = now;
         lastSpeechAt = now;
