@@ -465,6 +465,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   /** She was held for a sound that turned out to be nothing — she carries on. */
   const releaseHold = useCallback(() => {
     holdRef.current = false;
+    holdSinceRef.current = 0;
     pendingInterruptRef.current = false;
     const handle = speakRef.current;
     if (handle?.isPaused()) {
