@@ -404,6 +404,7 @@ export const MaryPresence = memo(function MaryPresence({
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
+      window.visualViewport?.removeEventListener("resize", resize);
     };
   }, [reduced]);
 
