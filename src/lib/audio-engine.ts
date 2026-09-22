@@ -1174,6 +1174,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   const data = new Uint8Array(analyser.frequencyBinCount);
   const spectrum = new Uint8Array(analyser.frequencyBinCount);
   const detector = new VoiceDetector();
+  const nearField = new NearFieldModel();
   const baseSilenceMs = options.silenceMs ?? TIMINGS.endpointSilenceMs;
   const maxUtteranceMs = options.maxUtteranceMs ?? TIMINGS.maxUtteranceMs;
   const tracker = new EchoTracker();
