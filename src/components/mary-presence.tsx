@@ -253,7 +253,7 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.lineCap = "round";
       ctx.lineJoin = "round";
       const base = R * shell.w * cur.thick * (1 + lv * 0.22);
-      for (const pass of PASSES) {
+      for (const pass of lite ? PASSES.slice(1) : PASSES) {
         ctx.globalAlpha = Math.min(1, pass.a * shell.alpha * cur.glow * (0.85 + lv * 0.4));
         ctx.lineWidth = Math.max(0.5, base * pass.k);
         ctx.stroke();
