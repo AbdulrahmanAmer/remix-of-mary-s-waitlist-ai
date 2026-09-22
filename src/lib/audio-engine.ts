@@ -958,6 +958,23 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     }
   }
   activeMicTrack = stream.getAudioTracks()[0] ?? null;
+  // Phones and laptops are free to ignore what we asked for. Read back what
+  // the device actually agreed to: when it refuses to clean the line, our own
+  // echo and noise handling is all there is, and the check panel should say so.
+  try {
+    const applied = activeMicTrack?.getSettings() as
+      | { echoCancellation?: boolean; noiseSuppression?: boolean; autoGainControl?: boolean }
+      | undefined;
+    micProcessing = applied
+      ? [
+          applied.echoCancellation ? "echo cancel" : "no echo cancel",
+          applied.noiseSuppression ? "noise suppression" : "no noise suppression",
+          applied.autoGainControl ? "auto gain" : "no auto gain",
+        ].join(", ")
+      : "unknown";
+  } catch {
+    micProcessing = "unknown";
+  }
 
   const Ctor =
     window.AudioContext ??
