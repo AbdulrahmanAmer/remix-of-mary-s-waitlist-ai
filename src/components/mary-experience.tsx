@@ -1006,6 +1006,38 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
     setMicAttempt((n) => n + 1);
   }, []);
 
+  // If they go into browser settings and allow the microphone, the line should
+  // come back on its own — nobody should have to reload to be heard.
+  useEffect(() => {
+    if (stage !== "live" || micLive) return;
+    let stop = () => {};
+    void (async () => {
+      const state = await micPermissionState();
+      if (state !== "denied" && state !== "prompt") return;
+      try {
+        const status = await (
+          navigator as unknown as {
+            permissions: {
+              query: (d: { name: string }) => Promise<{
+                state: string;
+                addEventListener?: (t: string, fn: () => void) => void;
+                removeEventListener?: (t: string, fn: () => void) => void;
+              }>;
+            };
+          }
+        ).permissions.query({ name: "microphone" });
+        const onChange = () => {
+          if (status.state === "granted") retryMic();
+        };
+        status.addEventListener?.("change", onChange);
+        stop = () => status.removeEventListener?.("change", onChange);
+      } catch {
+        /* the browser keeps its permissions private; the mic button still works */
+      }
+    })();
+    return () => stop();
+  }, [micLive, retryMic, stage]);
+
   /** Mute keeps the call open but stops her hearing you. */
   const toggleMicMute = useCallback(() => {
     lastActivityRef.current = Date.now();
