@@ -246,7 +246,8 @@
     color-mix(in oklab, var(--primary) 16%, transparent),
     transparent 72%
   );
-  animation: mary-boot-glow 2.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: mary-boot-glow 1.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(-1 * var(--boot-elapsed, 0s));
 }
 
 @keyframes mary-boot-glow {
@@ -268,7 +269,8 @@
   position: relative;
   width: 168px;
   height: 168px;
-  animation: mary-boot-orb-in 1.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: mary-boot-orb-in 1.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(0.14s - var(--boot-elapsed, 0s));
 }
 
 @keyframes mary-boot-orb-in {
@@ -299,6 +301,7 @@
   );
   mask: radial-gradient(farthest-side, transparent calc(100% - 3.5px), #000 calc(100% - 3px));
   animation: mary-boot-spin linear infinite;
+  animation-delay: calc(-1 * var(--boot-elapsed, 0s));
 }
 
 .mary-boot-ring--a {
@@ -354,7 +357,8 @@
   box-shadow:
     inset 0 0 22px color-mix(in oklab, var(--primary) 22%, transparent),
     0 0 46px color-mix(in oklab, var(--primary) 26%, transparent);
-  animation: mary-boot-core 2.2s ease-in-out 0.5s infinite;
+  animation: mary-boot-core 2.2s ease-in-out infinite;
+  animation-delay: calc(0.5s - var(--boot-elapsed, 0s));
 }
 
 @keyframes mary-boot-core {
@@ -382,7 +386,8 @@
     transparent 75%
   );
   filter: blur(3px);
-  animation: mary-boot-shadow 2.2s ease-in-out 0.5s infinite;
+  animation: mary-boot-shadow 2.2s ease-in-out infinite;
+  animation-delay: calc(0.5s - var(--boot-elapsed, 0s));
 }
 
 @keyframes mary-boot-shadow {
@@ -428,7 +433,8 @@
     transparent
   );
   transform-origin: center;
-  animation: mary-boot-line 1.6s cubic-bezier(0.22, 1, 0.36, 1) 1s both;
+  animation: mary-boot-line 1.1s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: calc(1.5s - var(--boot-elapsed, 0s));
 }
 
 @keyframes mary-boot-line {
@@ -444,7 +450,8 @@
 
 .mary-boot-caption {
   opacity: 0;
-  animation: mary-boot-caption 0.8s ease 1.35s both;
+  animation: mary-boot-caption 0.8s ease both;
+  animation-delay: calc(1.78s - var(--boot-elapsed, 0s));
 }
 
 @keyframes mary-boot-caption {
@@ -461,21 +468,21 @@
 /* Handoff: the boot screen dissolves outward and lifts away so the home page
    underneath rises into its place instead of being cut to. */
 .mary-boot--out {
-  animation: mary-boot-out 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: mary-boot-out 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .mary-boot--out .mary-boot-orb {
-  animation: mary-boot-orb-out 0.72s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: mary-boot-orb-out 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .mary-boot--out .mary-boot-word span,
 .mary-boot--out .mary-boot-line,
 .mary-boot--out .mary-boot-caption {
-  animation: mary-boot-text-out 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: mary-boot-text-out 0.56s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 .mary-boot--out .mary-boot-glow {
-  animation: mary-boot-glow-out 0.72s ease-out both;
+  animation: mary-boot-glow-out 0.8s ease-out both;
 }
 
 @keyframes mary-boot-out {
