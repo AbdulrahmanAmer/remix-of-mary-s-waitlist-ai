@@ -644,8 +644,8 @@ export function MaryExperience() {
               className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-10 text-center"
             >
               <div>
-                <div className="flex justify-center">
-                  <MaryOrb state="success" level={0.3} size={190} />
+                <div className="mx-auto w-full max-w-md">
+                  <MaryPresence state="done" level={0} height={200} />
                 </div>
                 <p className="eyebrow mt-7">Early access confirmed</p>
                 <h1 className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink">
