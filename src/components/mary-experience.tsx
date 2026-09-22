@@ -635,7 +635,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
               key="landing"
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -90, filter: "blur(12px)" }}
+              exit={{ opacity: 0, y: -16, scale: 0.92, filter: "blur(14px)" }}
               transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-4 text-center"
             >
