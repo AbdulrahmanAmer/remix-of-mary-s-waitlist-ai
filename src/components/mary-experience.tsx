@@ -148,17 +148,19 @@ export function MaryExperience() {
       if (opts.record !== false) setLines((prev) => [...prev, { id: uid(), role: "mary", text }]);
       setReveal(0);
 
-      const duration = Math.max(1400, words * 300);
-      const start = performance.now();
-      let raf = 0;
-      const animateWords = () => {
-        const progress = Math.min(1, (performance.now() - start) / duration);
-        setReveal(Math.ceil(progress * words));
-        if (progress < 1) raf = requestAnimationFrame(animateWords);
-      };
-      raf = requestAnimationFrame(animateWords);
+      // Rough spoken length, used only as a floor while the audio stream fills.
+      const approx = Math.max(1.4, words * 0.42);
 
       if (mutedRef.current) {
+        const duration = approx * 1000;
+        const start = performance.now();
+        let raf = 0;
+        const animateWords = () => {
+          const progress = Math.min(1, (performance.now() - start) / duration);
+          setReveal(Math.ceil(progress * words));
+          if (progress < 1) raf = requestAnimationFrame(animateWords);
+        };
+        raf = requestAnimationFrame(animateWords);
         setPresenceState("speaking");
         return new Promise<void>((resolve) => {
           window.setTimeout(() => {
@@ -174,8 +176,10 @@ export function MaryExperience() {
       setPresenceState("speaking");
       const handle = speak(text, {
         onLevel: setLevel,
+        approxDurationSec: approx,
+        // Words land in step with the voice that is actually playing.
+        onProgress: (progress) => setReveal(Math.ceil(progress * words)),
         onEnd: () => {
-          cancelAnimationFrame(raf);
           setReveal(words);
           setPresenceState((current) => (current === "speaking" ? "idle" : current));
         },
