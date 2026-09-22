@@ -146,10 +146,7 @@ export const MaryPresence = memo(function MaryPresence({
       const radius = Math.min(boxHeight * 0.34, width * 0.22);
       if (radius <= 0) return;
 
-      const current = stateRef.current;
-      const breath = animated
-        ? 1 + Math.sin(t * 1.1) * 0.03 + lv * 0.07 + bloom * 0.09
-        : 1;
+      const breath = animated ? 1 + Math.sin(t * 1.1) * 0.03 + lv * 0.07 + bloom * 0.09 : 1;
 
       // Halo.
       const haloR = radius * (cur.halo + lv * 0.5 + bloom * 0.6);
@@ -219,8 +216,6 @@ export const MaryPresence = memo(function MaryPresence({
         ctx.lineWidth = 1.6;
         ctx.stroke();
       }
-
-      if (current === "done" && !animated) return;
     };
 
     const frame = (now: number) => {
