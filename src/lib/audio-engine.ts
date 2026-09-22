@@ -638,19 +638,65 @@ function recognitionCtor(): (new () => Recognition) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
+/** Why the microphone could not open — drives what the person is told. */
+export type MicFailure = "insecure" | "unsupported" | "denied" | "no-device" | "busy" | "unknown";
+
+export class MicUnavailableError extends Error {
+  reason: MicFailure;
+  constructor(reason: MicFailure) {
+    super(reason);
+    this.reason = reason;
+  }
+}
+
+function micFailureFrom(error: unknown): MicFailure {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError")
+    return "denied";
+  if (name === "NotFoundError" || name === "OverconstrainedError" || name === "DevicesNotFoundError")
+    return "no-device";
+  if (name === "NotReadableError" || name === "AbortError" || name === "TrackStartError")
+    return "busy";
+  return "unknown";
+}
+
 export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {
-  const stream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-      channelCount: 1,
-      // Newer Chrome can cancel every sound the machine plays, not just calls.
-      // Unknown constraints are ignored everywhere else.
-      ...({ echoCancellationMode: "all" } as Record<string, unknown>),
-    } as MediaTrackConstraints,
-  });
-  const ctx = new AudioContext();
+  // A page served over plain http (or an in-app browser that strips the API)
+  // has no microphone at all — say so plainly instead of blaming permissions.
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    throw new MicUnavailableError(
+      typeof window !== "undefined" && window.isSecureContext === false ? "insecure" : "unsupported",
+    );
+  }
+
+  let stream: MediaStream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        // Newer Chrome can cancel every sound the machine plays, not just calls.
+        // Unknown constraints are ignored everywhere else.
+        ...({ echoCancellationMode: "all" } as Record<string, unknown>),
+      } as MediaTrackConstraints,
+    });
+  } catch (error) {
+    throw new MicUnavailableError(micFailureFrom(error));
+  }
+
+  const Ctor =
+    window.AudioContext ??
+    (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!Ctor) {
+    stream.getTracks().forEach((track) => track.stop());
+    throw new MicUnavailableError("unsupported");
+  }
+  const ctx = new Ctor();
+  // iPhone Safari hands back a suspended context whenever the gesture that
+  // started the call has already settled; without this the line is deaf.
+  if (ctx.state === "suspended") await ctx.resume().catch(() => {});
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
   analyser.fftSize = 512;
