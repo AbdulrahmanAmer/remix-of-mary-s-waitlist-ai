@@ -33,8 +33,11 @@ import {
   type LeadPayload,
 } from "@/lib/lead-sync";
 import {
+  audioDiagnostics,
   isInAppBrowser,
   micPermissionState,
+  primeMicPermission,
+  replayLastLine,
   MicUnavailableError,
   speak,
   startMicSession,
@@ -295,6 +298,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   /** Bumped to ask the browser for the microphone all over again. */
   const [micAttempt, setMicAttempt] = useState(0);
   const [echoHint, setEchoHint] = useState(false);
+  /** Her voice had to be pushed to the speakers — the phone may be on silent. */
+  const [silentHint, setSilentHint] = useState(false);
   const [result, setResult] = useState<ConversationResult | null>(null);
   /** This visit's row in the browser store and in the sheet. */
   const entryIdRef = useRef<string>("session");
@@ -869,7 +874,14 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const begin = useCallback(async () => {
     if (introRef.current) return;
     introRef.current = true;
+    // iPhone Safari only grants the microphone while the tap is still being
+    // handled, so it is asked for here — before any animation or await.
+    const primed = primeMicPermission().catch((error: unknown) => {
+      setMicError(micMessage(error));
+      return null;
+    });
     await unlockAudio();
+    await primed;
 
     if (reduced) {
       await enterLive();
@@ -1001,6 +1013,22 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       session?.close();
     };
   }, [maybeShowEchoHint, micAttempt, stage]);
+
+  // If her voice ever had to be forced to the speakers, the phone's ring
+  // switch is the usual culprit — say so plainly, once.
+  useEffect(() => {
+    if (stage !== "live" || silentHint) return;
+    // Only iPhones and iPads have the silent switch this hint is about; on
+    // other browsers the plain route is a normal fallback, not a problem.
+    const apple =
+      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+    if (!apple) return;
+    const timer = window.setInterval(() => {
+      if (audioDiagnostics().directOutput) setSilentHint(true);
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [silentHint, stage]);
 
   /** Ask for the microphone again — after a refusal, a swap, or a stolen line. */
   const retryMic = useCallback(() => {
@@ -1585,6 +1613,23 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                       {statusText}
                     </motion.p>
                   </AnimatePresence>
+                  {silentHint && (
+                    <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-accent-text">
+                      <span>
+                        Can&apos;t hear her? Turn the ring switch on the side of your phone on, or
+                        plug in headphones.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void replayLastLine();
+                        }}
+                        className="rounded-full border border-border px-2.5 py-0.5 text-[0.68rem] transition-colors hover:bg-muted"
+                      >
+                        Play sound
+                      </button>
+                    </p>
+                  )}
                   <AnimatePresence>
                     {echoHint && micLive && (
                       <motion.p

@@ -33,6 +33,10 @@ function trace(event: Record<string, unknown>) {
 }
 
 let sharedContext: AudioContext | null = null;
+/** The live microphone track, kept for the on-phone diagnostics panel. */
+let activeMicTrack: MediaStreamTrack | null = null;
+/** A stream captured during the tap, handed to the session so iOS sees a gesture. */
+let primedStream: MediaStream | null = null;
 
 /** Thrown when the device/browser simply cannot do live audio at all. */
 export class AudioUnsupportedError extends Error {}
@@ -71,10 +75,40 @@ type Sink = {
 };
 let sink: Sink | null = null;
 let degraded = false;
+/** Direct-to-speaker path, silent until the call route proves inaudible. */
+let directGain: GainNode | null = null;
+/** Everything she says passes through here before it splits to both routes. */
+let hub: GainNode | null = null;
+let directOn = false;
+/** performance.now() of the last frame where the element clock actually moved. */
+let lastElementProgressAt = 0;
 
 /** True when her voice is playing without the browser's echo canceller. */
 export function echoCancellationDegraded(): boolean {
   return degraded;
+}
+
+/**
+ * iPhone Safari mutes and mis-routes the "phone call" audio path (silent
+ * switch, earpiece). If the element clock stops moving while a line is
+ * playing, her voice also goes straight to the speakers: being heard beats
+ * the browser's echo canceller, and the local echo model covers the rest.
+ */
+function enableDirectOutput() {
+  if (directOn || !directGain) return;
+  directOn = true;
+  degraded = true;
+  try {
+    directGain.gain.value = 1;
+  } catch {
+    /* ignore */
+  }
+  trace({ type: "directOutput" });
+}
+
+/** True once her voice had to be pushed straight to the speakers. */
+export function directOutputEngaged(): boolean {
+  return directOn;
 }
 
 /** Sends a stream out and back through the browser's call engine. */
@@ -111,6 +145,15 @@ async function loopback(stream: MediaStream): Promise<MediaStream> {
 function ensureSink(ctx: AudioContext): Sink {
   if (sink) return sink;
   const node = ctx.createMediaStreamDestination();
+  // The silent fallback path to the real speakers, opened only if the call
+  // route turns out to make no sound (iPhone silent switch, earpiece routing).
+  hub = ctx.createGain();
+  directGain = ctx.createGain();
+  directGain.gain.value = 0;
+  hub.connect(node);
+  hub.connect(directGain);
+  directGain.connect(ctx.destination);
+  directOn = false;
   const element = document.createElement("audio");
   element.setAttribute("playsinline", "");
   element.autoplay = true;
@@ -166,7 +209,73 @@ export async function unlockAudio() {
 function outputNode(ctx: AudioContext): AudioNode {
   const s = ensureSink(ctx);
   if (s.element.paused) s.element.play().catch(() => {});
-  return s.node;
+  return hub ?? s.node;
+}
+
+/**
+ * Watches the element's own clock while a line plays. If it never moves the
+ * element is not really making sound (blocked autoplay, silent switch, a
+ * routing the phone refuses), so the speakers take over.
+ */
+function watchOutput() {
+  const s = sink;
+  if (!s) return;
+  let last = -1;
+  let stuckFrames = 0;
+  lastElementProgressAt = performance.now();
+  const check = () => {
+    if (!sink || sink !== s) return;
+    if (!monitor.active || monitor.paused) {
+      last = -1;
+      stuckFrames = 0;
+      window.setTimeout(check, 250);
+      return;
+    }
+    const now = s.element.currentTime;
+    if (s.element.paused || now === last) {
+      stuckFrames += 1;
+      if (stuckFrames >= 3) enableDirectOutput();
+    } else {
+      stuckFrames = 0;
+      lastElementProgressAt = performance.now();
+    }
+    last = now;
+    if (!directOn) window.setTimeout(check, 250);
+  };
+  window.setTimeout(check, 250);
+}
+
+/** What the audio path is actually doing right now, for the on-phone check. */
+export function audioDiagnostics() {
+  const ctx = sharedContext;
+  return {
+    context: ctx ? ctx.state : "none",
+    sampleRate: ctx?.sampleRate ?? 0,
+    callRoute: sink?.ok ?? false,
+    elementPaused: sink ? sink.element.paused : true,
+    elementTime: sink ? Math.round(sink.element.currentTime * 100) / 100 : 0,
+    directOutput: directOn,
+    echoCancellationDegraded: degraded,
+    speaking: monitor.active && !monitor.paused,
+    lastOutputMovedMsAgo: lastElementProgressAt
+      ? Math.round(performance.now() - lastElementProgressAt)
+      : -1,
+    micTrack: activeMicTrack
+      ? `${activeMicTrack.readyState}${activeMicTrack.muted ? " (muted)" : ""}`
+      : "none",
+    micLabel: activeMicTrack?.label ?? "",
+    speechRecognition: typeof window !== "undefined" && !!recognitionCtor(),
+    secureContext: typeof window !== "undefined" ? window.isSecureContext : false,
+    inAppBrowser: isInAppBrowser(),
+  };
+}
+
+/** The last thing she said out loud, so it can be played again on demand. */
+let lastSpokenText = "";
+export function replayLastLine(): SpeakHandle | null {
+  if (!lastSpokenText) return null;
+  enableDirectOutput();
+  return speak(lastSpokenText);
 }
 
 // ---------------------------------------------------------------------------
@@ -243,6 +352,8 @@ export function speak(
   monitor.active = true;
   monitor.paused = false;
   monitor.lines = [...monitor.lines.slice(-7), text];
+  lastSpokenText = text;
+  watchOutput();
   trace({ type: "speak", text });
   monitor.outputLatencyMs = Math.round(
     (((ctx as AudioContext & { outputLatency?: number }).outputLatency ?? 0) ||
@@ -711,6 +822,37 @@ export async function micPermissionState(): Promise<"granted" | "denied" | "prom
   }
 }
 
+/**
+ * Asks for the microphone on the tick of the tap. iPhone Safari only treats a
+ * request made inside the gesture as one the person asked for; a request a
+ * couple of seconds later can be refused with no prompt shown at all. The
+ * stream is kept and handed to the session that opens moments later.
+ */
+export async function primeMicPermission(): Promise<void> {
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    throw new MicUnavailableError(
+      typeof window !== "undefined" && window.isSecureContext === false
+        ? "insecure"
+        : "unsupported",
+    );
+  }
+  if (primedStream?.getAudioTracks().some((track) => track.readyState === "live")) return;
+  try {
+    primedStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        ...({ echoCancellationMode: "all" } as Record<string, unknown>),
+      } as MediaTrackConstraints,
+    });
+  } catch (error) {
+    primedStream = null;
+    throw new MicUnavailableError(micFailureFrom(error));
+  }
+}
+
 export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {
   // A page served over plain http (or an in-app browser that strips the API)
   // has no microphone at all — say so plainly instead of blaming permissions.
@@ -723,21 +865,31 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   }
 
   let stream: MediaStream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-        // Newer Chrome can cancel every sound the machine plays, not just calls.
-        // Unknown constraints are ignored everywhere else.
-        ...({ echoCancellationMode: "all" } as Record<string, unknown>),
-      } as MediaTrackConstraints,
-    });
-  } catch (error) {
-    throw new MicUnavailableError(micFailureFrom(error));
+  // A stream captured during the tap is reused: iPhone Safari only reliably
+  // grants the microphone while the tap is still being handled.
+  const primed = primedStream;
+  primedStream = null;
+  if (primed && primed.getAudioTracks().some((track) => track.readyState === "live")) {
+    stream = primed;
+  } else {
+    primed?.getTracks().forEach((track) => track.stop());
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          // Newer Chrome can cancel every sound the machine plays, not just calls.
+          // Unknown constraints are ignored everywhere else.
+          ...({ echoCancellationMode: "all" } as Record<string, unknown>),
+        } as MediaTrackConstraints,
+      });
+    } catch (error) {
+      throw new MicUnavailableError(micFailureFrom(error));
+    }
   }
+  activeMicTrack = stream.getAudioTracks()[0] ?? null;
 
   const Ctor =
     window.AudioContext ??
@@ -1308,6 +1460,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       }
       navigator.mediaDevices.removeEventListener?.("devicechange", onDeviceChange);
       stream.getTracks().forEach((each) => each.stop());
+      activeMicTrack = null;
       void ctx.close().catch(() => {});
     },
   };

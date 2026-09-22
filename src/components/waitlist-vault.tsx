@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 
+import { AudioDiagnostics } from "@/components/audio-diagnostics";
 import { Button } from "@/components/ui/button";
 import { clearLessons, loadLessons, type StoredLesson } from "@/lib/experience-store";
 import { clearEntries, downloadCsv, loadEntries, type WaitlistEntry } from "@/lib/waitlist-store";
@@ -11,7 +12,7 @@ type SheetStatus =
   | { state: "on"; leads: number; lessons: number; version: string }
   | { state: "error"; error: string };
 
-type Tab = "entries" | "notes";
+type Tab = "entries" | "notes" | "audio";
 
 /** Fired by the hidden gesture (five quick taps on "omnikom" in the footer). */
 export const OWNER_VIEW_EVENT = "mary:owner-view";
@@ -179,6 +180,7 @@ export function WaitlistVault() {
                 [
                   ["entries", "Conversations"],
                   ["notes", "MARY's field notes"],
+                  ["audio", "Sound & mic check"],
                 ] as const
               ).map(([key, label]) => (
                 <button
@@ -197,6 +199,8 @@ export function WaitlistVault() {
                 </button>
               ))}
             </div>
+
+            {tab === "audio" && <AudioDiagnostics />}
 
             {tab === "entries" && (
               <div className="mt-5 space-y-3">
