@@ -729,6 +729,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     chunks = [];
     capturePeak = 0;
     speechCandidateAt = 0;
+    loudScore = 0;
     committed = "";
     interim = "";
     emitInterim();
@@ -748,6 +749,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     capturing = false;
     capturePeak = 0;
     speechCandidateAt = 0;
+    loudScore = 0;
     utteranceStartedAt = 0;
     let text = takeText();
     const lines = assistantLines();
@@ -847,6 +849,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       if (scoreLoud(peak >= echoThreshold) >= 6) {
         loudScore = 0;
         speechCandidateAt = 0;
+        loudScore = 0;
         trace({
           type: "energy",
           peak: Number(peak.toFixed(3)),
@@ -903,6 +906,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       chunks = [];
       capturePeak = 0;
       speechCandidateAt = 0;
+      loudScore = 0;
       committed = "";
       interim = "";
       options.onLevel?.(0);
