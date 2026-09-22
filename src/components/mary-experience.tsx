@@ -290,6 +290,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const [listeningPhase, setListeningPhase] = useState<ListeningPhase>("idle");
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
+  /** Bumped to ask the browser for the microphone all over again. */
+  const [micAttempt, setMicAttempt] = useState(0);
   const [echoHint, setEchoHint] = useState(false);
   const [result, setResult] = useState<ConversationResult | null>(null);
   /** This visit's row in the browser store and in the sheet. */
