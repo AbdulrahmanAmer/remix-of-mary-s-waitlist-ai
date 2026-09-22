@@ -306,9 +306,8 @@ export const MaryPresence = memo(function MaryPresence({
         cy + R * 0.3,
         R * 1.05,
       );
-      inner.addColorStop(0, withAlpha(primary, (0.07 + lv * 0.12) * cur.glow));
-      inner.addColorStop(0.32, withAlpha(primary, 0.02 * cur.glow));
-      inner.addColorStop(1, withAlpha(primary, 0));
+      for (const [p, a] of falloffStops((0.08 + lv * 0.12) * cur.glow))
+        inner.addColorStop(p, withAlpha(primary, a));
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
       for (const m of MOTES) {
