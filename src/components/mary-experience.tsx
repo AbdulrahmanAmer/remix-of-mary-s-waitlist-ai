@@ -47,6 +47,21 @@ const STAGE_IN = { duration: 0.6, ease: EASE } as const;
 const SOFT = { duration: 0.42, ease: EASE } as const;
 const SPRING = { type: "spring", stiffness: 210, damping: 26, mass: 0.9 } as const;
 
+// Tracks the live viewport height so the single-screen layout can shrink
+// instead of spilling over on short windows.
+function useViewportHeight(): number {
+  const [height, setHeight] = useState(() =>
+    typeof window === "undefined" ? 900 : window.innerHeight,
+  );
+  useEffect(() => {
+    const update = () => setHeight(window.innerHeight);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
+  }, []);
+  return height;
+}
+
 const TYPING_LINES = [
   "Take your time writing what you have in mind — I'm right here with you.",
   "No rush at all, I'll wait while you type.",
