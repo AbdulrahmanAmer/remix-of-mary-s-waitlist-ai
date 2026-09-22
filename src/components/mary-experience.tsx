@@ -402,7 +402,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
     window.setTimeout(() => {
       void enterLive();
-    }, 1500);
+    }, 1380);
   }, [enterLive, reduced]);
 
   const startInterim = useCallback(() => {
