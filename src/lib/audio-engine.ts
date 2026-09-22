@@ -1410,7 +1410,12 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     // captured. Everything else is judged against it.
     const learnRoom = !speaking && !capturing && !pending && !holding && !withinTail();
     analyser.getByteFrequencyData(spectrum);
-    const voice: VoiceReading = detector.update(spectrum, ctx.sampleRate, analyser.fftSize, learnRoom);
+    const voice: VoiceReading = detector.update(
+      spectrum,
+      ctx.sampleRate,
+      analyser.fftSize,
+      learnRoom,
+    );
     voiceReading = voice;
     // The meter follows the voice, not the room: a fan no longer lights her up.
     options.onLevel?.(Math.min(1, peak * 1.8 * (0.25 + 0.75 * voice.score)));

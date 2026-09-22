@@ -59,7 +59,13 @@ export function AudioDiagnostics() {
         {
           label: "Hearing now",
           value:
-            d.voiceScore < 0 ? "—" : d.voiceScore >= 50 ? "a person" : d.voiceScore >= 32 ? "maybe" : "room only",
+            d.voiceScore < 0
+              ? "—"
+              : d.voiceScore >= 50
+                ? "a person"
+                : d.voiceScore >= 32
+                  ? "maybe"
+                  : "room only",
           good: d.voiceScore < 0 ? undefined : d.voiceScore >= 32,
         },
         {
