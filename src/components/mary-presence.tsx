@@ -135,8 +135,10 @@ export const MaryPresence = memo(function MaryPresence({
       const rect = canvas.getBoundingClientRect();
       width = Math.max(1, rect.width);
       boxHeight = Math.max(1, rect.height);
-      small = width < 420;
-      const dpr = Math.min(small ? 2 : 2.25, window.devicePixelRatio || 1);
+      small = width < 360;
+      // Supersample: soft glows need >= 2x pixels or they step, whatever the screen reports.
+      const raw = window.devicePixelRatio || 1;
+      const dpr = small ? 2 : Math.min(3, Math.max(2, raw));
       canvas.width = Math.round(width * dpr);
       canvas.height = Math.round(boxHeight * dpr);
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
