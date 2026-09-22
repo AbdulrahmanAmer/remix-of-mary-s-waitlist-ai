@@ -26,7 +26,6 @@ const MotionButton = motion.create(Button);
 // One motion vocabulary for the whole experience.
 const EASE = [0.22, 1, 0.36, 1] as const;
 const STAGE_IN = { duration: 0.6, ease: EASE } as const;
-const STAGE_OUT = { duration: 0.32, ease: [0.4, 0, 1, 1] as const } as const;
 const SOFT = { duration: 0.42, ease: EASE } as const;
 const SPRING = { type: "spring", stiffness: 210, damping: 26, mass: 0.9 } as const;
 
