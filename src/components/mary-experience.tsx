@@ -1472,15 +1472,21 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                   className="surface-floating mx-auto flex w-full max-w-xl items-end gap-1 rounded-[1.6rem] bg-card/80 px-2 py-1.5 backdrop-blur-sm"
                 >
                   <MotionButton
-                    onClick={toggleMicMute}
+                    onClick={micLive ? toggleMicMute : retryMic}
                     whileTap={reduced ? {} : { scale: 0.94 }}
                     whileHover={reduced ? {} : { scale: 1.04 }}
                     transition={SPRING}
-                    aria-label={micMuted ? "Unmute your microphone" : "Mute your microphone"}
+                    aria-label={
+                      !micLive
+                        ? "Try the microphone again"
+                        : micMuted
+                          ? "Unmute your microphone"
+                          : "Mute your microphone"
+                    }
                     size="icon"
-                    className={`surface-raised relative size-11 shrink-0 rounded-full ${micMuted ? "" : "bg-primary text-primary-foreground"}`}
+                    className={`surface-raised relative size-11 shrink-0 rounded-full ${micMuted || !micLive ? "" : "bg-primary text-primary-foreground"}`}
                   >
-                    {micMuted ? <MicOff /> : <Mic />}
+                    {micLive && !micMuted ? <Mic /> : <MicOff />}
                   </MotionButton>
                   <textarea
                     ref={inputRef}
