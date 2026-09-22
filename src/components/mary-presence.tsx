@@ -200,7 +200,7 @@ export const MaryPresence = memo(function MaryPresence({
 
     /** One soft tube: a gently folded closed curve stroked from wide-faint to narrow-bright. */
     const drawShell = (cx: number, cy: number, R: number, shell: Shell) => {
-      const segments = small ? 60 : 96;
+      const segments = small ? 96 : 168;
       const rr = R * shell.r;
       ctx.beginPath();
       let prev: { x: number; y: number } | null = null;
