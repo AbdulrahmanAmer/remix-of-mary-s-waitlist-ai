@@ -324,6 +324,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         if (sessionFinishedRef.current) return;
       }
       stopSpeaking();
+      interimRef.current = "";
       setInterim("");
       setDraft("");
       const next = [...linesRef.current, { id: uid(), role: "user" as const, text: clean }];
@@ -446,6 +447,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       recognition.onresult = (event) => {
         let text = "";
         for (let i = 0; i < event.results.length; i++) text += event.results[i]![0].transcript;
+        interimRef.current = text.trim();
         setInterim(text.trim());
       };
       recognition.start();
