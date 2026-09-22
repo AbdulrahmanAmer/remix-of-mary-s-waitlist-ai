@@ -368,16 +368,6 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.lineWidth = Math.max(0.6, R * 0.014);
       ctx.stroke();
 
-      // Sub-perceptual dither over the glow area — kills residual gradient banding.
-      // Radially faded so it never leaves a visible square patch on the paper.
-      const d = R * (cur.halo + 0.4);
-      const g = grainFor(d);
-      if (g) {
-        ctx.save();
-        ctx.globalAlpha = 0.012;
-        ctx.drawImage(g, cx - d, cy - d, d * 2, d * 2);
-        ctx.restore();
-      }
 
       // Completion bloom.
       if (bloom > 0.01) {
