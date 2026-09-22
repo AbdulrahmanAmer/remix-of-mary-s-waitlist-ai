@@ -320,7 +320,7 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.fillStyle = inner;
       ctx.fillRect(cx - R, cy - R, R * 2, R * 2);
 
-      for (const m of MOTES) {
+      for (const m of lite ? MOTES.slice(0, 4) : MOTES) {
         const tw = 0.25 + 0.75 * Math.abs(Math.sin(t * 1.1 + m.p));
         const sx = cx + m.x * R + Math.sin(t * 0.4 + m.p) * R * 0.035;
         const sy = cy + m.y * R + Math.cos(t * 0.33 + m.p) * R * 0.035;
