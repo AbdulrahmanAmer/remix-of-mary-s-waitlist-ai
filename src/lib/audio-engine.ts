@@ -1430,6 +1430,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       }
       navigator.mediaDevices.removeEventListener?.("devicechange", onDeviceChange);
       stream.getTracks().forEach((each) => each.stop());
+      activeMicTrack = null;
       void ctx.close().catch(() => {});
     },
   };
