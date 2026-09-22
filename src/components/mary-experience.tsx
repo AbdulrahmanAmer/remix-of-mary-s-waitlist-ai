@@ -876,9 +876,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                         listeningPhase === "hearing" || listeningPhase === "finishing"
                           ? listeningPhase
                           : micMuted
-
-                            ? "hf"
-                            : "idle"
+                            ? "muted"
+                            : "live"
                       }
                       initial={reduced ? false : { opacity: 0, y: 4 }}
                       animate={{ opacity: 1, y: 0 }}
@@ -889,9 +888,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                         ? "Keep speaking — MARY replies when you finish."
                         : listeningPhase === "finishing"
                           ? "Got it. MARY is preparing her reply."
-                          : handsFree
-                            ? "Hands-free is on. Speak naturally; no second tap needed."
-                            : "Tap the microphone once for hands-free conversation, or type anytime."}
+                          : micMuted
+                            ? "Your microphone is muted. Unmute to keep talking, or type."
+                            : "MARY is listening. Just talk — she answers when you pause."}
+
                     </motion.p>
                   </AnimatePresence>
                 </div>
