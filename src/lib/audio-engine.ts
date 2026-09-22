@@ -1179,7 +1179,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     emitInterim();
     tracker.learnFalseInterrupt();
     trace({ type: "cancelled", coupling: tracker.peakCoupling });
-    options.onInterruptCancelled?.();
+    options.onInterruptCancelled?.(false);
   };
 
   const flush = () => {
