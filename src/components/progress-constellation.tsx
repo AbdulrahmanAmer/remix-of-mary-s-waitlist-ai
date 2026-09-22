@@ -39,9 +39,7 @@ export function ProgressConstellation({ collected }: { collected: Collected }) {
               transition={{ duration: 0.6 }}
             />
             <span className="font-medium">{LABELS[field]}</span>
-            {filled && (
-              <span className="max-w-[9rem] truncate text-white/55">{value}</span>
-            )}
+            {filled && <span className="max-w-[9rem] truncate text-white/55">{value}</span>}
           </motion.div>
         );
       })}

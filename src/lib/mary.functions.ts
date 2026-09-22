@@ -32,15 +32,7 @@ const TurnSchema = z.object({
   business: z.string().nullable(),
   industry: z.string().nullable(),
   operations: z.string().nullable(),
-  nextField: z.enum([
-    "name",
-    "email",
-    "phone",
-    "business",
-    "industry",
-    "operations",
-    "none",
-  ]),
+  nextField: z.enum(["name", "email", "phone", "business", "industry", "operations", "none"]),
   complete: z.boolean(),
   declined: z.boolean(),
 });
@@ -77,9 +69,7 @@ export const maryTurn = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) =>
     z
       .object({
-        messages: z.array(
-          z.object({ role: z.enum(["user", "assistant"]), content: z.string() }),
-        ),
+        messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
         collected: z.record(z.string(), z.string()).default({}),
       })
       .parse(input),

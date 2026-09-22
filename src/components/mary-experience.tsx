@@ -5,12 +5,7 @@ import { Mic, Square, Send, Sparkle, Volume2, VolumeX } from "lucide-react";
 import { MaryOrb, type OrbState } from "./mary-orb";
 import { ProgressConstellation } from "./progress-constellation";
 import { AuroraBackground } from "./aurora-background";
-import {
-  maryTurn,
-  WAITLIST_FIELDS,
-  type Collected,
-  type MaryTurn,
-} from "@/lib/mary.functions";
+import { maryTurn, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
 import { submitWaitlist } from "@/lib/waitlist.functions";
 import {
   speak,
@@ -49,9 +44,7 @@ export function MaryExperience() {
   const [recording, setRecording] = useState(false);
   const [muted, setMuted] = useState(false);
   const [micError, setMicError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ position: number; message: string } | null>(
-    null,
-  );
+  const [result, setResult] = useState<{ position: number; message: string } | null>(null);
 
   const speakRef = useRef<SpeakHandle | null>(null);
   const recorderRef = useRef<Recorder | null>(null);
@@ -126,32 +119,29 @@ export function MaryExperience() {
     [stopSpeaking],
   );
 
-  const finalize = useCallback(
-    async (finalCollected: Collected) => {
-      const transcript = linesRef.current
-        .map((l) => `${l.role === "mary" ? "MARY" : "Guest"}: ${l.text}`)
-        .join("\n");
-      try {
-        const res = await submitWaitlist({
-          data: {
-            name: finalCollected.name ?? "",
-            email: finalCollected.email ?? "",
-            phone: finalCollected.phone ?? "",
-            business: finalCollected.business ?? "",
-            industry: finalCollected.industry ?? "",
-            operations: finalCollected.operations ?? "",
-            transcript,
-          },
-        });
-        setResult({ position: res.position, message: res.message });
-      } catch {
-        setResult({ position: 0, message: "We captured your details." });
-      }
-      setStage("done");
-      setOrbState("success");
-    },
-    [],
-  );
+  const finalize = useCallback(async (finalCollected: Collected) => {
+    const transcript = linesRef.current
+      .map((l) => `${l.role === "mary" ? "MARY" : "Guest"}: ${l.text}`)
+      .join("\n");
+    try {
+      const res = await submitWaitlist({
+        data: {
+          name: finalCollected.name ?? "",
+          email: finalCollected.email ?? "",
+          phone: finalCollected.phone ?? "",
+          business: finalCollected.business ?? "",
+          industry: finalCollected.industry ?? "",
+          operations: finalCollected.operations ?? "",
+          transcript,
+        },
+      });
+      setResult({ position: res.position, message: res.message });
+    } catch {
+      setResult({ position: 0, message: "We captured your details." });
+    }
+    setStage("done");
+    setOrbState("success");
+  }, []);
 
   const runTurn = useCallback(
     async (nextLines: Line[]) => {
@@ -211,10 +201,8 @@ export function MaryExperience() {
 
   const startInterim = useCallback(() => {
     const Ctor =
-      (window as unknown as { SpeechRecognition?: new () => never })
-        .SpeechRecognition ??
-      (window as unknown as { webkitSpeechRecognition?: new () => never })
-        .webkitSpeechRecognition;
+      (window as unknown as { SpeechRecognition?: new () => never }).SpeechRecognition ??
+      (window as unknown as { webkitSpeechRecognition?: new () => never }).webkitSpeechRecognition;
     if (!Ctor) return;
     try {
       const recognition = new Ctor() as unknown as {
@@ -223,7 +211,7 @@ export function MaryExperience() {
         lang: string;
         onresult: (e: {
           resultIndex: number;
-          results: { [k: number]: { 0: { transcript: string } } ; length: number };
+          results: { [k: number]: { 0: { transcript: string } }; length: number };
         }) => void;
         start: () => void;
         stop: () => void;
@@ -345,9 +333,7 @@ export function MaryExperience() {
               <span className="font-display text-sm font-semibold">O</span>
             </div>
             <div className="leading-tight">
-              <p className="font-display text-sm font-semibold tracking-tight">
-                OmniSuite
-              </p>
+              <p className="font-display text-sm font-semibold tracking-tight">OmniSuite</p>
               <p className="text-[11px] text-white/45">AI-Native Revenue Infrastructure</p>
             </div>
           </div>
@@ -408,8 +394,8 @@ export function MaryExperience() {
                   transition={{ delay: 0.42 }}
                   className="mx-auto max-w-xl text-pretty text-base text-white/60"
                 >
-                  A live conversation with the AI Revenue Concierge behind OmniSuite.
-                  Talk to her or type — she'll take it from there.
+                  A live conversation with the AI Revenue Concierge behind OmniSuite. Talk to her or
+                  type — she'll take it from there.
                 </motion.p>
               </div>
 
@@ -492,11 +478,7 @@ export function MaryExperience() {
                         <motion.span
                           key={`${lastMary.id}-${i}`}
                           initial={{ opacity: 0.12, y: 6 }}
-                          animate={
-                            i < reveal
-                              ? { opacity: 1, y: 0 }
-                              : { opacity: 0.16, y: 3 }
-                          }
+                          animate={i < reveal ? { opacity: 1, y: 0 } : { opacity: 0.16, y: 3 }}
                           transition={{ duration: 0.28 }}
                           className="mr-[0.3em] inline-block"
                         >
@@ -506,9 +488,7 @@ export function MaryExperience() {
                     </p>
                   )}
                   {interim && (
-                    <p className="mt-3 text-right text-sm italic text-white/45">
-                      {interim}
-                    </p>
+                    <p className="mt-3 text-right text-sm italic text-white/45">{interim}</p>
                   )}
                 </motion.div>
               </div>
@@ -523,10 +503,7 @@ export function MaryExperience() {
                     {micError}
                   </motion.p>
                 )}
-                <motion.div
-                  layout
-                  className="glass-panel flex items-end gap-2 rounded-3xl p-2.5"
-                >
+                <motion.div layout className="glass-panel flex items-end gap-2 rounded-3xl p-2.5">
                   <motion.button
                     onClick={toggleMic}
                     whileTap={{ scale: 0.94 }}
@@ -563,9 +540,7 @@ export function MaryExperience() {
                       }
                     }}
                     rows={1}
-                    placeholder={
-                      recording ? "Listening…" : "Speak, or type your answer here"
-                    }
+                    placeholder={recording ? "Listening…" : "Speak, or type your answer here"}
                     className="max-h-32 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-white outline-none placeholder:text-white/35"
                   />
 
@@ -602,13 +577,10 @@ export function MaryExperience() {
                   <span className="text-gradient">You're on the waitlist.</span>
                 </h2>
                 <p className="mx-auto max-w-lg text-white/60">
-                  Thanks for signing up — we'll be in touch the moment OmniSuite
-                  launches.
+                  Thanks for signing up — we'll be in touch the moment OmniSuite launches.
                 </p>
                 {result && result.position > 0 && (
-                  <p className="text-sm text-white/45">
-                    Early access position #{result.position}
-                  </p>
+                  <p className="text-sm text-white/45">Early access position #{result.position}</p>
                 )}
               </div>
 
@@ -630,23 +602,19 @@ export function MaryExperience() {
                       <dt className="text-[11px] uppercase tracking-[0.18em] text-white/40">
                         {field}
                       </dt>
-                      <dd className="mt-1 text-sm text-white/85">
-                        {collected[field] || "—"}
-                      </dd>
+                      <dd className="mt-1 text-sm text-white/85">{collected[field] || "—"}</dd>
                     </motion.div>
                   ))}
                 </dl>
               </motion.div>
-              {result && (
-                <p className="text-[11px] text-white/30">{result.message}</p>
-              )}
+              {result && <p className="text-[11px] text-white/30">{result.message}</p>}
             </motion.section>
           )}
         </AnimatePresence>
 
         <footer className="pt-8 text-center text-[11px] text-white/25">
-          MARY works new leads, your existing database and missed opportunities across
-          voice, SMS and email.
+          MARY works new leads, your existing database and missed opportunities across voice, SMS
+          and email.
         </footer>
       </div>
     </div>

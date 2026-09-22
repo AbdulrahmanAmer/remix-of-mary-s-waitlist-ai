@@ -22,10 +22,7 @@ export function MaryOrb({
         : "var(--primary)";
 
   return (
-    <div
-      className="relative grid place-items-center"
-      style={{ width: size, height: size }}
-    >
+    <div className="relative grid place-items-center" style={{ width: size, height: size }}>
       {/* audio-reactive halo */}
       <motion.div
         className="absolute rounded-full blur-3xl"

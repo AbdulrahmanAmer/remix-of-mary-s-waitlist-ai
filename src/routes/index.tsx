@@ -28,9 +28,7 @@ function Index() {
         <div className="relative min-h-screen">
           <AuroraBackground />
           <div className="relative z-10 grid min-h-screen place-items-center">
-            <p className="text-sm tracking-[0.3em] text-white/40 uppercase">
-              Waking MARY
-            </p>
+            <p className="text-sm tracking-[0.3em] text-white/40 uppercase">Waking MARY</p>
           </div>
         </div>
       }

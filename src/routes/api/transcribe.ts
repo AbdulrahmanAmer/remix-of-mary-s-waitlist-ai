@@ -25,14 +25,11 @@ export const Route = createFileRoute("/api/transcribe")({
         upstream.append("model", "google/gemini-3.5-transcribe");
         upstream.append("file", file, "recording.wav");
 
-        const response = await fetch(
-          "https://ai.gateway.lovable.dev/v1/audio/transcriptions",
-          {
-            method: "POST",
-            headers: { Authorization: `Bearer ${key}` },
-            body: upstream,
-          },
-        );
+        const response = await fetch("https://ai.gateway.lovable.dev/v1/audio/transcriptions", {
+          method: "POST",
+          headers: { Authorization: `Bearer ${key}` },
+          body: upstream,
+        });
 
         if (!response.ok) {
           const detail = await response.text().catch(() => "");

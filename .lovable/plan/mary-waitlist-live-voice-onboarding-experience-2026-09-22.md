@@ -5,11 +5,13 @@ A standalone, visually stunning waitlist page where MARY — the AI Revenue Conc
 ## The experience
 
 Landing state
+
 - Full-bleed cinematic hero in OmniSuite's brand language (Space Grotesk + DM Sans, dark ink surface, soft aurora gradients, glass panels).
 - A living MARY orb at the centre: layered animated rings that breathe, drift and react. One primary call to action — "Talk to MARY".
 - Short line of context plus a "Prefer to type?" secondary entry so nobody is blocked by a missing microphone.
 
 The conversation
+
 - MARY opens unprompted, in her own voice:
   "Hi, I'm MARY — the AI Revenue Concierge behind OmniSuite. I work new leads, existing databases and missed opportunities across voice, SMS and email, then hand the right conversations to the human team. We're opening early access soon — would you like me to put you on the waitlist and make you one of the first to work with me?"
 - If yes, she collects, one natural question at a time:
@@ -23,6 +25,7 @@ The conversation
 - Close: "Thanks for signing up for the waitlist — we'll be in touch the moment we launch." Then a celebratory reveal card with their details and a waitlist position.
 
 Real-time interactivity (the core of the build)
+
 - Speak or type, interchangeably, mid-conversation — switching modes never resets anything.
 - Live voice: streaming speech recognition with interim words appearing as the person speaks, plus barge-in (start talking and MARY stops).
 - Typing awareness: the moment keys are pressed, MARY notices and says things like "Take your time writing what you have in mind — I'm right here with you," then goes quiet while they type. Idle pauses get gentle, non-repetitive nudges.
@@ -44,6 +47,7 @@ Real-time interactivity (the core of the build)
 - Duplicate-safe, with a clear retry and a visible error if the sheet write fails so no signup is silently lost.
 
 ### What I need from you
+
 1. Deploy the Apps Script Web App (I'll give you the exact script to paste) and send me its URL.
    Until then I'll wire the endpoint and queue signups so nothing is lost — the page works end to end either way.
 

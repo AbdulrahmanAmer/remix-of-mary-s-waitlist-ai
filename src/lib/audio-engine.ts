@@ -10,8 +10,7 @@ export function getAudioContext(): AudioContext {
   if (!sharedContext) {
     const Ctor =
       window.AudioContext ??
-      (window as unknown as { webkitAudioContext: typeof AudioContext })
-        .webkitAudioContext;
+      (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
     sharedContext = new Ctor({ sampleRate: 24000 });
   }
   return sharedContext;
@@ -185,9 +184,7 @@ export type Recorder = {
 };
 
 /** Captures mic PCM and returns a complete 16k mono WAV blob on stop. */
-export async function startRecording(
-  onLevel?: (level: number) => void,
-): Promise<Recorder> {
+export async function startRecording(onLevel?: (level: number) => void): Promise<Recorder> {
   const stream = await navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true },
   });
