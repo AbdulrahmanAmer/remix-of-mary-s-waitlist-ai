@@ -1097,6 +1097,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       style={locked && viewport ? { height: viewport.height } : undefined}
     >
       <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
+      <WaitlistVault />
       <div
         className={`relative z-10 mx-auto flex w-full max-w-5xl flex-col px-5 sm:px-8 ${locked ? "h-full py-3 sm:py-5" : "min-h-dvh py-4 sm:py-5"}`}
       >
