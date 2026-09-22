@@ -16,6 +16,13 @@
  * Every export must be called from an effect or event handler, never at import.
  */
 import {
+  VOICE_INTERRUPT,
+  VOICE_KEEP,
+  VOICE_ONSET,
+  VoiceDetector,
+  type VoiceReading,
+} from "./voice-detector";
+import {
   EchoTracker,
   endpointDelayMs,
   isEchoOfAssistant,
@@ -24,6 +31,57 @@ import {
 } from "./voice-logic";
 
 const RATE = 24000;
+
+/**
+ * Every clock the live line runs on, in one place. These are the numbers that
+ * decide how a call feels: too eager and a cough takes her turn, too patient
+ * and she talks over people.
+ */
+const TIMINGS = {
+  /** Learning the room before any decision is made. */
+  calibrationMs: 500,
+  /** Voice-like frames needed to open a turn while she is quiet. */
+  onsetFrames: 5,
+  /** Voice-like frames needed to cut in over her. */
+  interruptFrames: 4,
+  /** Default quiet needed to call a sentence finished. */
+  endpointSilenceMs: 800,
+  /** Nothing voice-like for this long closes the turn, whatever the room does. */
+  noVoiceEndpointMs: 1800,
+  /** Her voice draining out of the room before a cut-in can be judged. */
+  cutInSettleMs: 180,
+  /** A cut-in that proves nothing in this long was not a person. */
+  cutInDecideMs: 520,
+  /** A hold can never outlive this. */
+  holdMaxMs: 4000,
+  /** Longest single turn. */
+  maxUtteranceMs: 45000,
+} as const;
+
+/** Worklet-side capture: peaks and raw frames, off the main thread. */
+const CAPTURE_WORKLET = `
+class MaryCapture extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.buffer = new Float32Array(2048);
+    this.filled = 0;
+  }
+  process(inputs) {
+    const input = inputs[0] && inputs[0][0];
+    if (input) {
+      for (let i = 0; i < input.length; i++) {
+        this.buffer[this.filled++] = input[i];
+        if (this.filled === this.buffer.length) {
+          this.port.postMessage(this.buffer.slice(0));
+          this.filled = 0;
+        }
+      }
+    }
+    return true;
+  }
+}
+registerProcessor('mary-capture', MaryCapture);
+`;
 
 /** Optional event tap for diagnostics (`window.__maryTrace`). No-op otherwise. */
 function trace(event: Record<string, unknown>) {
