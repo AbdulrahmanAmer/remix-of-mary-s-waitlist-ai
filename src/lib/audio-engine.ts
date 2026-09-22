@@ -1216,7 +1216,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     });
     if (!text && !audio) {
       utteranceOverAssistant = false;
-      options.onInterruptCancelled?.();
+      options.onInterruptCancelled?.(wasHolding);
       return;
     }
     options.onUtterance({
