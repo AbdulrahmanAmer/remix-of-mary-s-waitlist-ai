@@ -566,6 +566,9 @@ export function speak(
     } catch {
       streamDone = true;
       if (!stopped && total === 0) finish();
+    } finally {
+      window.clearTimeout(firstByteGuard);
+      window.clearTimeout(wholeLineGuard);
     }
   })();
 
