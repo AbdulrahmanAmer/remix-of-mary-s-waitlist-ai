@@ -957,6 +957,11 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let loudScore = 0;
   let lastEchoThreshold = 0.02;
   let lastSpeechAt = 0;
+  // The last clearly-louder-than-the-room moment. Steady noise keeps
+  // `lastSpeechAt` alive forever; this one only moves for real speech.
+  let lastRealSpeechAt = 0;
+  // When she went quiet for a cut-in, so a hold can never last for ever.
+  let holdingSince = 0;
   let utteranceStartedAt = 0;
   let utteranceOverAssistant = false;
   /** Loudest frame of this utterance recorded while she was NOT audible. */
