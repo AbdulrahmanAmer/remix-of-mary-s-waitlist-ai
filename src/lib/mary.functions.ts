@@ -100,9 +100,16 @@ export const maryTurn = createServerFn({ method: "POST" })
       .map(([k, v]) => `${k}: ${v}`)
       .join("\n");
 
-    const prompt = `Already captured:\n${known || "(nothing yet)"}\n\nConversation so far:\n${
+    const capturedCount = WAITLIST_FIELDS.filter((f) => (data.collected as Collected)[f]).length;
+    const phase = !history
+      ? "WELCOME — the conversation is just starting; this is your one and only welcome."
+      : capturedCount >= WAITLIST_FIELDS.length
+        ? "CLOSE — everything is captured; deliver the closing line exactly once."
+        : "COLLECT — the welcome already happened. Do NOT mention the waitlist offer or first access again. Acknowledge what they just said, then ask the next missing detail.";
+
+    const prompt = `Current phase: ${phase}\n\nAlready captured:\n${known || "(nothing yet)"}\n\nConversation so far:\n${
       history || "(the conversation is just starting)"
-    }\n\nProduce MARY's next single spoken turn.`;
+    }\n\nProduce MARY's next single spoken turn. It must not repeat anything you already said.`;
 
     try {
       const result = streamText({
