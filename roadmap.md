@@ -1,9 +1,8 @@
 # Roadmap
 
 ## Now
-- [ ] Her voice double-plays: find every path that can start the same line twice (element + call route, retry/fallback, resume, streamed `say` + final turn) and close them
-- [ ] Whole-code health pass: remove dead/broken branches that affect behaviour, reconcile stale comments and the roadmap with what the code does
 - [ ] Connect the Google Sheet: paste `docs/google-sheets/Code.gs` into the sheet's Apps Script, deploy as a web app, then add `SHEETS_WEBAPP_URL` (and optional `SHEETS_WEBAPP_SECRET`) as project secrets — waits on the owner
+- [ ] Real-device pass of the output watcher: confirm on an iPhone (ring switch off/on) and a laptop that her voice never switches to plain speakers while the call route is audible
 
 ## Next
 - [ ] Real waitlist position everywhere: once the sheet answers, retire the on-device estimate on the end screen and in the owner view
@@ -13,6 +12,8 @@
 - [ ] Field-notes quality gate: a repeatable script that replays saved transcripts through /api/reflect and flags notes that leak names or contradict the playbook
 
 ## Done
+- [x] One voice, one path: her audio leaves through exactly one leg (call route or speakers, never both), a new line always ends the previous one at the engine level, a replay tapped mid-sentence no longer starts a second copy, the output watcher only judges while she is audibly producing sound and after a route swap has settled, a rebuilt route retires the old one, the last speech frame of a stream is never dropped, and a turn whose first beat was already spoken never regenerates a second unrelated follow-up
+- [x] Health pass: removed the unused voice callback, unused exports and the stale roadmap entries; typecheck and lint clean; verified in a test browser that at most one of her voices plays at any moment, including during double taps on replay
 - [x] Phone layout: long messages are proper rounded bubbles, the call is locked to the visible screen with the composer above the keyboard and the home indicator, older lines fade at the top of the thread, progress dots move into the header on narrow screens
 - [x] Natural pacing: no more "take your time writing" lines while someone types; "MARY is thinking…" shows while she works; a silent or suspended audio output can no longer freeze a turn mid-line
 - [x] MARY learns: after each conversation she debriefs herself (summary, objections, what worked/stalled, up to 5 PII-free lessons); lessons live in the browser and pool in the sheet's Experience tab, and the best ones ride into every turn as field notes
