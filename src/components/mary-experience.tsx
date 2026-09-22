@@ -364,7 +364,13 @@ export function MaryExperience() {
         setListeningPhase("paused");
         setOrbState("idle");
       }
-      if (wasEmpty && value && !busyRef.current && typingSaidRef.current < TYPING_LINES.length && stage === "live") {
+      if (
+        wasEmpty &&
+        value &&
+        !busyRef.current &&
+        typingSaidRef.current < TYPING_LINES.length &&
+        stage === "live"
+      ) {
         stopSpeaking();
         const line = TYPING_LINES[typingSaidRef.current];
         typingSaidRef.current += 1;
@@ -378,7 +384,8 @@ export function MaryExperience() {
     if (stage !== "live") return;
     const timer = window.setInterval(() => {
       if (busyRef.current || recording || handsFree || draft.length > 0) return;
-      if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length) return;
+      if (Date.now() - lastActivityRef.current < 22000 || nudgeRef.current >= IDLE_NUDGES.length)
+        return;
       lastActivityRef.current = Date.now();
       const line = IDLE_NUDGES[nudgeRef.current];
       nudgeRef.current += 1;
@@ -442,7 +449,8 @@ export function MaryExperience() {
                   Meet the concierge who works the revenue you already have.
                 </h1>
                 <p className="mt-6 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground">
-                  Speak or type with MARY. She’ll learn about your business and personally add you to the OmniSuite launch waitlist.
+                  Speak or type with MARY. She’ll learn about your business and personally add you
+                  to the OmniSuite launch waitlist.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-4">
                   <MotionButton
@@ -454,12 +462,20 @@ export function MaryExperience() {
                   >
                     Talk to MARY <ArrowRight />
                   </MotionButton>
-                  <span className="text-sm text-muted-foreground">Voice or text · switch anytime</span>
+                  <span className="text-sm text-muted-foreground">
+                    Voice or text · switch anytime
+                  </span>
                 </div>
                 <div className="mt-10 flex flex-wrap gap-x-8 gap-y-3 border-t border-border pt-5 text-sm text-muted-foreground">
-                  <span><strong className="text-ink">Convert</strong> fresh demand</span>
-                  <span><strong className="text-ink">Cultivate</strong> your database</span>
-                  <span><strong className="text-ink">Recover</strong> missed opportunities</span>
+                  <span>
+                    <strong className="text-ink">Convert</strong> fresh demand
+                  </span>
+                  <span>
+                    <strong className="text-ink">Cultivate</strong> your database
+                  </span>
+                  <span>
+                    <strong className="text-ink">Recover</strong> missed opportunities
+                  </span>
                 </div>
               </div>
 
@@ -468,7 +484,9 @@ export function MaryExperience() {
                 <div className="rounded-2xl border border-border bg-card p-6 shadow-lift sm:p-8">
                   <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent-text">Live concierge</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-accent-text">
+                        Live concierge
+                      </p>
                       <p className="mt-1 text-xl font-semibold text-ink">MARY</p>
                     </div>
                     <span className="inline-flex items-center gap-2 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-accent-text">
@@ -479,7 +497,8 @@ export function MaryExperience() {
                     <MaryOrb state="idle" level={0} size={190} />
                   </div>
                   <div className="rounded-xl bg-surface px-4 py-3 text-sm leading-relaxed text-muted-foreground">
-                    “I work new leads, existing databases and missed opportunities — then bring the right conversations to your team.”
+                    “I work new leads, existing databases and missed opportunities — then bring the
+                    right conversations to your team.”
                   </div>
                 </div>
               </div>
@@ -498,12 +517,16 @@ export function MaryExperience() {
               <aside className="hidden rounded-2xl border border-border bg-card p-5 shadow-soft lg:flex lg:flex-col">
                 <div className="flex flex-col items-center border-b border-border pb-5">
                   <MaryOrb state={orbState} level={level} size={164} />
-                  <p className="mt-4 text-center text-sm text-muted-foreground">AI Revenue Concierge</p>
+                  <p className="mt-4 text-center text-sm text-muted-foreground">
+                    AI Revenue Concierge
+                  </p>
                 </div>
                 <div className="mt-5 flex-1">
                   <ProgressConstellation collected={collected} />
                 </div>
-                <p className="mt-5 text-xs leading-relaxed text-muted-foreground">Your conversation stays intact when you switch between speaking and typing.</p>
+                <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
+                  Your conversation stays intact when you switch between speaking and typing.
+                </p>
               </aside>
 
               <div className="flex min-h-[calc(100dvh-7rem)] min-w-0 flex-col rounded-2xl border border-border bg-card shadow-lift lg:min-h-0">
@@ -513,7 +536,9 @@ export function MaryExperience() {
                     <p className="font-semibold text-ink">MARY</p>
                     <p className="truncate text-xs text-muted-foreground">AI Revenue Concierge</p>
                   </div>
-                  <span className="text-xs text-muted-foreground">{Object.keys(collected).length}/6</span>
+                  <span className="text-xs text-muted-foreground">
+                    {Object.keys(collected).length}/6
+                  </span>
                 </div>
 
                 <div className="flex min-h-0 flex-1 flex-col justify-end overflow-hidden px-4 py-5 sm:px-7 sm:py-7">
@@ -526,9 +551,13 @@ export function MaryExperience() {
                           initial={{ opacity: 0, y: 8 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0 }}
-                          className={line.role === "user" ? "flex justify-end" : "flex justify-start"}
+                          className={
+                            line.role === "user" ? "flex justify-end" : "flex justify-start"
+                          }
                         >
-                          <div className={`max-w-[88%] rounded-xl px-4 py-3 text-sm leading-relaxed ${line.role === "user" ? "rounded-br-sm bg-ink text-background" : "rounded-bl-sm bg-surface text-ink"}`}>
+                          <div
+                            className={`max-w-[88%] rounded-xl px-4 py-3 text-sm leading-relaxed ${line.role === "user" ? "rounded-br-sm bg-ink text-background" : "rounded-bl-sm bg-surface text-ink"}`}
+                          >
                             {line.text}
                           </div>
                         </motion.div>
@@ -537,13 +566,17 @@ export function MaryExperience() {
 
                     {lastMary && (
                       <div className="rounded-2xl rounded-bl-sm border border-primary/25 bg-primary/8 p-4 sm:p-5">
-                        <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">MARY</p>
+                        <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
+                          MARY
+                        </p>
                         <p className="text-pretty text-lg leading-relaxed text-ink sm:text-xl">
                           {lastMary.text.split(/\s+/).map((word, index) => (
                             <motion.span
                               key={`${lastMary.id}-${index}`}
                               initial={false}
-                              animate={index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }}
+                              animate={
+                                index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }
+                              }
                               transition={{ duration: 0.22 }}
                               className="mr-[0.28em] inline-block"
                             >
@@ -553,21 +586,37 @@ export function MaryExperience() {
                         </p>
                       </div>
                     )}
-                    {interim && <p className="text-right text-sm italic text-muted-foreground">{interim}</p>}
+                    {interim && (
+                      <p className="text-right text-sm italic text-muted-foreground">{interim}</p>
+                    )}
                   </div>
                 </div>
 
                 <div className="border-t border-border bg-surface/70 p-3 sm:p-4">
-                  {micError && <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>}
+                  {micError && (
+                    <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>
+                  )}
                   <motion.div
-                    animate={reduced ? false : recording || orbState === "speaking" ? { scale: pulseScale, borderColor: "var(--primary)" } : { scale: [1, 1.004, 1] }}
-                    transition={recording || orbState === "speaking" ? { type: "spring", stiffness: 240, damping: 24 } : { duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
+                    animate={
+                      reduced
+                        ? false
+                        : recording || orbState === "speaking"
+                          ? { scale: pulseScale, borderColor: "var(--primary)" }
+                          : { scale: [1, 1.004, 1] }
+                    }
+                    transition={
+                      recording || orbState === "speaking"
+                        ? { type: "spring", stiffness: 240, damping: 24 }
+                        : { duration: 3.2, repeat: Infinity, ease: "easeInOut" }
+                    }
                     className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
                   >
                     <MotionButton
                       onClick={toggleMic}
                       whileTap={reduced ? {} : { scale: 0.94 }}
-                      aria-label={handsFree ? "Pause hands-free listening" : "Start hands-free listening"}
+                      aria-label={
+                        handsFree ? "Pause hands-free listening" : "Start hands-free listening"
+                      }
                       size="icon"
                       className={`relative size-11 shrink-0 rounded-lg ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
                     >
@@ -633,20 +682,31 @@ export function MaryExperience() {
                   <MaryOrb state="success" level={0.3} size={190} />
                 </div>
                 <p className="eyebrow mt-7">Early access confirmed</p>
-                <h1 className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink">You’re on the waitlist.</h1>
+                <h1 className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink">
+                  You’re on the waitlist.
+                </h1>
                 <p className="mt-4 max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground">
-                  Thanks for signing up — we’ll be in touch as soon as OmniSuite launches, a product by Omnikom.
+                  Thanks for signing up — we’ll be in touch as soon as OmniSuite launches, a product
+                  by Omnikom.
                 </p>
-                {result && result.position > 0 && <p className="mt-5 font-semibold text-accent-text">Early access position #{result.position}</p>}
+                {result && result.position > 0 && (
+                  <p className="mt-5 font-semibold text-accent-text">
+                    Early access position #{result.position}
+                  </p>
+                )}
               </div>
 
               <div className="rounded-2xl border border-border bg-card p-6 shadow-lift sm:p-8">
                 <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Registration</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                      Registration
+                    </p>
                     <p className="mt-1 text-xl font-semibold text-ink">Details confirmed</p>
                   </div>
-                  <span className="rounded-full bg-primary/12 px-3 py-1.5 text-xs font-semibold text-accent-text">Complete</span>
+                  <span className="rounded-full bg-primary/12 px-3 py-1.5 text-xs font-semibold text-accent-text">
+                    Complete
+                  </span>
                 </div>
                 <dl className="mt-6 grid gap-5 sm:grid-cols-2">
                   {WAITLIST_FIELDS.map((field, index) => (
@@ -657,12 +717,20 @@ export function MaryExperience() {
                       transition={{ delay: 0.12 + index * 0.05 }}
                       className={field === "operations" ? "sm:col-span-2" : ""}
                     >
-                      <dt className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">{FIELD_LABELS[field]}</dt>
-                      <dd className="mt-1 text-sm font-medium text-ink">{collected[field] || "—"}</dd>
+                      <dt className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        {FIELD_LABELS[field]}
+                      </dt>
+                      <dd className="mt-1 text-sm font-medium text-ink">
+                        {collected[field] || "—"}
+                      </dd>
                     </motion.div>
                   ))}
                 </dl>
-                {result && <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">{result.message}</p>}
+                {result && (
+                  <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
+                    {result.message}
+                  </p>
+                )}
               </div>
             </motion.section>
           )}
@@ -670,7 +738,9 @@ export function MaryExperience() {
 
         <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border py-4 text-[0.68rem] text-muted-foreground">
           <span>OmniSuite · AI-native revenue infrastructure</span>
-          <span>A product by <span className="wordmark text-ink">omnikom</span></span>
+          <span>
+            A product by <span className="wordmark text-ink">omnikom</span>
+          </span>
         </footer>
       </div>
     </main>
