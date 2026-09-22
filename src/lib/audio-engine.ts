@@ -1444,10 +1444,14 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     const ownVoice = cleanPeak < 0.02;
     const audio = chunks.length && !ownVoice ? encodeWav(chunks, ctx.sampleRate) : null;
     const peak = capturePeak;
+    // Not one solid moment of the person on the microphone: this was the room
+    // talking among themselves. She never hears it and never reacts to it.
+    const ambient = nearFrames < 3;
     chunks = [];
     capturing = false;
     capturePeak = 0;
     cleanPeak = 0;
+    nearFrames = 0;
     speechCandidateAt = 0;
     loudScore = 0;
     utteranceStartedAt = 0;
