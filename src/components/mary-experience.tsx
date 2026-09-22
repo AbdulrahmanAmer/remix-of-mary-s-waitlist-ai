@@ -1537,13 +1537,15 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                     rows={1}
                     enterKeyHint="send"
                     placeholder={
-                      listeningPhase === "hearing"
-                        ? "I can hear you…"
-                        : listeningPhase === "finishing"
-                          ? "Finishing your answer…"
-                          : micMuted
-                            ? "Muted — type your answer"
-                            : "Speak or type your answer"
+                      !micLive
+                        ? "Type your answer"
+                        : listeningPhase === "hearing"
+                          ? "I can hear you…"
+                          : listeningPhase === "finishing"
+                            ? "Finishing your answer…"
+                            : micMuted
+                              ? "Muted — type your answer"
+                              : "Speak or type your answer"
                     }
                     className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground sm:text-sm"
                   />
