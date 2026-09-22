@@ -57,6 +57,10 @@ const TIMINGS = {
   holdMaxMs: 4000,
   /** Longest single turn. */
   maxUtteranceMs: 45000,
+  /** How far above the room's own voices the person on the mic must sit. */
+  nearFieldMarginDb: 9,
+  /** A run of near-field voice must hold together this long to open a turn. */
+  onsetHoldMs: 220,
 } as const;
 
 /** Worklet-side capture: peaks and raw frames, off the main thread. */
