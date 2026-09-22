@@ -159,3 +159,58 @@
     display: none;
   }
 }
+
+/* Crafted 2.5D control surfaces: raised paper with a light top edge,
+   a grounded shadow that presses in on click, and a sheen on hover. */
+@utility surface-raised {
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 55%),
+    inset 0 -1px 0 oklch(0.15 0.01 110 / 6%),
+    0 1px 2px oklch(0.15 0.01 110 / 6%),
+    0 10px 24px -8px oklch(0.15 0.01 110 / 16%);
+  transition:
+    box-shadow 240ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 240ms cubic-bezier(0.22, 1, 0.36, 1);
+
+  &:hover {
+    box-shadow:
+      inset 0 1px 0 oklch(1 0 0 / 65%),
+      inset 0 -1px 0 oklch(0.15 0.01 110 / 6%),
+      0 2px 4px oklch(0.15 0.01 110 / 7%),
+      0 18px 36px -10px oklch(0.15 0.01 110 / 22%);
+  }
+
+  &:active {
+    box-shadow:
+      inset 0 2px 6px oklch(0.15 0.01 110 / 16%),
+      0 1px 2px oklch(0.15 0.01 110 / 8%);
+  }
+
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      105deg,
+      transparent 32%,
+      oklch(1 0 0 / 40%) 48%,
+      transparent 64%
+    );
+    transform: translateX(-120%);
+    transition: transform 720ms cubic-bezier(0.22, 1, 0.36, 1);
+    pointer-events: none;
+  }
+
+  &:hover::after {
+    transform: translateX(120%);
+  }
+}
+
+@utility surface-floating {
+  box-shadow:
+    inset 0 1px 0 oklch(1 0 0 / 60%),
+    0 1px 2px oklch(0.15 0.01 110 / 5%),
+    0 22px 48px -18px oklch(0.15 0.01 110 / 24%);
+}
