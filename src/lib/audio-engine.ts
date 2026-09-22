@@ -559,6 +559,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let muted = false;
   let alive = true;
   let speechCandidateAt = 0;
+  /** Running onset score: up on loud frames, down on quiet ones. */
+  let loudScore = 0;
   let lastSpeechAt = 0;
   let utteranceStartedAt = 0;
   let utteranceOverAssistant = false;
