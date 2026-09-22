@@ -23,6 +23,12 @@ type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 
 const MotionButton = motion.create(Button);
 
+// One motion vocabulary for the whole experience.
+const EASE = [0.22, 1, 0.36, 1] as const;
+const STAGE_IN = { duration: 0.6, ease: EASE } as const;
+const SOFT = { duration: 0.42, ease: EASE } as const;
+const SPRING = { type: "spring", stiffness: 210, damping: 26, mass: 0.9 } as const;
+
 const TYPING_LINES = [
   "Take your time writing what you have in mind — I'm right here with you.",
   "No rush at all, I'll wait while you type.",
@@ -412,55 +418,87 @@ export function MaryExperience() {
 
   return (
     <main className="relative min-h-dvh overflow-hidden">
-      <AuroraBackground intensity={stage === "live" ? Math.min(1, 0.4 + level) : 0} />
+      <AuroraBackground intensity={stage === "landing" ? 0.18 : Math.min(1, 0.4 + level)} />
       <div className="relative z-10 mx-auto flex min-h-dvh w-full max-w-5xl flex-col px-5 py-5 sm:px-8 sm:py-6">
-        <header
+        <motion.header
+          layout
+          transition={SPRING}
           className={`flex min-h-12 items-center gap-4 ${stage === "landing" ? "justify-center" : "justify-between"}`}
         >
           <BrandLockup compact={stage !== "landing"} centered={stage === "landing"} />
-          {stage === "live" && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setMuted((current) => !current);
-                if (!muted) stopSpeaking();
-              }}
-              aria-label={muted ? "Turn MARY's voice on" : "Turn MARY's voice off"}
-              className="rounded-full bg-card"
-            >
-              {muted ? <VolumeX /> : <Volume2 />}
-              <span className="hidden sm:inline">{muted ? "Voice off" : "Voice on"}</span>
-            </Button>
-          )}
-        </header>
+          <AnimatePresence>
+            {stage === "live" && (
+              <motion.button
+                initial={reduced ? false : { opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.94 }}
+                transition={SOFT}
+                type="button"
+                onClick={() => {
+                  setMuted((current) => !current);
+                  if (!muted) stopSpeaking();
+                }}
+                aria-label={muted ? "Turn MARY's voice on" : "Turn MARY's voice off"}
+                className="inline-flex items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-ink"
+              >
+                {muted ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                <span className="hidden sm:inline">{muted ? "Voice off" : "Voice on"}</span>
+              </motion.button>
+            )}
+          </AnimatePresence>
+        </motion.header>
 
-        <AnimatePresence mode="wait">
+        <AnimatePresence mode="wait" initial={false}>
           {stage === "landing" && (
             <motion.section
               key="landing"
-              initial={reduced ? false : { opacity: 0, y: 16 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -12 }}
-              transition={{ duration: 0.55, ease: [0.22, 1, 0.36, 1] }}
+              initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -14, filter: "blur(4px)" }}
+              transition={STAGE_IN}
               className="flex flex-1 flex-col items-center justify-center py-10 text-center sm:py-14"
             >
               <div className="mx-auto flex max-w-3xl flex-col items-center">
-                <p className="eyebrow">Early access · MARY is ready</p>
-                <h1 className="mt-5 text-balance text-5xl font-semibold leading-[0.98] text-ink sm:text-7xl lg:text-8xl">
+                <motion.p
+                  initial={reduced ? false : { opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SOFT, delay: 0.05 }}
+                  className="eyebrow"
+                >
+                  Early access · MARY is ready
+                </motion.p>
+                <motion.h1
+                  initial={reduced ? false : { opacity: 0, y: 14 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SOFT, delay: 0.12 }}
+                  className="mt-5 text-balance text-5xl font-semibold leading-[0.98] text-ink sm:text-7xl lg:text-8xl"
+                >
                   Meet <span className="text-muted-foreground">MARY.</span>
-                </h1>
-                <p className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl">
+                </motion.h1>
+                <motion.p
+                  initial={reduced ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SOFT, delay: 0.2 }}
+                  className="mt-5 max-w-xl text-pretty text-lg leading-relaxed text-muted-foreground sm:text-xl"
+                >
                   Your AI Revenue Concierge. She works the revenue you already have and personally
                   welcomes you to the OmniSuite launch waitlist.
-                </p>
-                <div className="mt-6 w-full max-w-md">
+                </motion.p>
+                <motion.div
+                  initial={reduced ? false : { opacity: 0, scale: 0.94 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ ...SPRING, delay: 0.24 }}
+                  className="mt-6 w-full max-w-md"
+                >
                   <MaryPresence state="idle" level={0} height={200} />
-                </div>
+                </motion.div>
                 <MotionButton
                   onClick={begin}
                   size="lg"
-                  whileHover={reduced ? {} : { y: -2, scale: 1.01 }}
+                  initial={reduced ? false : { opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SOFT, delay: 0.32 }}
+                  whileHover={reduced ? {} : { y: -2, scale: 1.015 }}
                   whileTap={reduced ? {} : { scale: 0.98 }}
                   className="mt-7 h-13 rounded-full px-8 shadow-soft"
                 >
@@ -469,17 +507,24 @@ export function MaryExperience() {
                 <span className="mt-3 text-sm text-muted-foreground">
                   Voice or text · switch anytime
                 </span>
-                <div className="mt-9 grid w-full grid-cols-3 divide-x divide-border border-y border-border py-4 text-xs text-muted-foreground sm:text-sm">
-                  <span className="px-2">
-                    <strong className="block text-ink sm:inline">Convert</strong> fresh demand
+                <motion.div
+                  initial={reduced ? false : { opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ ...SOFT, delay: 0.4 }}
+                  className="mt-10 flex w-full flex-wrap items-center justify-center gap-x-8 gap-y-2 text-xs text-muted-foreground sm:text-sm"
+                >
+                  <span>
+                    <strong className="text-ink">Convert</strong> fresh demand
                   </span>
-                  <span className="px-2">
-                    <strong className="block text-ink sm:inline">Cultivate</strong> your database
+                  <span className="text-border-strong">·</span>
+                  <span>
+                    <strong className="text-ink">Cultivate</strong> your database
                   </span>
-                  <span className="px-2">
-                    <strong className="block text-ink sm:inline">Recover</strong> opportunities
+                  <span className="text-border-strong">·</span>
+                  <span>
+                    <strong className="text-ink">Recover</strong> opportunities
                   </span>
-                </div>
+                </motion.div>
               </div>
             </motion.section>
           )}
@@ -487,19 +532,39 @@ export function MaryExperience() {
           {stage === "live" && (
             <motion.section
               key="live"
-              initial={reduced ? false : { opacity: 0, y: 14 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -10 }}
-              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+              initial={reduced ? false : { opacity: 0, y: 16, filter: "blur(6px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ opacity: 0, y: -12, filter: "blur(4px)" }}
+              transition={STAGE_IN}
               className="mx-auto flex w-full max-w-4xl flex-1 flex-col py-5 lg:py-7"
             >
               <MaryPresence state={presence} level={level} height={128} />
               <div className="mt-1 flex items-center justify-between gap-4 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 <span className="inline-flex items-center gap-2">
-                  <span
+                  <motion.span
+                    animate={
+                      reduced || !handsFree
+                        ? { opacity: 1, scale: 1 }
+                        : { opacity: [0.45, 1, 0.45], scale: [1, 1.25, 1] }
+                    }
+                    transition={{
+                      duration: 2.4,
+                      repeat: handsFree && !reduced ? Infinity : 0,
+                      ease: "easeInOut",
+                    }}
                     className={`size-1.5 rounded-full ${handsFree ? "bg-primary" : "bg-border-strong"}`}
                   />
-                  {handsFree ? "Hands-free" : PRESENCE_LABEL[presence]}
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.span
+                      key={handsFree ? "handsfree" : presence}
+                      initial={reduced ? false : { opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.22, ease: EASE }}
+                    >
+                      {handsFree ? "Hands-free" : PRESENCE_LABEL[presence]}
+                    </motion.span>
+                  </AnimatePresence>
                 </span>
                 <span className="hidden sm:inline">MARY · AI Revenue Concierge</span>
               </div>
@@ -508,20 +573,28 @@ export function MaryExperience() {
               </div>
 
               <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col justify-end overflow-hidden">
-                <div className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto">
-                  <AnimatePresence initial={false}>
+                <motion.div
+                  layout
+                  transition={SPRING}
+                  className="mx-auto w-full max-w-3xl space-y-2.5 overflow-y-auto"
+                >
+                  <AnimatePresence initial={false} mode="popLayout">
                     {history.map((line, index) => (
                       <motion.div
                         key={line.id}
                         layout
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 0.35 + (index / Math.max(1, history.length)) * 0.5 }}
-                        exit={{ opacity: 0, y: -6 }}
-                        transition={{ duration: 0.4, ease: [0.22, 1, 0.36, 1] }}
+                        initial={reduced ? false : { opacity: 0, y: 12, scale: 0.98 }}
+                        animate={{
+                          opacity: 0.3 + (index / Math.max(1, history.length)) * 0.5,
+                          y: 0,
+                          scale: 1,
+                        }}
+                        exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                        transition={SOFT}
                         className={line.role === "user" ? "flex justify-end" : "flex justify-start"}
                       >
                         <div
-                          className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/90 text-background" : "bg-surface text-muted-foreground"}`}
+                          className={`max-w-[80%] rounded-full px-4 py-1.5 text-[0.82rem] leading-relaxed ${line.role === "user" ? "bg-ink/85 text-background" : "text-muted-foreground"}`}
                         >
                           {line.text}
                         </div>
@@ -530,7 +603,11 @@ export function MaryExperience() {
                   </AnimatePresence>
 
                   {lastMary && (
-                    <div className="mx-auto max-w-2xl text-center">
+                    <motion.div
+                      layout
+                      transition={SPRING}
+                      className="mx-auto max-w-2xl pt-2 text-center"
+                    >
                       <p className="mb-2 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-accent-text">
                         MARY
                       </p>
@@ -540,50 +617,71 @@ export function MaryExperience() {
                             key={`${lastMary.id}-${index}`}
                             initial={false}
                             animate={
-                              index < reveal ? { opacity: 1, y: 0 } : { opacity: 0.28, y: 2 }
+                              index < reveal
+                                ? { opacity: 1, y: 0, filter: "blur(0px)" }
+                                : { opacity: 0.22, y: 3, filter: "blur(1.5px)" }
                             }
-                            transition={{ duration: 0.22 }}
+                            transition={{ duration: 0.3, ease: EASE }}
                             className="mr-[0.28em] inline-block"
                           >
                             {word}
                           </motion.span>
                         ))}
                       </p>
-                    </div>
+                    </motion.div>
                   )}
-                  {interim && (
-                    <p className="text-right text-sm italic text-muted-foreground">{interim}</p>
-                  )}
-                </div>
+                  <AnimatePresence>
+                    {interim && (
+                      <motion.p
+                        initial={reduced ? false : { opacity: 0, y: 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        transition={SOFT}
+                        className="text-right text-sm italic text-muted-foreground"
+                      >
+                        {interim}
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
+                </motion.div>
               </div>
 
               <div className="pt-3">
-                {micError && (
-                  <p className="mb-2 text-center text-xs text-muted-foreground">{micError}</p>
-                )}
+                <AnimatePresence>
+                  {micError && (
+                    <motion.p
+                      initial={reduced ? false : { opacity: 0, y: 6 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      transition={SOFT}
+                      className="mb-2 text-center text-xs text-muted-foreground"
+                    >
+                      {micError}
+                    </motion.p>
+                  )}
+                </AnimatePresence>
                 <motion.div
+                  layout
                   animate={
                     reduced
-                      ? false
+                      ? { scale: 1 }
                       : recording || presence === "speaking"
-                        ? { scale: pulseScale, borderColor: "var(--primary)" }
+                        ? { scale: pulseScale }
                         : { scale: 1 }
                   }
-                  transition={
-                    recording || presence === "speaking"
-                      ? { type: "spring", stiffness: 240, damping: 24 }
-                      : { duration: 0.25 }
-                  }
-                  className="mx-auto flex w-full max-w-3xl items-end gap-2 rounded-xl border border-border-strong bg-card p-2 shadow-soft"
+                  transition={SPRING}
+                  className="mx-auto flex w-full max-w-3xl items-end gap-1 rounded-full bg-card/70 px-2 py-1.5 shadow-soft backdrop-blur-sm"
                 >
                   <MotionButton
                     onClick={toggleMic}
                     whileTap={reduced ? {} : { scale: 0.94 }}
+                    whileHover={reduced ? {} : { scale: 1.04 }}
+                    transition={SPRING}
                     aria-label={
                       handsFree ? "Pause hands-free listening" : "Start hands-free listening"
                     }
                     size="icon"
-                    className={`relative size-11 shrink-0 rounded-lg ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
+                    className={`relative size-11 shrink-0 rounded-full ${handsFree ? "bg-primary text-primary-foreground" : ""}`}
                   >
                     {handsFree ? <Square className="fill-current" /> : <Mic />}
                   </MotionButton>
@@ -607,28 +705,54 @@ export function MaryExperience() {
                             ? "Listening — or type your answer"
                             : "Speak or type your answer"
                     }
-                    className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-2 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
+                    className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground"
                   />
-                  <Button
-                    onClick={() => void sendUser(draft)}
-                    disabled={!draft.trim()}
-                    size="icon"
-                    variant="ghost"
-                    aria-label="Send"
-                    className="size-11 shrink-0 rounded-lg"
-                  >
-                    <Send />
-                  </Button>
+                  <AnimatePresence initial={false}>
+                    {draft.trim() && (
+                      <motion.div
+                        initial={reduced ? false : { opacity: 0, scale: 0.8 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.8 }}
+                        transition={SPRING}
+                      >
+                        <Button
+                          onClick={() => void sendUser(draft)}
+                          size="icon"
+                          variant="ghost"
+                          aria-label="Send"
+                          className="size-11 shrink-0 rounded-full"
+                        >
+                          <Send />
+                        </Button>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </motion.div>
-                <p className="mt-2 text-center text-[0.68rem] text-muted-foreground">
-                  {listeningPhase === "hearing"
-                    ? "Keep speaking — MARY replies when you finish."
-                    : listeningPhase === "finishing"
-                      ? "Got it. MARY is preparing her reply."
-                      : handsFree
-                        ? "Hands-free is on. Speak naturally; no second tap needed."
-                        : "Tap the microphone once for hands-free conversation, or type anytime."}
-                </p>
+                <div className="mt-2 text-center text-[0.68rem] text-muted-foreground">
+                  <AnimatePresence mode="wait" initial={false}>
+                    <motion.p
+                      key={
+                        listeningPhase === "hearing" || listeningPhase === "finishing"
+                          ? listeningPhase
+                          : handsFree
+                            ? "hf"
+                            : "idle"
+                      }
+                      initial={reduced ? false : { opacity: 0, y: 4 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -4 }}
+                      transition={{ duration: 0.24, ease: EASE }}
+                    >
+                      {listeningPhase === "hearing"
+                        ? "Keep speaking — MARY replies when you finish."
+                        : listeningPhase === "finishing"
+                          ? "Got it. MARY is preparing her reply."
+                          : handsFree
+                            ? "Hands-free is on. Speak naturally; no second tap needed."
+                            : "Tap the microphone once for hands-free conversation, or type anytime."}
+                    </motion.p>
+                  </AnimatePresence>
+                </div>
               </div>
             </motion.section>
           )}
@@ -636,49 +760,68 @@ export function MaryExperience() {
           {stage === "done" && (
             <motion.section
               key="done"
-              initial={reduced ? false : { opacity: 0, y: 18 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
+              initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
+              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
+              transition={STAGE_IN}
               className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-10 text-center"
             >
               <div>
-                <div className="mx-auto w-full max-w-md">
+                <motion.div
+                  initial={reduced ? false : { opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={SPRING}
+                  className="mx-auto w-full max-w-md"
+                >
                   <MaryPresence state="done" level={0} height={200} />
-                </div>
-                <p className="eyebrow mt-7">Early access confirmed</p>
-                <h1 className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink">
+                </motion.div>
+                <motion.p
+                  initial={reduced ? false : { opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SOFT, delay: 0.14 }}
+                  className="eyebrow mt-7"
+                >
+                  Early access confirmed
+                </motion.p>
+                <motion.h1
+                  initial={reduced ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SOFT, delay: 0.2 }}
+                  className="mt-3 text-balance text-5xl font-semibold leading-tight text-ink"
+                >
                   You’re on the waitlist.
-                </h1>
-                <p className="mx-auto mt-4 max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground">
+                </motion.h1>
+                <motion.p
+                  initial={reduced ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ ...SOFT, delay: 0.26 }}
+                  className="mx-auto mt-4 max-w-lg text-pretty text-lg leading-relaxed text-muted-foreground"
+                >
                   Thanks for signing up — we’ll be in touch as soon as OmniSuite launches, a product
                   by Omnikom.
-                </p>
+                </motion.p>
                 {result && result.position > 0 && (
-                  <p className="mt-5 font-semibold text-accent-text">
+                  <motion.p
+                    initial={reduced ? false : { opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ ...SOFT, delay: 0.34 }}
+                    className="mt-5 font-semibold text-accent-text"
+                  >
                     Early access position #{result.position}
-                  </p>
+                  </motion.p>
                 )}
               </div>
 
-              <div className="mt-8 w-full rounded-2xl border border-border bg-card p-6 text-left shadow-lift sm:p-8">
-                <div className="flex items-center justify-between gap-4 border-b border-border pb-5">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                      Registration
-                    </p>
-                    <p className="mt-1 text-xl font-semibold text-ink">Details confirmed</p>
-                  </div>
-                  <span className="rounded-full bg-primary/12 px-3 py-1.5 text-xs font-semibold text-accent-text">
-                    Complete
-                  </span>
-                </div>
-                <dl className="mt-6 grid gap-5 sm:grid-cols-2">
+              <div className="mt-10 w-full text-left">
+                <p className="text-center text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Details confirmed
+                </p>
+                <dl className="mt-6 grid gap-6 sm:grid-cols-2">
                   {WAITLIST_FIELDS.map((field, index) => (
                     <motion.div
                       key={field}
-                      initial={reduced ? false : { opacity: 0, y: 8 }}
+                      initial={reduced ? false : { opacity: 0, y: 10 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: 0.12 + index * 0.05 }}
+                      transition={{ ...SOFT, delay: 0.38 + index * 0.06 }}
                       className={field === "operations" ? "sm:col-span-2" : ""}
                     >
                       <dt className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -691,16 +834,14 @@ export function MaryExperience() {
                   ))}
                 </dl>
                 {result && (
-                  <p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
-                    {result.message}
-                  </p>
+                  <p className="mt-8 text-center text-xs text-muted-foreground">{result.message}</p>
                 )}
               </div>
             </motion.section>
           )}
         </AnimatePresence>
 
-        <footer className="flex flex-wrap items-center justify-between gap-2 border-t border-border py-4 text-[0.68rem] text-muted-foreground">
+        <footer className="flex flex-wrap items-center justify-between gap-2 py-4 text-[0.68rem] text-muted-foreground">
           <span>OmniSuite · AI-native revenue infrastructure</span>
           <span>
             A product by <span className="wordmark text-ink">omnikom</span>
