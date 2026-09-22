@@ -197,7 +197,26 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   }, [micMuted]);
   useEffect(() => {
     collectedRef.current = collected;
+    // Write through on every confirmed detail: a refresh mid-call loses nothing.
+    if (Object.keys(collected).length > 0) saveProgress(entryIdRef.current, collected);
   }, [collected]);
+
+  // Pick up this visit's row, and anything already known about this person.
+  useEffect(() => {
+    const id = sessionId();
+    entryIdRef.current = id;
+    const existing = loadProgress(id);
+    if (!existing || existing.complete) return;
+    const known: Collected = {};
+    for (const field of WAITLIST_FIELDS) {
+      const value = existing[field];
+      if (value) known[field] = value;
+    }
+    if (Object.keys(known).length > 0) {
+      collectedRef.current = known;
+      setCollected(known);
+    }
+  }, []);
 
   /** Lines are written to the ref first so the queue never reads a stale list. */
   const commitLines = useCallback((next: Line[]) => {
