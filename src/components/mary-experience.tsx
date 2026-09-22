@@ -218,8 +218,8 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
   const finalize = useCallback(async (finalCollected: Collected) => {
     sessionFinishedRef.current = true;
-    handsFreeRef.current = false;
-    setHandsFree(false);
+    sessionRef.current?.setMuted(true);
+
     const transcript = linesRef.current
       .map((line) => `${line.role === "mary" ? "MARY" : "Guest"}: ${line.text}`)
       .join("\n");
