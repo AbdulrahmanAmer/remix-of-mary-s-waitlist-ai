@@ -84,7 +84,9 @@ export function AudioDiagnostics() {
         {
           label: "Last ten: for her?",
           value: d.addresseeVerdicts.length
-            ? d.addresseeVerdicts.map((v) => (v === "mary" ? "•" : v === "ambient" ? "·" : "?")).join(" ")
+            ? d.addresseeVerdicts
+                .map((v) => (v === "mary" ? "•" : v === "ambient" ? "·" : "?"))
+                .join(" ")
             : "—",
         },
         {
