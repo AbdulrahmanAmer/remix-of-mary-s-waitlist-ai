@@ -98,15 +98,23 @@ function ensureSink(ctx: AudioContext): Sink {
   element.autoplay = true;
   const created: Sink = { node, element, ok: false, ready: Promise.resolve(false) };
   created.ready = loopback(node.stream)
-    .catch(() => node.stream)
     .then(async (out) => {
       element.srcObject = out;
       document.body.appendChild(element);
       await element.play();
       created.ok = true;
+      trace({ type: "sinkReady" });
       return true;
     })
-    .catch(() => false);
+    .catch(() => {
+      created.ok = false;
+      element.pause();
+      element.srcObject = null;
+      element.remove();
+      if (sink === created) sink = null;
+      trace({ type: "sinkFailed" });
+      return false;
+    });
   sink = created;
   return created;
 }
@@ -115,7 +123,13 @@ function ensureSink(ctx: AudioContext): Sink {
 export async function unlockAudio() {
   const ctx = getAudioContext();
   if (ctx.state === "suspended") await ctx.resume().catch(() => {});
-  await ensureSink(ctx).ready;
+  // A transient autoplay/WebRTC failure gets one clean rebuild. We never fall
+  // back to direct AudioContext output because the microphone cannot reliably
+  // remove that path from the room.
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const current = ensureSink(ctx);
+    if (await current.ready) return;
+  }
 }
 
 function outputNode(ctx: AudioContext): AudioNode {
@@ -123,9 +137,15 @@ function outputNode(ctx: AudioContext): AudioNode {
   if (s.ok && s.element.paused) {
     s.element.play().catch(() => {
       s.ok = false;
+      s.element.srcObject = null;
+      s.element.remove();
+      if (sink === s) sink = null;
+      trace({ type: "sinkLost" });
     });
   }
-  return s.ok ? s.node : ctx.destination;
+  // Silent is safer than direct playback: direct output is not a browser call
+  // path, so its words can return through the microphone as if the user spoke.
+  return s.node;
 }
 
 // ---------------------------------------------------------------------------
