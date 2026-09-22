@@ -834,21 +834,32 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   }
 
   let stream: MediaStream;
-  try {
-    stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-        // Newer Chrome can cancel every sound the machine plays, not just calls.
-        // Unknown constraints are ignored everywhere else.
-        ...({ echoCancellationMode: "all" } as Record<string, unknown>),
-      } as MediaTrackConstraints,
-    });
-  } catch (error) {
-    throw new MicUnavailableError(micFailureFrom(error));
+  // A stream captured during the tap is reused: iPhone Safari only reliably
+  // grants the microphone while the tap is still being handled.
+  const primed = primedStream;
+  primedStream = null;
+  if (primed && primed.getAudioTracks().some((track) => track.readyState === "live")) {
+    stream = primed;
+  } else {
+    primed?.getTracks().forEach((track) => track.stop());
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+          // Newer Chrome can cancel every sound the machine plays, not just calls.
+          // Unknown constraints are ignored everywhere else.
+          ...({ echoCancellationMode: "all" } as Record<string, unknown>),
+        } as MediaTrackConstraints,
+      });
+    } catch (error) {
+      throw new MicUnavailableError(micFailureFrom(error));
+    }
   }
+  activeMicTrack = stream.getAudioTracks()[0] ?? null;
+
 
   const Ctor =
     window.AudioContext ??
