@@ -285,10 +285,9 @@ export const MaryPresence = memo(function MaryPresence({
 
       // Outer halo.
       const haloR = R * (cur.halo + lv * 0.22 + bloom * 0.35);
-      const halo = ctx.createRadialGradient(cx, cy, R * 0.9, cx, cy, haloR);
-      halo.addColorStop(0, withAlpha(primary, (0.1 + lv * 0.12) * cur.glow));
-      halo.addColorStop(0.5, withAlpha(primary, (0.035 + lv * 0.045) * cur.glow));
-      halo.addColorStop(1, withAlpha(primary, 0));
+      const halo = ctx.createRadialGradient(cx, cy, R * 0.86, cx, cy, haloR);
+      for (const [p, a] of falloffStops((0.12 + lv * 0.13) * cur.glow))
+        halo.addColorStop(p, withAlpha(primary, a));
       ctx.fillStyle = halo;
       ctx.beginPath();
       ctx.arc(cx, cy, haloR, 0, Math.PI * 2);
