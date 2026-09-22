@@ -406,12 +406,12 @@ export const MaryPresence = memo(function MaryPresence({
 
   return (
     <div
-      className={`pointer-events-none relative w-full overflow-visible ${className}`}
-      style={{ height }}
+      className={`pointer-events-none relative mx-auto aspect-square ${className}`}
+      style={{ height, width: height }}
       role="img"
       aria-label={`MARY is ${STATE_LABEL[state].toLowerCase()}`}
     >
-      <canvas ref={canvasRef} className="absolute -inset-y-[30%] left-0 w-full" />
+      <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" />
     </div>
   );
 });
