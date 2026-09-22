@@ -20,6 +20,9 @@ import {
 
 type Line = { id: string; role: "user" | "mary"; text: string };
 type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
+type Point = { x: number; y: number; w: number };
+/** Screen-space path the OmniSuite mark travels during the intro. */
+type Flight = { from: Point; mid: Point; to: Point };
 
 const MotionButton = motion.create(Button);
 
