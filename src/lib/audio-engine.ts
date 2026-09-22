@@ -795,6 +795,8 @@ export type MicSessionOptions = {
   onInterruptCancelled?: (heldFirst: boolean) => void;
   /** How loudly the microphone hears her (0 = headphones, ~0.3+ = laptop speakers). */
   onEchoCoupling?: (coupling: number) => void;
+  /** Frame-by-frame read of how much the microphone sounds like a person. */
+  onVoice?: (reading: VoiceReading) => void;
   /** The microphone went away mid-call: headset unplugged, another app took it. */
   onLost?: (reason: MicFailure) => void;
   silenceMs?: number;
