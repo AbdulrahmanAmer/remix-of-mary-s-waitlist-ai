@@ -822,7 +822,7 @@ export function MaryExperience() {
               initial={reduced ? false : { opacity: 0, y: 18, filter: "blur(6px)" }}
               animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
               transition={STAGE_IN}
-              className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-10 text-center"
+              className="no-scrollbar mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center overflow-y-auto py-4 text-center"
             >
               <div>
                 <motion.div
