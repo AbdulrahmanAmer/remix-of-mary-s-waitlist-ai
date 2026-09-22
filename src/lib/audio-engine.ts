@@ -1484,6 +1484,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
       options.onInterruptCancelled?.(wasHolding);
       return;
     }
+    if (peak > 0) nearField.learnOwn(peak);
     options.onUtterance({
       text,
       audio,
