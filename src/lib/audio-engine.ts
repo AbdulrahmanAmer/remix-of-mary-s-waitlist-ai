@@ -95,6 +95,10 @@ let sharedContext: AudioContext | null = null;
 let activeMicTrack: MediaStreamTrack | null = null;
 /** A stream captured during the tap, handed to the session so iOS sees a gesture. */
 let primedStream: MediaStream | null = null;
+/** The latest read of what the microphone is hearing, for the sound check. */
+let voiceReading: VoiceReading | null = null;
+/** What the microphone actually agreed to do (echo cancellation and friends). */
+let micProcessing = "";
 
 /** Thrown when the device/browser simply cannot do live audio at all. */
 export class AudioUnsupportedError extends Error {}
