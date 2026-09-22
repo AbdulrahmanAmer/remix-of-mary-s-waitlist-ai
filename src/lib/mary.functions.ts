@@ -21,11 +21,11 @@ export type TurnFlags = {
   revealed: boolean;
   lanesDone: boolean;
   /** The wrap question has been asked, so CLOSE is reachable. */
-  wrapAsked?: boolean;
+  wrapAsked?: boolean | undefined;
   /** They asked for a callback; the sales sequence is over. */
-  callback?: boolean;
+  callback?: boolean | undefined;
   /** How they are showing up, carried between turns. */
-  mode?: "neutral" | "rushed" | "skeptical" | "guarded" | "warm";
+  mode?: "neutral" | "rushed" | "skeptical" | "guarded" | "warm" | undefined;
 };
 
 /** What the person's last message was actually doing, read before the funnel. */
