@@ -25,7 +25,14 @@ const MotionButton = motion.create(Button);
 
 // Word-overlap check: catches MARY re-saying a line she already delivered.
 function isNearRepeat(previous: string, next: string): boolean {
-  const words = (text: string) => new Set(text.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/).filter(Boolean));
+  const words = (text: string) =>
+    new Set(
+      text
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "")
+        .split(/\s+/)
+        .filter(Boolean),
+    );
   const a = words(previous);
   const b = words(next);
   if (!a.size || !b.size) return false;
@@ -220,7 +227,8 @@ export function MaryExperience() {
                 collected: collectedRef.current as Record<string, string>,
               },
             });
-            if (!isNearRepeat(turn.say, fresh.say)) turn = { ...fresh, collected: { ...turn.collected, ...fresh.collected } };
+            if (!isNearRepeat(turn.say, fresh.say))
+              turn = { ...fresh, collected: { ...turn.collected, ...fresh.collected } };
           } catch {
             // keep the original line if the retry fails
           }
