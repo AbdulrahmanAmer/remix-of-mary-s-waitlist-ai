@@ -187,36 +187,40 @@ export const MaryPresence = memo(function MaryPresence({
     /** Sweeping brightness around the tube — bright at the front, faint behind. */
     const sweepGradient = (cx: number, cy: number, R: number, angle: number, color: string) => {
       const hasConic = typeof ctx.createConicGradient === "function";
-      const g = hasConic
-        ? ctx.createConicGradient(angle, cx, cy)
-        : ctx.createLinearGradient(
-            cx - Math.cos(angle) * R,
-            cy - Math.sin(angle) * R,
-            cx + Math.cos(angle) * R,
-            cy + Math.sin(angle) * R,
-          );
-      const stops: [number, number][] = hasConic
-        ? [
-            [0, 0.28],
-            [0.14, 1],
-            [0.32, 0.46],
-            [0.5, 0.86],
-            [0.68, 0.3],
-            [0.86, 0.72],
-            [1, 0.28],
-          ]
-        : [
-            [0, 0.3],
-            [0.5, 1],
-            [1, 0.34],
-          ];
-      for (const [p, a] of stops) g.addColorStop(p, withAlpha(color, a));
-      return g;
+      const a = q(angle, Math.PI / 90);
+      return cachedGradient(`sw:${color}:${a.toFixed(3)}:${q(R, 2)}:${hasConic ? 1 : 0}`, () => {
+        const g = hasConic
+          ? ctx.createConicGradient(a, cx, cy)
+          : ctx.createLinearGradient(
+              cx - Math.cos(a) * R,
+              cy - Math.sin(a) * R,
+              cx + Math.cos(a) * R,
+              cy + Math.sin(a) * R,
+            );
+        const stops: [number, number][] = hasConic
+          ? [
+              [0, 0.28],
+              [0.14, 1],
+              [0.32, 0.46],
+              [0.5, 0.86],
+              [0.68, 0.3],
+              [0.86, 0.72],
+              [1, 0.28],
+            ]
+          : [
+              [0, 0.3],
+              [0.5, 1],
+              [1, 0.34],
+            ];
+        for (const [p, alpha] of stops) g.addColorStop(p, withAlpha(color, alpha));
+        return g;
+      });
     };
 
     /** One soft tube: a gently folded closed curve stroked from wide-faint to narrow-bright. */
     const drawShell = (cx: number, cy: number, R: number, shell: Shell) => {
-      const segments = small ? 96 : 168;
+      const segments = lite ? 64 : small ? 84 : 132;
+
       const rr = R * shell.r;
       ctx.beginPath();
       let prev: { x: number; y: number } | null = null;
