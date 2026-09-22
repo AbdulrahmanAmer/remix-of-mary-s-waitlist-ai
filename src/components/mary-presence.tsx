@@ -346,13 +346,24 @@ export const MaryPresence = memo(function MaryPresence({
       ctx.stroke();
 
       // Sub-perceptual dither over the glow area — kills residual gradient banding.
+      // Radially faded so it never leaves a visible square patch on the paper.
       if (noise) {
         const d = R * (cur.halo + 0.4);
+        const mask = ctx.createRadialGradient(cx, cy, d * 0.12, cx, cy, d);
+        mask.addColorStop(0, "rgba(0,0,0,1)");
+        mask.addColorStop(0.55, "rgba(0,0,0,0.6)");
+        mask.addColorStop(1, "rgba(0,0,0,0)");
         ctx.save();
-        ctx.globalAlpha = 0.012;
+        ctx.beginPath();
+        ctx.arc(cx, cy, d, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.globalAlpha = 0.01;
         ctx.fillStyle = noise;
-        ctx.fillRect(cx - d, cy - d, d * 2, d * 2.2);
+        ctx.fillRect(cx - d, cy - d, d * 2, d * 2);
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.globalAlpha = 1;
         ctx.restore();
+        void mask;
       }
 
       // Completion bloom.
