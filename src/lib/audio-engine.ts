@@ -642,14 +642,19 @@ export function speak(
       return;
     }
     schedule();
+    if (!pendingFinish && streamDone && !paused && cursor >= total && active.length === 0) {
+      pendingFinish = true;
+      window.setTimeout(finish, Math.min(400, monitor.outputLatencyMs + 40));
+    }
   }, 50);
-
 
   const finish = () => {
     if (stopped) return;
     stopped = true;
     if (frozenFraction === null) frozenFraction = Math.min(1, played() / totalEstimate());
     cancelAnimationFrame(raf);
+    window.clearInterval(pump);
+
     for (const piece of active) {
       piece.cancelled = true;
       try {
