@@ -196,7 +196,7 @@ export function speak(
     finish();
   };
 
-  const schedule = (floats: Float32Array) => {
+  const schedule = (floats: Float32Array<ArrayBuffer>) => {
     if (floats.length === 0) return;
     const audioBuffer = ctx.createBuffer(1, floats.length, 24000);
     audioBuffer.copyToChannel(floats, 0);
