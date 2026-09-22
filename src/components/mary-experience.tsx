@@ -435,9 +435,17 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
             (turn.lanesDone && /cultivate/i.test(heardText) && /recover/i.test(heardText)),
         };
 
-        if (turn.complete) {
-          const allDone = WAITLIST_FIELDS.every((field) => turn.collected[field]);
-          if (allDone) await finalize(turn.collected);
+        // They asked to be called back: the request is saved as soon as there
+        // is a name and a number, and the sales sequence ends there.
+        if (turn.callbackRequested && turn.collected.name && turn.collected.phone) {
+          finalize(turn.collected, { callback: true });
+        } else if (turn.complete) {
+          const required = WAITLIST_FIELDS.filter((field) => field !== "phone");
+          if (required.every((field) => turn.collected[field])) finalize(turn.collected);
+        } else if (turn.declined) {
+          // Nothing to sell here — she lets them go and stops the ladder.
+          sessionFinishedRef.current = true;
+          sessionRef.current?.setMuted(true);
         }
       } catch {
         if (!stale()) await say("I hit a snag on my side — could you try that once more?");
