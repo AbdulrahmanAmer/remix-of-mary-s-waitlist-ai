@@ -109,3 +109,9 @@ FOLLOW-UP (independent diagnosis + 3 skeptics from the research workflow)
 UNPROVEN / NEXT
 - A real iPhone. Operator: merge, Publish -> Update in Lovable, then on the iPhone open /soundcheck (ring switch silent and ring) and a real call.
 - Fix the AI gateway failure first, or no device will hear her.
+
+## 2026-09-23 - Apple readiness audit of merged main (44318ba) -> follow-up PR
+- Audit workflow (3 area auditors, 2 refuters per finding, completeness critic). Verdict: approach correct (ElevenLabs route); not provable without a device. Confidence: iPhone Safari with mic medium, no-mic path low, Mac Safari medium, desktop Chrome high (all assuming the voice backend works and main is published).
+- Fixed on the branch (restarted from main): screen wake lock for the call (requested in the tap, re-acquired on return, released at the end); recorder closed whenever the call screen goes away (a Hold press after "Type instead" left the mic on); element restarted once the mic is live so WebKit can join it to the voice-processing unit, as ElevenLabs builds its element after getUserMedia; /soundcheck test 6 reports a failed speech request; diagnostics no longer call the element route "echo cancellation degraded".
+- Verified in Chromium (iPhone, desktop, Mac-Safari profiles): elementRestarted trace, audio still reaches the element (0.40), wake lock requested inside the tap (denied in headless, handled), desktop unchanged; gates 0/0/67/0.
+- Still open (not code): voice backend 502 since ~08:00 UTC; publish main; real-device test (/soundcheck silent + ring, one call, one Type-instead call, Mac Safari call).

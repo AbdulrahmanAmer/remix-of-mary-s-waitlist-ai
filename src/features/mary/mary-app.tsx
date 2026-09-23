@@ -43,6 +43,37 @@ import { HoldRecorder } from "./voice/hold-recorder";
 import { HoldTalk } from "./voice/hold-talk";
 import { VoiceLine } from "./voice/voice-line";
 
+/**
+ * The screen stays on for the whole call, as ElevenLabs does: a locked iPhone
+ * suspends the page, her voice and the microphone with it. WebKit grants the
+ * first lock only inside a tap, and later ones after that first grant.
+ */
+let wakeLock: WakeLockSentinel | null = null;
+let wakeRequest: Promise<void> | null = null;
+let wakeWanted = false;
+function holdScreenAwake(on: boolean) {
+  wakeWanted = on;
+  if (!on) {
+    void wakeLock?.release().catch(() => {});
+    wakeLock = null;
+    return;
+  }
+  if ((wakeLock && !wakeLock.released) || wakeRequest) return;
+  if (!("wakeLock" in navigator) || document.visibilityState !== "visible") return;
+  wakeRequest = navigator.wakeLock
+    .request("screen")
+    .then(
+      (lock) => {
+        if (wakeWanted) wakeLock = lock;
+        else void lock.release().catch(() => {});
+      },
+      () => {},
+    )
+    .finally(() => {
+      wakeRequest = null;
+    });
+}
+
 /** The boot screen shows at least this long after first paint, then dissolves. */
 const MIN_BOOT_MS = 900;
 const BOOT_FADE_MS = 500;
@@ -231,6 +262,28 @@ function useCallEffects(
       c.store.dispatch({ type: "SET_MIC", mic: { live: false } });
     };
   }, [c, stage, micAttempt, talkMode]);
+
+  // Whatever opened the microphone (the hold effect, or a Hold press after "Type
+  // instead"), it closes when the call screen goes away.
+  useEffect(() => {
+    if (stage === "call") return;
+    c.hold.cancel();
+    c.recorder.close();
+  }, [c, stage]);
+
+  // The screen stays on while the call is up, and the lock comes back after a tab switch.
+  useEffect(() => {
+    if (stage !== "call") return;
+    holdScreenAwake(true);
+    const onVisible = () => {
+      if (document.visibilityState === "visible") holdScreenAwake(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisible);
+      holdScreenAwake(false);
+    };
+  }, [stage]);
 
   // Desktop: hold the space bar to talk. The answer box is focused after every
   // reply, so an empty box still means "talk"; once they start typing, space types.
@@ -462,13 +515,19 @@ export function MaryApp() {
       // iPhone Safari grants the microphone only while the tap is still being
       // handled. The stream is kept: the line that records next takes it over.
       const primed = withVoice
-        ? primeMicPermission().catch((error: unknown) => {
-            store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
-          })
-        : Promise.resolve();
+        ? primeMicPermission().then(
+            () => true,
+            (error: unknown) => {
+              store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
+              return false;
+            },
+          )
+        : Promise.resolve(false);
+      // The screen stays on for the call: iOS only grants that inside the tap.
+      holdScreenAwake(true);
       await unlockAudio();
-      await primed;
-      primeOutput();
+      const micLive = await primed;
+      primeOutput({ micLive });
       store.dispatch({ type: "START_CALL", at: Date.now() });
       if (!withVoice) store.dispatch({ type: "SET_LISTENING", listening: "paused" });
       void c.runner.welcome();
@@ -525,6 +584,7 @@ export function MaryApp() {
   }, [c, store]);
   const onResume = useCallback(() => {
     // Inside the tap: the output element is rebuilt and started where iOS allows it.
+    holdScreenAwake(true);
     void unlockAudio();
     c.lead.resume();
   }, [c]);

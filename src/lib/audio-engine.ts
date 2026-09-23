@@ -241,8 +241,9 @@ export function isAppleMobile(): boolean {
 /**
  * WebKit: Safari on a Mac, and every browser on iPhone and iPad. It can leave a
  * looped-back call stream muted (fixed only in Safari 27), so her voice takes
- * the element route there. It still passes WebKit's echo canceller, which
- * renders MediaStream playback through the same unit as the microphone.
+ * the element route there. WebKit renders MediaStream playback through the
+ * microphone's voice-processing unit (echo cancellation) only when the element
+ * starts while capture is running; primeOutput restarts it once the mic is live.
  */
 export function isWebKitEngine(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -484,20 +485,47 @@ export async function unlockAudio() {
  * ElevenLabs' iOS prime, once the microphone is live: about 100 ms of silence
  * through the element's own path, then play() again, so iOS treats the element
  * as playing media before her first word arrives.
+ *
+ * With the microphone live, the element is also restarted first. It had to
+ * start inside the tap, before the microphone; WebKit joins a MediaStream
+ * element to the microphone's voice-processing unit (echo cancellation, one
+ * call-mode audio session) only if it starts while capture runs, which is why
+ * ElevenLabs builds its element after getUserMedia. The restart is allowed
+ * without a tap while the page is capturing.
  */
-export function primeOutput() {
+export function primeOutput(opts: { micLive?: boolean } = {}) {
   const ctx = sharedContext;
   if (!ctx || !hub || !sink || sink.stale) return;
-  try {
-    const silence = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.1), ctx.sampleRate);
-    const source = ctx.createBufferSource();
-    source.buffer = silence;
-    source.connect(hub);
-    source.start();
-  } catch {
-    /* nothing to prime */
+  const current = sink;
+  const prime = () => {
+    if (current.stale) return;
+    try {
+      const silence = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.1), ctx.sampleRate);
+      const source = ctx.createBufferSource();
+      source.buffer = silence;
+      source.connect(hub ?? ctx.destination);
+      source.start();
+    } catch {
+      /* nothing to prime */
+    }
+    void current.element.play().catch(() => {});
+  };
+  if (!opts.micLive || outputRoute !== "element") {
+    prime();
+    return;
   }
-  void sink.element.play().catch(() => {});
+  // A beat for the capture unit to start (macOS starts it asynchronously).
+  window.setTimeout(() => {
+    if (current.stale || currentHandle) {
+      // She is already talking: never cut a line to restart the element.
+      prime();
+      return;
+    }
+    current.element.srcObject = null;
+    void attach(current.element, current.node.stream, 1500);
+    trace({ type: "elementRestarted" });
+    prime();
+  }, 250);
 }
 
 /**
@@ -585,7 +613,7 @@ export function audioDiagnostics() {
     route: outputRoute,
     audioSession:
       (navigator as unknown as { audioSession?: { type: string } }).audioSession?.type ?? "n/a",
-    echoCancellationDegraded: directOn || !(sink?.ok ?? false),
+    echoCancellationDegraded: directOn || (outputRoute === "call" && !(sink?.ok ?? false)),
     speaking: monitor.active && !monitor.paused,
     lastOutputMovedMsAgo: lastElementProgressAt
       ? Math.round(performance.now() - lastElementProgressAt)
