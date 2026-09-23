@@ -21,6 +21,8 @@ export function AudioDiagnostics() {
       setRows([
         { label: "Audio engine", value: d.context, good: d.context === "running" },
         { label: "Sample rate", value: `${d.sampleRate || "—"}` },
+        { label: "Output route", value: d.route },
+        { label: "Audio session", value: d.audioSession },
         { label: "Call route built", value: d.callRoute ? "yes" : "no", good: d.callRoute },
         {
           label: "Output playing",

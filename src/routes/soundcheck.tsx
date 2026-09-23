@@ -4,8 +4,11 @@ import { useState } from "react";
 import {
   audioDiagnostics,
   isAppleMobile,
+  isInAppBrowser,
+  primeMicPermission,
+  releasePrimedMic,
   setAudioSessionType,
-  setDirectOutput,
+  setOutputRoute,
   speak,
   unlockAudio,
 } from "@/lib/audio-engine";
@@ -14,6 +17,9 @@ import {
  * On-phone sound check: plays a sound through each output route MARY could use
  * and records what the device reports alongside what the person heard. One
  * screenshot of this page tells which layer is silent on a given phone.
+ *
+ * Every test starts its sound in the first, synchronous part of its tap: iOS
+ * only lets a page start sound while the tap is being handled.
  */
 export const Route = createFileRoute("/soundcheck")({
   head: () => ({ meta: [{ title: "MARY sound check" }, { name: "robots", content: "noindex" }] }),
@@ -25,6 +31,7 @@ export const Route = createFileRoute("/soundcheck")({
 });
 
 type Result = { test: string; heard: "yes" | "no" | "?"; state: string };
+type SessionType = "playback" | "play-and-record" | "auto";
 
 const RATE = 48000;
 
@@ -85,16 +92,95 @@ function describe(extra = ""): string {
     .join(" · ");
 }
 
-function playChime(): Promise<void> {
+/** Which phone, system and browser this is: the same page behaves differently across them. */
+function deviceLine(): string {
+  const ua = navigator.userAgent;
+  const os = /OS (\d+)_(\d+)(?:_(\d+))?/.exec(ua);
+  const safari = /Version\/([\d.]+)/.exec(ua);
+  const browser = /CriOS/.test(ua)
+    ? "Chrome"
+    : /FxiOS/.test(ua)
+      ? "Firefox"
+      : /EdgiOS/.test(ua)
+        ? "Edge"
+        : isInAppBrowser()
+          ? "in-app browser"
+          : safari
+            ? `Safari ${safari[1]}`
+            : "other";
+  const standalone = window.matchMedia?.("(display-mode: standalone)").matches
+    ? " · home screen"
+    : "";
+  // iOS 26 and later freeze the user agent at "OS 18_6"; Safari's own version matches iOS there.
+  const frozen = os?.[1] === "18" && os[2] === "6";
+  const safariMajor = Number(safari?.[1]?.split(".")[0] ?? 0);
+  const system = !os
+    ? "not iOS"
+    : frozen && safariMajor >= 26
+      ? `iOS ${safari?.[1]}`
+      : frozen
+        ? "iOS 18.6 or later"
+        : `iOS ${os[1]}.${os[2]}${os[3] ? `.${os[3]}` : ""}`;
+  return [
+    system,
+    browser,
+    `audioSession ${"audioSession" in navigator ? "yes" : "no"}`,
+    window.top === window ? "top frame" : "inside a frame",
+  ]
+    .join(" · ")
+    .concat(standalone);
+}
+
+/** Every Web Audio test sets the session type itself, so earlier tests don't leak into it. */
+function setSession(type: SessionType): string {
+  setAudioSessionType(type);
+  const now = sessionType();
+  return now === type || now === "n/a" ? "" : `asked ${type}, got ${now}`;
+}
+
+function playChime(into?: AudioNode): Promise<void> {
   const c = context();
   const source = c.createBufferSource();
   source.buffer = chime(c);
-  source.connect(c.destination);
+  source.connect(into ?? c.destination);
   source.start();
   return new Promise((resolve) => (source.onended = () => resolve()));
 }
 
-async function openMic(): Promise<MediaStream> {
+/**
+ * MARY's iPhone route (ElevenLabs' too): Web Audio into a MediaStream, played
+ * by a hidden <audio> element. Built and told to play inside the tap.
+ */
+let routeNode: MediaStreamAudioDestinationNode | null = null;
+let routeElement: HTMLAudioElement | null = null;
+function startElementRoute(): {
+  node: AudioNode;
+  element: HTMLAudioElement;
+  ready: Promise<string>;
+} {
+  const c = context();
+  if (!routeNode || !routeElement) {
+    routeNode = c.createMediaStreamDestination();
+    routeElement = document.createElement("audio");
+    routeElement.setAttribute("playsinline", "");
+    routeElement.autoplay = true;
+    routeElement.style.display = "none";
+    document.body.appendChild(routeElement);
+    routeElement.srcObject = routeNode.stream;
+  }
+  const element = routeElement;
+  const ready = element.play().then(
+    () => "",
+    (e: unknown) => `play() ${(e as Error).name}`,
+  );
+  return { node: routeNode, element, ready };
+}
+
+function elementState(element: HTMLAudioElement, error: string): string {
+  return `element ${element.paused ? "paused" : "playing"} t=${element.currentTime.toFixed(2)} ${error}`.trim();
+}
+
+function openMic(): Promise<MediaStream> {
   return navigator.mediaDevices.getUserMedia({
     audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
   });
@@ -127,7 +213,7 @@ async function loopbackElement(): Promise<string> {
   await element.play().catch((e: unknown) => (error = `play() ${(e as Error).name}`));
   source.start();
   await new Promise((r) => setTimeout(r, 2200));
-  const state = `element ${element.paused ? "paused" : "playing"} t=${element.currentTime.toFixed(2)} ${error}`;
+  const state = elementState(element, error);
   element.srcObject = null;
   from.close();
   to.close();
@@ -147,55 +233,82 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
     },
   },
   {
+    id: "element",
+    label: "2 · New iPhone route: Web Audio → <audio> element",
+    run: async () => {
+      const note = setSession("auto");
+      const route = startElementRoute();
+      const error = await route.ready;
+      await playChime(route.node);
+      return [elementState(route.element, error), note].filter(Boolean).join(" · ");
+    },
+  },
+  {
+    id: "element-mic",
+    label: "3 · New route with the mic open (as in a call)",
+    run: async () => {
+      const note = setSession("auto");
+      const mic = openMic();
+      const route = startElementRoute();
+      const stream = await mic;
+      const error = await route.ready;
+      await playChime(route.node);
+      const state = elementState(route.element, error);
+      stream.getTracks().forEach((t) => t.stop());
+      return [state, "mic was open", note].filter(Boolean).join(" · ");
+    },
+  },
+  {
+    id: "mary",
+    label: "4 · MARY's real voice, started the way the app starts a call",
+    run: async () => {
+      setSession("auto");
+      // Same tap order as the app: microphone request, route, unlock; then her line.
+      const mic = primeMicPermission().then(
+        () => "",
+        (e: unknown) => `mic ${(e as Error).message}`,
+      );
+      setOutputRoute(isAppleMobile() ? "element" : "call");
+      await unlockAudio();
+      const micNote = await mic;
+      const handle = speak("Hi, this is MARY. If you can hear me, the new sound path works.");
+      await handle.done;
+      releasePrimedMic();
+      const d = audioDiagnostics();
+      return [
+        `engine ${d.context} ${d.sampleRate}Hz route=${d.route}`,
+        `element=${d.elementPaused ? "paused" : "playing"} direct=${d.directOutput}`,
+        micNote,
+      ]
+        .filter(Boolean)
+        .join(" ");
+    },
+  },
+  {
     id: "webaudio",
-    label: "2 · Web Audio (new iPhone path)",
+    label: "5 · Web Audio only (last week's route)",
     run: async () => {
-      setAudioSessionType("playback");
+      const note = setSession("auto");
       await playChime();
-      return "";
+      return note;
     },
   },
   {
-    id: "after-mic",
-    label: "3 · Web Audio after mic on then off",
+    id: "webaudio-playback",
+    label: "6 · Web Audio only, audio session 'playback'",
     run: async () => {
-      setAudioSessionType("play-and-record");
-      const stream = await openMic();
-      await new Promise((r) => setTimeout(r, 600));
-      stream.getTracks().forEach((t) => t.stop());
-      setAudioSessionType("playback");
-      await new Promise((r) => setTimeout(r, 300));
+      const note = setSession("playback");
       await playChime();
-      return "mic opened and released";
-    },
-  },
-  {
-    id: "mic-open",
-    label: "4 · Web Audio while mic is open (old app)",
-    run: async () => {
-      const stream = await openMic();
-      await playChime();
-      stream.getTracks().forEach((t) => t.stop());
-      setAudioSessionType("playback");
-      return "mic was open during the chime";
+      setSession("auto");
+      return note;
     },
   },
   {
     id: "loopback",
-    label: "5 · Call route (old app)",
-    run: loopbackElement,
-  },
-  {
-    id: "mary",
-    label: "6 · MARY's real voice (new path)",
+    label: "7 · Call route (the app before that)",
     run: async () => {
-      setDirectOutput(isAppleMobile());
-      await unlockAudio();
-      setAudioSessionType("playback");
-      const handle = speak("Hi, this is MARY. If you can hear me, the new sound path works.");
-      await handle.done;
-      const d = audioDiagnostics();
-      return `engine ${d.context} ${d.sampleRate}Hz direct=${d.directOutput}`;
+      setSession("auto");
+      return loopbackElement();
     },
   },
 ];
@@ -203,6 +316,8 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
 function SoundCheck() {
   const [results, setResults] = useState<Result[]>([]);
   const [busy, setBusy] = useState("");
+  const [ring, setRing] = useState<"ring" | "silent" | "?">("?");
+  const [copied, setCopied] = useState(false);
 
   const run = async (test: (typeof TESTS)[number]) => {
     setBusy(test.id);
@@ -223,17 +338,41 @@ function SoundCheck() {
     setResults((all) => all.map((r) => (r.test === label ? { ...r, heard } : r)));
 
   const summary = [
-    `${navigator.userAgent}`,
+    deviceLine(),
+    `ring switch: ${ring}`,
+    navigator.userAgent,
     ...results.map((r) => `${r.test}: heard=${r.heard} | ${r.state}`),
   ].join("\n");
+
+  const copy = () => {
+    void navigator.clipboard?.writeText(summary).then(
+      () => setCopied(true),
+      () => setCopied(false),
+    );
+  };
 
   return (
     <main className="mx-auto min-h-dvh max-w-lg px-4 py-8 text-ink">
       <h1 className="font-display text-2xl font-medium">MARY sound check</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Volume up, ring switch on. Tap each test, listen for a two-note chime (or MARY's voice),
-        then mark what you heard. Screenshot the box at the bottom and send it over.
+        Volume up. Tap each test, listen for a two-note chime (or MARY's voice), then mark what you
+        heard. Run it once with the ring switch on silent and once with it on ring, then copy the
+        results and send them over.
       </p>
+      <p className="mt-2 font-mono text-[0.7rem] text-muted-foreground">{deviceLine()}</p>
+      <div className="mt-4 flex items-center gap-2 text-sm">
+        <span>Ring switch right now:</span>
+        {(["ring", "silent"] as const).map((value) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setRing(value)}
+            className={`rounded-full px-3 py-1.5 ring-1 ring-border ${ring === value ? "bg-ink text-background" : ""}`}
+          >
+            {value === "ring" ? "Ring" : "Silent"}
+          </button>
+        ))}
+      </div>
       <ol className="mt-6 space-y-3">
         {TESTS.map((test) => {
           const result = results.find((r) => r.test === test.label);
@@ -273,10 +412,17 @@ function SoundCheck() {
       <textarea
         readOnly
         value={summary}
-        rows={10}
+        rows={12}
         aria-label="Sound check results"
         className="mt-6 w-full rounded-2xl bg-card p-3 font-mono text-[0.7rem] ring-1 ring-border"
       />
+      <button
+        type="button"
+        onClick={copy}
+        className="mt-2 rounded-full px-4 py-2 text-sm ring-1 ring-border"
+      >
+        {copied ? "Copied" : "Copy results"}
+      </button>
     </main>
   );
 }

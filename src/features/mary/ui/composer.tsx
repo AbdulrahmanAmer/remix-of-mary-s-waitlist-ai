@@ -317,10 +317,7 @@ export function Composer({
         </AnimatePresence>
         {notices.silentHint && (
           <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-accent-text">
-            <span>
-              Can't hear her? Turn the ring switch on the side of your phone on, or plug in
-              headphones.
-            </span>
+            <span>Can't hear her? Turn the volume up and tap Play sound.</span>
             <button
               type="button"
               onClick={onPlaySound}

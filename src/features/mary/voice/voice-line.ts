@@ -289,7 +289,7 @@ export class VoiceLine {
     }, 1000);
   }
 
-  /** iPhone had to route her voice to the speakers: the ring switch is the usual culprit. */
+  /** Her voice had to leave the <audio> element for the speakers: the element was not playing. */
   directOutputUsed(): boolean {
     return audioDiagnostics().directOutput;
   }

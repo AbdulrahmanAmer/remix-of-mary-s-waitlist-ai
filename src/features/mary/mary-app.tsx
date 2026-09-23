@@ -7,8 +7,7 @@ import {
   primeMicPermission,
   micPermissionState,
   releasePrimedMic,
-  setAudioSessionType,
-  setDirectOutput,
+  setOutputRoute,
   releaseAudioOutput,
   replayLastLine,
   transcribe,
@@ -134,9 +133,8 @@ function createController(): Controller {
   voice.onSend = (text) => void runner.send(text, "voice");
   voice.isBusy = () => runner.busy;
 
-  // iPhone and iPad: an open microphone makes iOS treat the page as a phone
-  // call and her voice goes to the earpiece or nowhere. There the mic is held
-  // only while the button is, and her voice goes straight to the speakers.
+  // iPhone and iPad keep the microphone track live between holds (ElevenLabs
+  // does the same): iOS then stays in its loudspeaker call mode for the whole call.
   const recorder = new HoldRecorder(isAppleMobile());
   recorder.onLevel = (level) => voiceLevel.set(level);
   const waiting = () => {
@@ -209,16 +207,6 @@ function useCallEffects(
   // Hold to talk (the default): the microphone is ready, but only held audio counts.
   useEffect(() => {
     if (stage !== "call" || talkMode !== "hold" || !c.voiceWanted.current) return;
-    if (isAppleMobile()) {
-      // The mic opens on each press; permission was granted at the tap.
-      if (!c.store.get().mic.error)
-        c.store.dispatch({ type: "SET_MIC", mic: { live: true, muted: false } });
-      c.store.dispatch({ type: "SET_LISTENING", listening: "listening" });
-      return () => {
-        c.hold.cancel();
-        c.recorder.close();
-      };
-    }
     let alive = true;
     c.recorder.open().then(
       () => {
@@ -301,17 +289,18 @@ function useCallEffects(
     return () => stop();
   }, [c, stage, micLive]);
 
-  // iPhone only: if her voice had to go to the speakers, the ring switch is the usual cause.
+  // iPhone only: a "Can't hear her?" way out until they first answer, and again if her
+  // voice had to move to the speakers. Its tap is a fresh gesture iOS lets sound start from.
   useEffect(() => {
-    if (stage !== "call") return;
-    const apple =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (!apple) return;
-    const timer = window.setInterval(() => {
-      if (c.voice.directOutputUsed())
-        c.store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: true });
-    }, 1000);
+    if (stage !== "call" || !isAppleMobile()) return;
+    const update = () => {
+      const state = c.store.get();
+      const answered = state.lines.some((line) => line.role === "user");
+      const show = !state.voiceOff && (!answered || c.voice.directOutputUsed());
+      c.store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: show });
+    };
+    update();
+    const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [c, stage]);
 
@@ -439,6 +428,7 @@ export function MaryApp() {
       c.hold.cancel();
       c.recorder.close();
       c.lead.dispose();
+      releasePrimedMic();
       releaseAudioOutput();
     },
     [c],
@@ -448,24 +438,15 @@ export function MaryApp() {
     async (withVoice: boolean) => {
       if (store.get().stage !== "landing") return;
       c.voiceWanted.current = withVoice;
-      const holdMode = store.get().talkMode === "hold";
-      const apple = isAppleMobile();
-      // iPhone: her voice never takes the call route (it lands in the earpiece).
-      setDirectOutput(apple);
-      // iPhone Safari grants the microphone only while the tap is still being handled.
+      // Her voice always plays through an <audio> element. iPhone and iPad feed it
+      // straight from Web Audio; a looped-back call stream can arrive muted there.
+      setOutputRoute(isAppleMobile() ? "element" : "call");
+      // iPhone Safari grants the microphone only while the tap is still being
+      // handled. The stream is kept: the line that records next takes it over.
       const primed = withVoice
-        ? primeMicPermission()
-            .then(() => {
-              // Hold to talk opens its own microphone per hold. Letting this one go
-              // takes iOS out of phone-call mode before her first word.
-              if (holdMode) {
-                releasePrimedMic();
-                if (apple) setAudioSessionType("playback");
-              }
-            })
-            .catch((error: unknown) => {
-              store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
-            })
+        ? primeMicPermission().catch((error: unknown) => {
+            store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
+          })
         : Promise.resolve();
       await unlockAudio();
       await primed;
