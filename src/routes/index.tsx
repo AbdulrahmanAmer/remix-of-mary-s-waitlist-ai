@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ClientOnly } from "@tanstack/react-router";
-import { BootGate } from "@/components/boot-gate";
-import { MaryBoot } from "@/components/mary-boot";
+import { MaryApp } from "@/features/mary/mary-app";
+import { BootScreen } from "@/features/mary/ui/boot-screen";
 
 // Shared links and QR codes need an absolute address for the preview card.
 // Update this when the custom domain goes live.
@@ -36,8 +36,8 @@ export const Route = createFileRoute("/")({
 
 function Index() {
   return (
-    <ClientOnly fallback={<MaryBoot />}>
-      <BootGate />
+    <ClientOnly fallback={<BootScreen />}>
+      <MaryApp />
     </ClientOnly>
   );
 }
