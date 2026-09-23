@@ -7,6 +7,7 @@ import {
   micPermissionState,
   releaseAudioOutput,
   replayLastLine,
+  transcribe,
   unlockAudio,
 } from "@/lib/audio-engine";
 import { addLessons, lessonsForTurn, type StoredLesson } from "@/lib/experience-store";
@@ -24,6 +25,8 @@ import {
 import { LeadLifecycle } from "./conversation/lead-lifecycle";
 import { createSessionStore, useSession, type SessionStore } from "./conversation/store";
 import { IDLE_NUDGES, micMessage } from "./conversation/text";
+import type { TalkMode } from "./conversation/types";
+import { voiceLevel } from "./signal/signal";
 import { TurnRunner } from "./conversation/turn-runner";
 import { BootScreen } from "./ui/boot-screen";
 import { CallStage } from "./ui/call-stage";
@@ -31,6 +34,8 @@ import { EndScreen } from "./ui/end-screen";
 import { Landing } from "./ui/landing";
 import { hasFinePointer, useKeyboardViewport, useViewportHeight } from "./ui/use-viewport";
 import { warmOrb } from "./ui/orb-renderer";
+import { HoldRecorder } from "./voice/hold-recorder";
+import { HoldTalk } from "./voice/hold-talk";
 import { VoiceLine } from "./voice/voice-line";
 
 /** The boot screen shows at least this long after first paint, then dissolves. */
@@ -42,6 +47,8 @@ type Controller = {
   voice: VoiceLine;
   runner: TurnRunner;
   lead: LeadLifecycle;
+  recorder: HoldRecorder;
+  hold: HoldTalk;
   /** Whether the person wants the microphone (false after "Type instead"). */
   voiceWanted: { current: boolean };
   focusComposer: { current: () => void };
@@ -91,6 +98,8 @@ function createController(): Controller {
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (id) => window.clearTimeout(id),
   });
+  // Assigned below; read only at call time.
+  let hold: HoldTalk | null = null;
   const runner = new TurnRunner({
     store,
     streamTurn: streamMaryTurn,
@@ -109,7 +118,8 @@ function createController(): Controller {
     lessons: (industry) => lessonsForTurn(industry),
     onFinish: (collected, outcome) => void lead.finalize(collected, outcome),
     onSettled: () => {
-      if (store.get().stage !== "call") return;
+      // Mid-hold the floor is already theirs; the hold decides what the screen shows.
+      if (store.get().stage !== "call" || hold?.holding) return;
       store.dispatch({
         type: "SET_LISTENING",
         listening: store.get().mic.muted ? "paused" : "listening",
@@ -119,7 +129,58 @@ function createController(): Controller {
   });
   voice.onSend = (text) => void runner.send(text, "voice");
   voice.isBusy = () => runner.busy;
-  return { store, voice, runner, lead, voiceWanted: { current: true }, focusComposer };
+
+  const recorder = new HoldRecorder();
+  recorder.onLevel = (level) => voiceLevel.set(level);
+  const waiting = () => {
+    store.dispatch({ type: "SET_LISTENING", listening: "listening" });
+    if (store.get().presence === "hearing")
+      store.dispatch({ type: "SET_PRESENCE", presence: "idle" });
+  };
+  hold = new HoldTalk({
+    recorder,
+    // Held audio is the person by definition: straight to transcription, no addressee judge.
+    transcribeHeld: transcribe,
+    onPress: () => {
+      // Same event as the press: her audio stops and the rest of her turn is dropped.
+      runner.interrupt();
+      voiceLevel.set(0);
+      store.dispatch({ type: "SET_NOTICE", key: "missedHold", value: false });
+      store.dispatch({ type: "SET_PRESENCE", presence: "hearing" });
+      store.dispatch({ type: "SET_LISTENING", listening: "hearing" });
+    },
+    onRelease: () => {
+      store.dispatch({ type: "SET_LISTENING", listening: "finishing" });
+      store.dispatch({ type: "SET_PRESENCE", presence: "thinking" });
+    },
+    onCancel: waiting,
+    onText: (text) => {
+      store.dispatch({ type: "SET_NOTICE", key: "suggestTyping", value: false });
+      void runner.send(text, "voice");
+    },
+    onMissed: (inARow) => {
+      waiting();
+      store.dispatch({ type: "SET_NOTICE", key: "missedHold", value: true });
+      if (inARow >= 2) store.dispatch({ type: "SET_NOTICE", key: "suggestTyping", value: true });
+    },
+    onError: (error) => {
+      waiting();
+      store.dispatch({ type: "SET_MIC", mic: { live: false, error: micMessage(error) } });
+    },
+    now: () => performance.now(),
+    setTimer: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimer: (id) => window.clearTimeout(id),
+  });
+  return {
+    store,
+    voice,
+    runner,
+    lead,
+    recorder,
+    hold,
+    voiceWanted: { current: true },
+    focusComposer,
+  };
 }
 
 /** Everything that runs only while the call screen is up. */
@@ -129,13 +190,64 @@ function useCallEffects(
   micLive: boolean,
   micMuted: boolean,
   micAttempt: number,
+  talkMode: TalkMode,
 ) {
-  // The line opens itself when the call starts and stays open, like a phone call.
+  // Hands-free (quiet rooms): the line opens itself and stays open, like a phone call.
   useEffect(() => {
-    if (stage !== "call" || !c.voiceWanted.current) return;
+    if (stage !== "call" || talkMode !== "hands-free" || !c.voiceWanted.current) return;
     void c.voice.openMic();
     return () => c.voice.closeMic();
-  }, [c, stage, micAttempt]);
+  }, [c, stage, micAttempt, talkMode]);
+
+  // Hold to talk (the default): the microphone is ready, but only held audio counts.
+  useEffect(() => {
+    if (stage !== "call" || talkMode !== "hold" || !c.voiceWanted.current) return;
+    let alive = true;
+    c.recorder.open().then(
+      () => {
+        if (alive)
+          c.store.dispatch({ type: "SET_MIC", mic: { live: true, muted: false, error: null } });
+      },
+      (error: unknown) => {
+        if (alive)
+          c.store.dispatch({ type: "SET_MIC", mic: { live: false, error: micMessage(error) } });
+      },
+    );
+    c.store.dispatch({ type: "SET_LISTENING", listening: "listening" });
+    return () => {
+      alive = false;
+      c.hold.cancel();
+      c.recorder.close();
+      c.store.dispatch({ type: "SET_MIC", mic: { live: false } });
+    };
+  }, [c, stage, micAttempt, talkMode]);
+
+  // Desktop: hold the space bar to talk (not while typing in the answer box).
+  useEffect(() => {
+    if (stage !== "call" || talkMode !== "hold") return;
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName));
+    const down = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || typing(event.target)) return;
+      event.preventDefault();
+      if (!event.repeat) c.hold.press();
+    };
+    const up = (event: KeyboardEvent) => {
+      if (event.code !== "Space" || typing(event.target)) return;
+      event.preventDefault();
+      c.hold.release();
+    };
+    const lost = () => c.hold.release();
+    window.addEventListener("keydown", down);
+    window.addEventListener("keyup", up);
+    window.addEventListener("blur", lost);
+    return () => {
+      window.removeEventListener("keydown", down);
+      window.removeEventListener("keyup", up);
+      window.removeEventListener("blur", lost);
+    };
+  }, [c, stage, talkMode]);
 
   // Allowing the microphone in the browser's settings brings the line back by itself.
   useEffect(() => {
@@ -219,6 +331,7 @@ export function MaryApp() {
   const { store } = c;
   const stage = useSession(store, (s) => s.stage);
   const mic = useSession(store, (s) => s.mic);
+  const talkMode = useSession(store, (s) => s.talkMode);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const viewportHeight = useViewportHeight();
   const keyboardHeight = useKeyboardViewport(stage === "call");
@@ -290,11 +403,13 @@ export function MaryApp() {
       node.focus({ preventScroll: true });
   };
 
-  useCallEffects(c, stage, mic.live, mic.muted, mic.attempt);
+  useCallEffects(c, stage, mic.live, mic.muted, mic.attempt, talkMode);
 
   useEffect(
     () => () => {
       c.voice.dispose();
+      c.hold.cancel();
+      c.recorder.close();
       c.lead.dispose();
       releaseAudioOutput();
     },
@@ -347,6 +462,16 @@ export function MaryApp() {
     if (off) c.voice.stopSpeaking();
   }, [c, store]);
 
+  const onHoldStart = useCallback(() => c.hold.press(), [c]);
+  const onHoldEnd = useCallback(() => c.hold.release(), [c]);
+  const onToggleTalkMode = useCallback(() => {
+    c.voiceWanted.current = true;
+    store.dispatch({
+      type: "SET_TALK_MODE",
+      mode: store.get().talkMode === "hold" ? "hands-free" : "hold",
+    });
+  }, [c, store]);
+
   const onPlaySound = useCallback(() => void replayLastLine({ viaSpeakers: true }), []);
   const onResume = useCallback(() => c.lead.resume(), [c]);
   const onRestart = useCallback(() => {
@@ -382,6 +507,9 @@ export function MaryApp() {
               onMicButton={onMicButton}
               onPlaySound={onPlaySound}
               onToggleVoice={onToggleVoice}
+              onHoldStart={onHoldStart}
+              onHoldEnd={onHoldEnd}
+              onToggleTalkMode={onToggleTalkMode}
             />
           )}
           {stage === "done" && (

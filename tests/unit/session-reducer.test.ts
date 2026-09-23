@@ -83,3 +83,13 @@ describe("session store and signal", () => {
     expect(seen).toEqual([0.4]);
   });
 });
+
+describe("talk mode", () => {
+  it("defaults to hold-to-talk and switches to hands-free", () => {
+    const s = initialState();
+    expect(s.talkMode).toBe("hold");
+    const hands = reduce(s, { type: "SET_TALK_MODE", mode: "hands-free" });
+    expect(hands.talkMode).toBe("hands-free");
+    expect(reduce(hands, { type: "SET_TALK_MODE", mode: "hands-free" })).toBe(hands);
+  });
+});

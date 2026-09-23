@@ -57,6 +57,24 @@ function setup(overrides: Partial<TurnRunnerDeps> = {}) {
 }
 
 describe("TurnRunner", () => {
+  it("interrupt during her first beat stops the turn before the follow-up", async () => {
+    let finishBeat: () => void = () => {};
+    const { runner, spoken, deps, store } = setup({
+      say: vi.fn((text: string) => {
+        spoken.push(text);
+        return new Promise<void>((resolve) => (finishBeat = resolve));
+      }),
+    });
+    const welcome = runner.welcome();
+    await vi.waitFor(() => expect(spoken).toHaveLength(1));
+    runner.interrupt();
+    finishBeat();
+    await welcome;
+    expect(spoken).toEqual(["Hi, I'm MARY from OmniSuite."]);
+    expect(deps.stopSpeaking).toHaveBeenCalled();
+    expect(store.get().flags.introDone).toBe(false);
+  });
+
   it("welcome speaks the first beat, then the follow-up after a breath", async () => {
     const { runner, spoken, waits, deps, store } = setup();
     await runner.welcome();

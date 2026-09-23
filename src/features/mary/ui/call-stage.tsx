@@ -1,6 +1,6 @@
 import { memo, useState, type RefObject } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { MessageSquareText, Volume2, VolumeX, X } from "lucide-react";
+import { Hand, MessageSquareText, Radio, Volume2, VolumeX, X } from "lucide-react";
 
 import type { SessionStore } from "../conversation/store";
 import { useSession } from "../conversation/store";
@@ -93,6 +93,9 @@ export function CallStage({
   onMicButton,
   onPlaySound,
   onToggleVoice,
+  onHoldStart,
+  onHoldEnd,
+  onToggleTalkMode,
 }: {
   store: SessionStore;
   orbSize: number;
@@ -103,6 +106,9 @@ export function CallStage({
   onMicButton: () => void;
   onPlaySound: () => void;
   onToggleVoice: () => void;
+  onHoldStart: () => void;
+  onHoldEnd: () => void;
+  onToggleTalkMode: () => void;
 }) {
   const reduced = useReducedMotion();
   const [panel, setPanel] = useState(false);
@@ -112,6 +118,7 @@ export function CallStage({
   const interim = useSession(store, (s) => s.interim);
   const collected = useSession(store, (s) => s.collected);
   const voiceOff = useSession(store, (s) => s.voiceOff);
+  const talkMode = useSession(store, (s) => s.talkMode);
 
   // Her lines since the person last spoke: the newest is the caption, the one before it sits above.
   const lastUserIndex = lines.map((l) => l.role).lastIndexOf("user");
@@ -137,6 +144,22 @@ export function CallStage({
             <div className="hidden min-w-0 md:block">
               <ProgressPills collected={collected} />
             </div>
+            <button
+              type="button"
+              onClick={onToggleTalkMode}
+              aria-pressed={talkMode === "hands-free"}
+              aria-label={
+                talkMode === "hold"
+                  ? "Quiet room: switch to hands-free talking"
+                  : "Loud room: switch to hold to talk"
+              }
+              className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink"
+            >
+              {talkMode === "hold" ? <Radio className="size-4" /> : <Hand className="size-4" />}
+              <span className="hidden sm:inline">
+                {talkMode === "hold" ? "Quiet room? Go hands-free" : "Hold to talk"}
+              </span>
+            </button>
             <button
               type="button"
               onClick={onToggleVoice}
@@ -251,6 +274,8 @@ export function CallStage({
           onSend={onSend}
           onMicButton={onMicButton}
           onPlaySound={onPlaySound}
+          onHoldStart={onHoldStart}
+          onHoldEnd={onHoldEnd}
         />
       </div>
 

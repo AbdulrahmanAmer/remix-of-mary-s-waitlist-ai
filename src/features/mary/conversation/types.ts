@@ -7,6 +7,12 @@ export type PresenceState = "idle" | "listening" | "hearing" | "thinking" | "spe
 
 export type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "paused";
 
+/**
+ * How the person takes the floor. "hold": they hold the mic button while talking
+ * (the room cannot trigger a turn). "hands-free": the open line decides.
+ */
+export type TalkMode = "hold" | "hands-free";
+
 export type Line = {
   id: string;
   role: "user" | "mary";
@@ -39,6 +45,10 @@ export type Notices = {
   voiceFailed: boolean;
   /** iPhone had to route her voice to the speakers: the ring switch is the usual cause. */
   silentHint: boolean;
+  /** A hold produced no words: "Didn't catch that". */
+  missedHold: boolean;
+  /** Two holds in a row produced nothing: typing is offered instead. */
+  suggestTyping: boolean;
 };
 
 export type SessionState = {
@@ -57,6 +67,7 @@ export type SessionState = {
   mic: MicState;
   /** "Voice off": she types instead of talking. */
   voiceOff: boolean;
+  talkMode: TalkMode;
   notices: Notices;
   /** Whether they spoke, typed, or both — kept for the record. */
   source: { voice: boolean; text: boolean };
@@ -74,6 +85,7 @@ export type SessionAction =
   | { type: "SET_REVEAL"; id: string; count: number }
   | { type: "SET_MIC"; mic: Partial<MicState> }
   | { type: "SET_VOICE_OFF"; off: boolean }
+  | { type: "SET_TALK_MODE"; mode: TalkMode }
   | { type: "SET_NOTICE"; key: keyof Notices; value: boolean }
   | { type: "NOTE_SOURCE"; via: "voice" | "text" }
   | { type: "FINISH"; outcome: ConversationOutcome }

@@ -1,10 +1,103 @@
-import { useState, type RefObject } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { Headphones, Mic, MicOff, Send, VolumeX } from "lucide-react";
 
 import type { SessionStore } from "../conversation/store";
 import { useSession } from "../conversation/store";
+import { voiceLevel } from "../signal/signal";
 import { QUICK } from "./motion";
+
+function holdStatusFor(presence: string, listening: string) {
+  if (listening === "hearing") return "Listening… release when done";
+  if (listening === "finishing" || presence === "thinking") return "Thinking…";
+  if (presence === "speaking") return "MARY is speaking · hold to cut in";
+  return "Hold the button while you talk, let go when you're done.";
+}
+
+/** Live input level while held, so people can see it is working at arm's length. */
+function HoldMeter() {
+  const bar = useRef<HTMLSpanElement | null>(null);
+  useEffect(
+    () =>
+      voiceLevel.subscribe((level) => {
+        if (bar.current) bar.current.style.transform = `scaleX(${Math.min(1, level * 1.4)})`;
+      }),
+    [],
+  );
+  return (
+    <span className="absolute inset-x-6 bottom-2 h-1 overflow-hidden rounded-full bg-ink/10">
+      <span
+        ref={bar}
+        className="block h-full origin-left rounded-full bg-primary transition-transform duration-75"
+        style={{ transform: "scaleX(0)" }}
+      />
+    </span>
+  );
+}
+
+function HoldButton({
+  held,
+  busy,
+  onHoldStart,
+  onHoldEnd,
+}: {
+  held: boolean;
+  busy: boolean;
+  onHoldStart: () => void;
+  onHoldEnd: () => void;
+}) {
+  const reduced = useReducedMotion();
+  return (
+    <motion.button
+      type="button"
+      aria-label="Hold to talk to MARY"
+      aria-pressed={held}
+      onPointerDown={(event) => {
+        if (event.button !== 0) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        onHoldStart();
+      }}
+      onPointerUp={onHoldEnd}
+      onPointerCancel={onHoldEnd}
+      onLostPointerCapture={onHoldEnd}
+      onContextMenu={(event) => event.preventDefault()}
+      onKeyDown={(event) => {
+        if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+          event.preventDefault();
+          onHoldStart();
+        }
+      }}
+      onKeyUp={(event) => {
+        if (event.key === " " || event.key === "Enter") {
+          event.preventDefault();
+          onHoldEnd();
+        }
+      }}
+      animate={reduced ? {} : { scale: held ? 1.03 : 1 }}
+      transition={QUICK}
+      style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
+      className={`relative flex h-16 w-full select-none items-center justify-center gap-3 overflow-hidden rounded-full font-display text-base font-medium transition-[background-color,box-shadow] duration-200 sm:h-14 ${
+        held
+          ? "bg-ink text-background shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.45),0_18px_40px_-18px_oklch(0.55_0.15_118/0.7)]"
+          : "bg-primary text-ink shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
+      }`}
+    >
+      {held && !reduced && (
+        <span className="absolute inset-0 animate-ping rounded-full bg-primary/25" />
+      )}
+      <Mic className="relative size-5" />
+      <span className="relative">
+        {held
+          ? "Listening… release when done"
+          : busy
+            ? "Thinking… hold to talk"
+            : "Hold to talk to MARY"}
+      </span>
+      {held && <HoldMeter />}
+    </motion.button>
+  );
+}
 
 function statusFor(state: {
   presence: string;
@@ -59,12 +152,16 @@ export function Composer({
   onSend,
   onMicButton,
   onPlaySound,
+  onHoldStart,
+  onHoldEnd,
 }: {
   store: SessionStore;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onSend: (text: string) => void;
   onMicButton: () => void;
   onPlaySound: () => void;
+  onHoldStart: () => void;
+  onHoldEnd: () => void;
 }) {
   const reduced = useReducedMotion();
   const [draft, setDraft] = useState("");
@@ -72,14 +169,18 @@ export function Composer({
   const presence = useSession(store, (s) => s.presence);
   const listening = useSession(store, (s) => s.listening);
   const notices = useSession(store, (s) => s.notices);
+  const talkMode = useSession(store, (s) => s.talkMode);
+  const holdMode = talkMode === "hold";
   const typingOnly = !mic.live;
-  const status = statusFor({
-    presence,
-    listening,
-    micLive: mic.live,
-    micMuted: mic.muted,
-    typingOnly,
-  });
+  const status = holdMode
+    ? holdStatusFor(presence, listening)
+    : statusFor({
+        presence,
+        listening,
+        micLive: mic.live,
+        micMuted: mic.muted,
+        typingOnly,
+      });
   const listeningLive = mic.live && !mic.muted;
 
   const submit = () => {
@@ -94,6 +195,26 @@ export function Composer({
       <Notice show={!!mic.error}>
         <span className="text-muted-foreground">{mic.error}</span>
       </Notice>
+      {holdMode && (
+        <div className="mt-2">
+          {/* Notices sit above the button: the composer grows upward, so the button
+              never moves under a thumb that is about to press it again. */}
+          <Notice show={notices.missedHold}>
+            Didn't catch that. Hold, speak close to the phone, and try again.
+          </Notice>
+          <Notice show={notices.suggestTyping}>
+            Loud in here? Type your answer below instead.
+          </Notice>
+          <div className="mt-2">
+            <HoldButton
+              held={listening === "hearing"}
+              busy={listening === "finishing" || presence === "thinking"}
+              onHoldStart={onHoldStart}
+              onHoldEnd={onHoldEnd}
+            />
+          </div>
+        </div>
+      )}
       <div
         className={`mt-2 flex w-full items-end gap-1 rounded-[1.75rem] bg-card/90 px-2 py-1.5 shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)] backdrop-blur-sm transition-shadow duration-300 ${
           listening === "hearing"
@@ -101,30 +222,34 @@ export function Composer({
             : ""
         }`}
       >
-        <motion.button
-          type="button"
-          onClick={onMicButton}
-          whileTap={reduced ? {} : { scale: 0.94 }}
-          aria-label={
-            !mic.live
-              ? "Turn the microphone on"
-              : mic.muted
-                ? "Unmute your microphone"
-                : "Mute your microphone"
-          }
-          className={`relative grid size-11 shrink-0 place-items-center rounded-full transition-colors ${
-            listeningLive ? "bg-primary text-ink" : "bg-muted text-muted-foreground hover:text-ink"
-          }`}
-        >
-          {listeningLive && listening === "hearing" && !reduced && (
-            <span className="absolute inset-0 animate-ping rounded-full bg-primary/40" />
-          )}
-          {listeningLive ? (
-            <Mic className="relative size-5" />
-          ) : (
-            <MicOff className="relative size-5" />
-          )}
-        </motion.button>
+        {!holdMode && (
+          <motion.button
+            type="button"
+            onClick={onMicButton}
+            whileTap={reduced ? {} : { scale: 0.94 }}
+            aria-label={
+              !mic.live
+                ? "Turn the microphone on"
+                : mic.muted
+                  ? "Unmute your microphone"
+                  : "Mute your microphone"
+            }
+            className={`relative grid size-11 shrink-0 place-items-center rounded-full transition-colors ${
+              listeningLive
+                ? "bg-primary text-ink"
+                : "bg-muted text-muted-foreground hover:text-ink"
+            }`}
+          >
+            {listeningLive && listening === "hearing" && !reduced && (
+              <span className="absolute inset-0 animate-ping rounded-full bg-primary/40" />
+            )}
+            {listeningLive ? (
+              <Mic className="relative size-5" />
+            ) : (
+              <MicOff className="relative size-5" />
+            )}
+          </motion.button>
+        )}
         <textarea
           ref={inputRef}
           value={draft}
@@ -139,15 +264,17 @@ export function Composer({
           enterKeyHint="send"
           aria-label="Your answer"
           placeholder={
-            !mic.live
-              ? "Type your answer"
-              : listening === "hearing"
-                ? "I can hear you…"
-                : listening === "finishing"
-                  ? "Finishing your answer…"
-                  : mic.muted
-                    ? "Muted, type your answer"
-                    : "Speak or type your answer"
+            holdMode
+              ? "Or type your answer"
+              : !mic.live
+                ? "Type your answer"
+                : listening === "hearing"
+                  ? "I can hear you…"
+                  : listening === "finishing"
+                    ? "Finishing your answer…"
+                    : mic.muted
+                      ? "Muted, type your answer"
+                      : "Speak or type your answer"
           }
           className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground sm:text-sm"
         />
@@ -179,7 +306,7 @@ export function Composer({
             className="flex items-center justify-center gap-2"
             aria-live="off"
           >
-            {listeningLive && (
+            {listeningLive && !holdMode && (
               <span className="size-1.5 rounded-full bg-primary shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.2)]" />
             )}
             {status}

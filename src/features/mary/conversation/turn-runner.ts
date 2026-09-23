@@ -71,6 +71,15 @@ export class TurnRunner {
     });
   }
 
+  /**
+   * The person took the floor (pressed hold to talk): her current line stops and
+   * the rest of this turn, including the follow-up, is never spoken.
+   */
+  interrupt(): void {
+    this.interrupted = true;
+    this.deps.stopSpeaking();
+  }
+
   private enqueue(task: () => Promise<void>): Promise<void> {
     // A turn's own failures are handled inside it; anything reaching here is a bug,
     // so it is logged rather than swallowed, and the queue keeps going.

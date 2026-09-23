@@ -14,7 +14,14 @@ export function initialState(): SessionState {
     reveal: { id: "", count: 0 },
     mic: { live: false, muted: false, error: null, attempt: 0 },
     voiceOff: false,
-    notices: { echoHint: false, voiceFailed: false, silentHint: false },
+    talkMode: "hold",
+    notices: {
+      echoHint: false,
+      voiceFailed: false,
+      silentHint: false,
+      missedHold: false,
+      suggestTyping: false,
+    },
     source: { voice: false, text: false },
   };
 }
@@ -60,6 +67,8 @@ export function reduce(state: SessionState, action: SessionAction): SessionState
       const same = (Object.keys(mic) as (keyof typeof mic)[]).every((k) => mic[k] === state.mic[k]);
       return same ? state : { ...state, mic };
     }
+    case "SET_TALK_MODE":
+      return state.talkMode === action.mode ? state : { ...state, talkMode: action.mode };
     case "SET_VOICE_OFF":
       return state.voiceOff === action.off ? state : { ...state, voiceOff: action.off };
     case "SET_NOTICE":

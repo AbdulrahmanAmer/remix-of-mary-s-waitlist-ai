@@ -148,13 +148,16 @@ export class VoiceLine {
   stopSpeaking(): void {
     const current = this.current;
     const handle = this.speakHandle;
-    if (current && handle) {
-      const { spoken, cut } = spokenPortion(current.text, handle.spokenFraction());
-      if (cut) this.store.dispatch({ type: "CUT_LINE", id: current.id, spoken });
-    }
+    // Silence first: the store update below re-renders the screen, and her voice
+    // must not keep playing through that render.
+    const fraction = handle?.spokenFraction() ?? 0;
     handle?.stop();
     this.speakHandle = null;
     this.current = null;
+    if (current && handle) {
+      const { spoken, cut } = spokenPortion(current.text, fraction);
+      if (cut) this.store.dispatch({ type: "CUT_LINE", id: current.id, spoken });
+    }
   }
 
   /** She was held for a sound that turned out to be nothing: she carries on. */
