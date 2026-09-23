@@ -114,6 +114,17 @@ describe("HoldTalk", () => {
     expect(log.filter((l) => l.startsWith("missed")).at(-1)).toBe("missed:1");
   });
 
+  it("a silent clip is a miss and never reaches transcription", async () => {
+    const { talk, log, recorder, transcribeHeld, advance } = setup();
+    recorder.stop.mockReturnValueOnce({ blob: new Blob(["x"]), durationMs: 900, peak: 0.001 });
+    talk.press();
+    await advance(900);
+    talk.release();
+    await advance(REPRESS_GRACE_MS);
+    expect(transcribeHeld).not.toHaveBeenCalled();
+    expect(log.at(-1)).toBe("missed:1");
+  });
+
   it("opens the microphone on the first press and records only if still held", async () => {
     const { talk, recorder, advance } = setup();
     recorder.isOpen = false;

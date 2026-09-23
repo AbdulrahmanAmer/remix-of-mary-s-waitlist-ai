@@ -79,12 +79,14 @@ export class HoldRecorder {
   private skipUntil = 0;
   private peak = 0;
 
+  /** Open and still live: a backgrounded tab or a phone call can end the track. */
   get isOpen(): boolean {
-    return this.stream !== null;
+    return this.stream?.getAudioTracks()[0]?.readyState === "live";
   }
 
   async open(): Promise<void> {
-    if (this.stream) return;
+    if (this.isOpen) return;
+    if (this.stream) this.close();
     const stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,

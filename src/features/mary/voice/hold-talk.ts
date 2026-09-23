@@ -6,6 +6,8 @@ export const MIN_HOLD_MS = 300;
 export const REPRESS_GRACE_MS = 250;
 /** A button held forever (a pocket, a stuck key) lets go by itself. */
 export const MAX_HOLD_MS = 30000;
+/** −50 dBFS: a clip whose loudest moment is below this holds no speech; it never leaves the device. */
+export const SILENT_PEAK = 0.00316;
 
 export type HoldTalkDeps = {
   recorder: {
@@ -117,6 +119,11 @@ export class HoldTalk {
     const clip = deps.recorder.isOpen ? deps.recorder.stop() : null;
     if (!clip?.blob || this.heldMs < MIN_HOLD_MS) {
       deps.onCancel();
+      return;
+    }
+    if (clip.peak < SILENT_PEAK) {
+      this.misses += 1;
+      deps.onMissed(this.misses);
       return;
     }
     deps.onRelease();
