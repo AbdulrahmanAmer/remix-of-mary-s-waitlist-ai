@@ -288,6 +288,13 @@ const BACKCHANNELS = new Set([
   "wow",
 ]);
 
+/** The person's words with MARY's echo removed; empty when all of it was her. */
+export function withoutEcho(transcript: string, assistantLines: string[]): string {
+  const cleaned = stripAssistantEcho(transcript, assistantLines);
+  if (!cleaned || isEchoOfAssistant(cleaned, assistantLines)) return "";
+  return cleaned;
+}
+
 /** Short acknowledgements that should never cut MARY off. */
 export function isBackchannel(text: string): boolean {
   const list = tokens(text);

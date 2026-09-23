@@ -40,9 +40,8 @@ export const Route = createFileRoute("/api/transcribe")({
         if (!response.ok) {
           const detail = await response.text().catch(() => "");
           console.error(`Transcription failed [${response.status}]: ${detail}`);
-          return new Response(detail || "Transcription failed", {
-            status: response.status,
-          });
+          // The upstream body stays in the log; the browser only needs to know it failed.
+          return new Response("Transcription failed", { status: 502 });
         }
 
         const result = (await response.json()) as { text?: string };

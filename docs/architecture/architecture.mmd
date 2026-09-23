@@ -1,0 +1,96 @@
+flowchart TD
+
+subgraph group_experience["Waitlist experience"]
+  node_landing["Landing route<br/>[index.tsx]"]
+  node_boot["Boot gate<br/>[boot-gate.tsx]"]
+  node_experience_ui["MARY experience"]
+  node_presence["MARY presence<br/>[mary-presence.tsx]"]
+  node_progress_ui["Progress display"]
+end
+
+subgraph group_conversation["Conversation AI"]
+  node_turn_api["Turn stream<br/>[turn.ts]"]
+  node_prompt_logic["Prompt and grounding"]
+  node_grounding["Field grounding<br/>[mary-grounding.ts]"]
+  node_experience_memory["Conversation memory"]
+  node_addressee_api["Addressee endpoint<br/>[addressee.ts]"]
+  node_reflect_api["Reflection endpoint<br/>[reflect.ts]"]
+end
+
+subgraph group_voice["Voice interaction"]
+  node_audio_engine["Audio engine<br/>[audio-engine.ts]"]
+  node_voice_logic["Voice logic<br/>[voice-logic.ts]"]
+  node_voice_detector["Voice detection<br/>[voice-detector.ts]"]
+  node_transcribe_api["Transcription route<br/>[transcribe.ts]"]
+  node_speech_api["Speech route<br/>[speech.ts]"]
+end
+
+subgraph group_leads["Lead handling"]
+  node_local_progress[("Local progress<br/>[waitlist-store.ts]")]
+  node_lead_sync["Lead sync<br/>[lead-sync.ts]"]
+  node_lead_api["Lead endpoint<br/>[lead.ts]"]
+  node_sheets[("Spreadsheet storage<br/>[sheets.server.ts]")]
+  node_lead_store[("Waitlist store<br/>[waitlist-store.ts]")]
+end
+
+node_visitor(("Visitor"))
+node_ai_gateway{{"AI model gateway"}}
+node_spreadsheet[("Spreadsheet service")]
+
+node_visitor -->|"opens"| node_landing
+node_landing -->|"renders"| node_boot
+node_boot -->|"starts"| node_experience_ui
+node_experience_ui -->|"updates state"| node_presence
+node_experience_ui -->|"shows progress"| node_progress_ui
+node_experience_ui -->|"saves progress"| node_local_progress
+node_experience_ui -->|"requests turns"| node_turn_api
+node_turn_api -->|"loads context"| node_experience_memory
+node_turn_api -->|"builds prompt"| node_prompt_logic
+node_prompt_logic -->|"grounds fields"| node_grounding
+node_turn_api -->|"streams generation"| node_ai_gateway
+node_experience_ui -->|"captures and plays"| node_audio_engine
+node_audio_engine -->|"filters echo"| node_voice_logic
+node_audio_engine -->|"detects speech"| node_voice_detector
+node_experience_ui -->|"submits audio"| node_transcribe_api
+node_experience_ui -->|"requests speech"| node_speech_api
+node_experience_ui -->|"submits signup"| node_lead_sync
+node_lead_sync -->|"posts lead"| node_lead_api
+node_lead_api -->|"writes lead"| node_sheets
+node_sheets -.->|"stores rows"| node_spreadsheet
+node_experience_ui -.->|"requests addressee"| node_addressee_api
+node_experience_ui -.->|"requests reflection"| node_reflect_api
+
+click node_landing "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/index.tsx"
+click node_boot "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/boot-gate.tsx"
+click node_experience_ui "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/mary-experience.tsx"
+click node_presence "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/mary-presence.tsx"
+click node_progress_ui "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/progress-constellation.tsx"
+click node_local_progress "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/waitlist-store.ts"
+click node_turn_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/turn.ts"
+click node_prompt_logic "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/mary-prompt.server.ts"
+click node_grounding "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/mary-grounding.ts"
+click node_experience_memory "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/mary-experience.server.ts"
+click node_audio_engine "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/audio-engine.ts"
+click node_voice_logic "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/voice-logic.ts"
+click node_voice_detector "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/voice-detector.ts"
+click node_transcribe_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/transcribe.ts"
+click node_speech_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/speech.ts"
+click node_lead_sync "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/lead-sync.ts"
+click node_lead_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/lead.ts"
+click node_sheets "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/sheets.server.ts"
+click node_lead_store "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/waitlist-store.ts"
+click node_addressee_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/addressee.ts"
+click node_reflect_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/reflect.ts"
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_landing,node_boot,node_experience_ui,node_presence,node_progress_ui toneBlue
+class node_turn_api,node_prompt_logic,node_grounding,node_experience_memory,node_addressee_api,node_reflect_api,node_spreadsheet toneAmber
+class node_audio_engine,node_voice_logic,node_voice_detector,node_transcribe_api,node_speech_api toneMint
+class node_local_progress,node_lead_sync,node_lead_api,node_sheets,node_lead_store toneRose
+class node_visitor,node_ai_gateway toneIndigo

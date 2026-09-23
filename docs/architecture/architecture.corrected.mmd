@@ -1,0 +1,144 @@
+flowchart TD
+
+subgraph group_ui["UI / Routes"]
+  node_root["src/routes/__root.tsx"]
+  node_router["src/router.tsx"]
+  node_landing["src/routes/index.tsx"]
+  node_boot_gate["src/components/boot-gate.tsx"]
+  node_mary_boot["src/components/mary-boot.tsx"]
+  node_experience_ui["src/components/mary-experience.tsx"]
+  node_presence["src/components/mary-presence.tsx"]
+  node_progress_ui["src/components/progress-constellation.tsx"]
+  node_aurora["src/components/aurora-background.tsx"]
+  node_brand["src/components/brand-lockup.tsx"]
+end
+
+subgraph group_owner["Diagnostics / Owner View"]
+  node_vault["src/components/waitlist-vault.tsx"]
+  node_audio_diag["src/components/audio-diagnostics.tsx"]
+end
+
+subgraph group_voice["Voice Engine"]
+  node_audio_engine["src/lib/audio-engine.ts"]
+  node_voice_logic["src/lib/voice-logic.ts"]
+  node_voice_detector["src/lib/voice-detector.ts"]
+  node_transcribe_api["src/routes/api/transcribe.ts"]
+  node_speech_api["src/routes/api/speech.ts"]
+end
+
+subgraph group_state["State / Stores"]
+  node_waitlist_store[("src/lib/waitlist-store.ts")]
+  node_experience_store[("src/lib/experience-store.ts")]
+  node_addressee_lib["src/lib/addressee.ts"]
+  node_mary_stream["src/lib/mary-stream.ts"]
+end
+
+subgraph group_server["Server Functions / API"]
+  node_mary_functions["src/lib/mary.functions.ts"]
+  node_turn_api["src/routes/api/turn.ts"]
+  node_prompt_server["src/lib/mary-prompt.server.ts"]
+  node_grounding["src/lib/mary-grounding.ts"]
+  node_experience_server["src/lib/mary-experience.server.ts"]
+  node_addressee_api["src/routes/api/addressee.ts"]
+  node_reflect_api["src/routes/api/reflect.ts"]
+  node_lead_sync["src/lib/lead-sync.ts"]
+  node_lead_api["src/routes/api/lead.ts"]
+  node_server_ts["src/server.ts"]
+  node_start_ts["src/start.ts"]
+  node_error_capture["src/lib/error-capture.ts"]
+  node_error_page["src/lib/error-page.ts"]
+  node_lovable_error["src/lib/lovable-error-reporting.ts"]
+end
+
+subgraph group_external["External Services (Sheets, AI Gateway)"]
+  node_sheets_server[("src/lib/sheets.server.ts")]
+  node_sheets_gs[("docs/google-sheets/Code.gs")]
+  node_ai_gateway{{"AI gateway (ai.gateway.lovable.dev, openai-compatible)"}}
+end
+
+node_visitor(("Visitor"))
+
+node_visitor -->|"opens"| node_landing
+node_landing -->|"renders"| node_boot_gate
+node_landing -->|"renders"| node_mary_boot
+node_boot_gate -->|"shows"| node_mary_boot
+node_boot_gate -->|"mounts"| node_experience_ui
+node_router -->|"builds route tree"| node_landing
+node_root -->|"reports SSR errors"| node_lovable_error
+
+node_experience_ui -->|"renders"| node_presence
+node_experience_ui -->|"renders"| node_progress_ui
+node_experience_ui -->|"renders"| node_aurora
+node_experience_ui -->|"renders"| node_brand
+node_experience_ui -->|"renders / dispatches owner-view event"| node_vault
+
+node_progress_ui -->|"reads field list"| node_mary_functions
+
+node_experience_ui -->|"saves/loads progress"| node_waitlist_store
+node_experience_ui -->|"saves/loads lessons"| node_experience_store
+node_experience_ui -->|"judges addressee"| node_addressee_lib
+node_experience_ui -->|"streams a turn"| node_mary_stream
+node_experience_ui -->|"captures/plays audio"| node_audio_engine
+node_experience_ui -->|"submits signup"| node_lead_sync
+
+node_vault -->|"reads/clears lessons"| node_experience_store
+node_vault -->|"reads/clears/exports entries"| node_waitlist_store
+node_vault -->|"renders"| node_audio_diag
+node_vault -.->|"fetches recent leads (GET)"| node_lead_api
+node_audio_diag -->|"reads diagnostics/permission state"| node_audio_engine
+
+node_audio_engine -->|"filters echo"| node_voice_logic
+node_audio_engine -->|"detects speech"| node_voice_detector
+node_audio_engine -->|"submits audio"| node_transcribe_api
+node_audio_engine -->|"requests speech"| node_speech_api
+
+node_mary_stream -->|"fetches streaming turn"| node_turn_api
+node_mary_stream -.->|"falls back to direct call on fetch failure"| node_mary_functions
+
+node_addressee_lib -.->|"escalates ambiguous cases"| node_addressee_api
+
+node_turn_api -->|"builds turn context"| node_prompt_server
+node_turn_api -->|"loads recent experience"| node_experience_server
+node_turn_api -->|"validates input via"| node_mary_functions
+node_turn_api -->|"streams generation"| node_ai_gateway
+
+node_prompt_server -->|"grounds collected fields"| node_grounding
+node_prompt_server -->|"strips voice echo / cut-off marks"| node_voice_logic
+
+node_experience_server -->|"normalizes lessons"| node_experience_store
+node_experience_server -->|"reads gateway config"| node_prompt_server
+node_experience_server -->|"reads/writes sheet"| node_sheets_server
+node_experience_server -->|"generates reflection"| node_ai_gateway
+
+node_addressee_api -->|"reads gateway config"| node_prompt_server
+node_addressee_api -->|"streams generation"| node_ai_gateway
+
+node_lead_sync -->|"posts lead (POST)"| node_lead_api
+node_lead_api -->|"validates against schema in"| node_lead_sync
+node_lead_api -->|"runs server-side reflection"| node_experience_server
+node_lead_api -->|"reads/writes sheet"| node_sheets_server
+
+node_reflect_api -->|"reads outcome enum"| node_lead_sync
+node_reflect_api -->|"runs reflection"| node_experience_server
+
+node_sheets_server -.->|"POST/GET webhook"| node_sheets_gs
+
+node_server_ts -->|"installs capture"| node_error_capture
+node_server_ts -->|"renders fallback page"| node_error_page
+node_start_ts -->|"renders fallback page"| node_error_page
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#134e4a
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef tonePlum fill:#f3e8ff,stroke:#9333ea,stroke-width:1.5px,color:#3b0764
+
+class node_root,node_router,node_landing,node_boot_gate,node_mary_boot,node_experience_ui,node_presence,node_progress_ui,node_aurora,node_brand toneBlue
+class node_vault,node_audio_diag tonePlum
+class node_audio_engine,node_voice_logic,node_voice_detector,node_transcribe_api,node_speech_api toneMint
+class node_waitlist_store,node_experience_store,node_addressee_lib,node_mary_stream toneRose
+class node_mary_functions,node_turn_api,node_prompt_server,node_grounding,node_experience_server,node_addressee_api,node_reflect_api,node_lead_sync,node_lead_api,node_server_ts,node_start_ts,node_error_capture,node_error_page,node_lovable_error toneAmber
+class node_sheets_server,node_sheets_gs,node_ai_gateway toneIndigo
+class node_visitor toneNeutral

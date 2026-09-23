@@ -18,9 +18,9 @@ const VerdictSchema = z.object({
 });
 
 const Body = z.object({
-  heard: z.string().min(1),
-  lastAssistant: z.string(),
-  recent: z.array(z.string()).max(6),
+  heard: z.string().min(1).max(2000),
+  lastAssistant: z.string().max(4000),
+  recent: z.array(z.string().max(4000)).max(6),
 });
 
 const SYSTEM = `You are the turn-taking judge on a live voice call between a person and MARY, an AI assistant.

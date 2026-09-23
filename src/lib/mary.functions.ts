@@ -86,9 +86,16 @@ export const ClientLessonSchema = z.object({
   at: z.string().max(40).default(""),
 });
 
+// Bounds on what a client may send: a real call stays far inside them, and
+// they cap what one request can cost.
 export const TurnInput = z.object({
-  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string() })),
-  collected: z.record(z.string(), z.string()).default({}),
+  messages: z
+    .array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().max(4000) }))
+    .max(400),
+  collected: z
+    .record(z.string().max(40), z.string().max(600))
+    .refine((value) => Object.keys(value).length <= 20, "too many fields")
+    .default({}),
   flags: z
     .object({
       revealed: z.boolean(),
@@ -97,7 +104,7 @@ export const TurnInput = z.object({
       wrapAsked: z.boolean().optional(),
       callback: z.boolean().optional(),
       mode: z.enum(["neutral", "rushed", "skeptical", "guarded", "warm"]).optional(),
-      rejected: z.array(z.string()).optional(),
+      rejected: z.array(z.string().max(40)).max(20).optional(),
     })
     .default({ revealed: false, lanesDone: false }),
   /** Lessons kept in this browser; merged on the server with the pooled ones. */
@@ -112,7 +119,7 @@ export type TurnInputData = z.infer<typeof TurnInput>;
  * environments where streaming is unavailable.
  */
 export const maryTurn = createServerFn({ method: "POST" })
-  .inputValidator((input: unknown) => TurnInput.parse(input))
+  .validator((input: unknown) => TurnInput.parse(input))
   .handler(async ({ data }): Promise<MaryTurn> => {
     const key = process.env["LOVABLE_API_KEY"];
     if (!key) throw new Error("Missing LOVABLE_API_KEY");

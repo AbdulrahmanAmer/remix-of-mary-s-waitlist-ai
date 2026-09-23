@@ -310,11 +310,17 @@ export function groundCollected(params: {
           ok = uDigits.includes(vDigits.slice(-4)) && uDigits.includes(vDigits.slice(0, 3));
           if (!ok && affirmed) ok = assistantOffered(value, lastAssistant);
         } else {
-          // "skipped" / "email only" — only when they actually waved it off.
+          // "skipped" / "email only" — only when they actually waved it off,
+          // or said yes to her own offer to leave the phone out.
+          const offeredSkip =
+            /\b(skip|without|email('s| is)? (fine|enough|okay|ok)|just email|no phone|rather not|leave (it|the phone|the number) out)\b/i.test(
+              lastAssistant ?? "",
+            );
           ok = /skip|declin|none|no phone|email only|not needed|prefer not/i.test(value)
             ? /\b(skip|no|nah|just email|email('s| is)? fine|don'?t|rather not|pass|leave it|without)\b/i.test(
                 lastUser,
-              ) || isAffirmation(lastUser)
+              ) ||
+              (offeredSkip && isAffirmation(lastUser))
             : false;
         }
         break;

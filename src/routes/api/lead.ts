@@ -32,10 +32,12 @@ export const Route = createFileRoute("/api/lead")({
             version: ping.version,
           });
         } catch (error) {
+          // This route is public: the detail (which can quote the upstream) stays in the log.
+          console.error("[mary] sheet ping failed", error);
           return Response.json({
             configured: true,
             reachable: false,
-            error: error instanceof Error ? error.message : "unreachable",
+            error: "The sheet did not answer (details in the server log).",
           });
         }
       },
@@ -65,7 +67,7 @@ export const Route = createFileRoute("/api/lead")({
           } catch (error) {
             const message = error instanceof Error ? error.message : "sheet error";
             console.error(`[mary] lead sync failed: ${message}`);
-            result.error = message;
+            result.error = "sheet unavailable";
           }
         }
 

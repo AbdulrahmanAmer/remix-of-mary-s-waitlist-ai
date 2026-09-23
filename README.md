@@ -1,26 +1,70 @@
-# Remix of Mary's Waitlist AI
+# MARY - the OmniSuite waitlist concierge
 
-@project:5200b780-9d66-4b88-abcf-848f3c8b3042:"Remix of MARY Revenue Engine" lets create a waitlist it will function with mary the ai it will do work as an interactive voice live session using ai live conversation to book the person into the waitlist it will take the person info details and it will onboard them what type of business do they do and what line of business and it gets the info from the person and finishes with thanks for sign up in the wait list we will be in touch with you as soon as we launch and Mary should start the conversation with greetings telling the user who is she and what she does (you can find all that from the codebase/project that I shared with you) she will ask them after that if they wanna sign up for the waitlist and be the first to have access to the AI Revenue Concierge Mary is this persona I want something visually stunning and here is the latest version of the website that I gave you the codebase for you can check for anything you need from it https://omnisuite-site.abdoamer683.workers.dev/ 
+MARY greets a visitor, explains OmniSuite (a product by Omnikom), and signs them onto the waitlist
+through a live voice call in the browser, with typing as a fallback. After each call she writes
+herself a few PII-free lessons that inform later calls.
 
-now lets fully write the plan that will get this done
+Built with [Lovable](https://lovable.dev/projects/73ac183b-3cba-490d-b4a7-e290763aaba5) and synced to
+this repo's `main` branch: commits pushed to `main` appear in the Lovable editor. Never force-push or
+rewrite pushed history (see `AGENTS.md`).
 
-This project was built with [Lovable](https://lovable.dev).
+## Stack
 
-## Build with Lovable
+React 19 · TanStack Start / Router (file routes and server handlers) · Vite 8 · Nitro, built as a
+Cloudflare Worker · Tailwind v4 · motion · zod · Vercel AI SDK against the Lovable AI gateway ·
+Google Apps Script sheet as the lead store (`docs/google-sheets/`).
 
-Continue developing this project in the [Lovable editor](https://lovable.dev/projects/73ac183b-3cba-490d-b4a7-e290763aaba5).
-
-- **Ship faster**: describe what you want to build and Lovable handles the code.
-- **Stay in sync**: every change made in Lovable is committed straight to this repository.
-- **Full ownership**: this code is yours. Push to `main` on GitHub and your changes sync back into Lovable, ready for your next prompt.
-
-## Development
-
-Prefer working locally? You need Node.js and npm — [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating).
+## Run it
 
 ```sh
-git clone <this-repository-url>
-cd <repository-name>
-npm i
-npm run dev
+bun install
+bun run dev:local    # dev server that also loads Lovable-hosted images (the logo)
+bun run build && bun run preview   # the production Worker, locally, via wrangler
 ```
+
+`bun run dev` is what Lovable's sandbox runs. Locally it cannot load images stored on Lovable
+(`/__l5e/assets-v1/...` returns 404); `dev:local` points those requests at the project's Lovable preview.
+
+| Script              | What it checks                                   |
+| ------------------- | ------------------------------------------------ |
+| `bun run typecheck` | `tsc --noEmit` (strict, unused code is an error) |
+| `bun run lint`      | ESLint + Prettier                                |
+| `bun run test`      | vitest unit tests in `tests/`                    |
+| `bun run build`     | production build to `.output/`                   |
+
+CI (`.github/workflows/ci.yml`) runs all four on every push and pull request.
+
+## Environment
+
+| Variable               | Needed for                                                                                                     | Without it                                                                                                                                                                                 |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `LOVABLE_API_KEY`      | conversation (`/api/turn`), voice (`/api/speech`), transcription (`/api/transcribe`), debrief (`/api/reflect`) | those routes return 500; `/api/addressee` falls back to "addressed to MARY". Set automatically in Lovable hosting only, so the AI does not run locally today (see `PROJECT-STATE.md`, D3). |
+| `SHEETS_WEBAPP_URL`    | sending leads and lessons to the Google Sheet                                                                  | leads stay in the visitor's browser only                                                                                                                                                   |
+| `SHEETS_WEBAPP_SECRET` | authenticating to the sheet                                                                                    | the sheet accepts anyone holding its URL; set it, and the matching `SHARED_SECRET` in `Code.gs`                                                                                            |
+
+## How it fits together
+
+`docs/architecture/architecture.corrected.mmd` (rendered: `diagram.corrected.png`) is the map that matches
+the code. In short:
+
+- `src/routes/index.tsx` → `components/boot-gate.tsx` → `components/mary-experience.tsx`, which runs the
+  call: phase machine, turn queue, UI.
+- `lib/audio-engine.ts` handles the microphone, her voice, echo handling and cut-ins; the pure decisions
+  live in `lib/voice-logic.ts` and `lib/voice-detector.ts`.
+- Turns stream from `/api/turn`. The prompt is in `lib/mary-prompt.server.ts`, grounding (only keep what
+  the person really said) in `lib/mary-grounding.ts`, and field notes in `lib/mary-experience.server.ts`.
+  `lib/mary.functions.ts` is the non-streaming fallback.
+- Leads: `lib/waitlist-store.ts` (browser) and `lib/lead-sync.ts` → `/api/lead` → `lib/sheets.server.ts`
+  → Apps Script.
+- `lib/api-guard.ts` protects every `/api/*` write: cross-site requests are refused, bodies are capped and
+  each IP is rate-limited per route.
+- Owner view: Ctrl/Cmd+Shift+O, or five quick taps on "omnikom" in the footer (`components/waitlist-vault.tsx`).
+
+MARY's voice and behaviour are specified in `docs/mary-voice.md`.
+
+## Working on it
+
+- Known gaps, ranked, with evidence: `docs/audit/GAP-REGISTER.md`.
+- Current stage and open decisions: `PROJECT-STATE.md` (agent-os; `python .agent-os/scripts/agent_os.py stage`).
+- Where the last session stopped: `.claude/POSITION.md`.
+- Semantic search over code and docs: `node .claude/tools/vector-index.mjs index`, then `... find "<question>"`.

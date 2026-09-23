@@ -30,3 +30,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Workspace tooling - derived, rebuild with: node .claude/tools/vector-index.mjs index
+.claude/index/
+.claude/settings.local.json

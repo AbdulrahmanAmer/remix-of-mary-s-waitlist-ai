@@ -26,9 +26,8 @@ import {
 import {
   EchoTracker,
   endpointDelayMs,
-  isEchoOfAssistant,
-  stripAssistantEcho,
   transcriptConfirmsInterrupt,
+  withoutEcho,
 } from "./voice-logic";
 
 const RATE = 24000;
@@ -343,6 +342,17 @@ export async function unlockAudio() {
   }
 }
 
+/**
+ * The call is over: stop her voice and tear down the call route (peer
+ * connections, hidden element). The audio context stays — iPhone Safari only
+ * grants a new one inside a tap — and the next line rebuilds the route.
+ */
+export function releaseAudioOutput() {
+  currentHandle?.stop();
+  currentHandle = null;
+  sink?.release();
+}
+
 /** Where a line's audio goes. The hub outlives any rebuild of the route behind it. */
 function outputNode(ctx: AudioContext): AudioNode {
   const s = ensureSink(ctx);
@@ -493,6 +503,8 @@ export function speak(
     /** Rough expected length in seconds; keeps early progress honest while the stream fills. */
     approxDurationSec?: number;
     onEnd?: () => void;
+    /** Her voice never arrived (speech service failed before any audio). Fires before onEnd. */
+    onError?: (reason: string) => void;
   } = {},
 ): SpeakHandle {
   // She has one voice. Whatever was still playing — a line the app lost track
@@ -634,6 +646,8 @@ export function speak(
     }
   };
 
+  let pendingFinish = false;
+
   // Her voice is fed out on its own clock. Nothing on screen — a heavy frame,
   // a resize, a backgrounded tab — can starve the speaker.
   pump = window.setInterval(() => {
@@ -681,8 +695,6 @@ export function speak(
     }
     resolveDone();
   };
-
-  let pendingFinish = false;
 
   const tick = () => {
     if (stopped) return;
@@ -881,9 +893,15 @@ export function speak(
       streamDone = true;
       if (total === 0) finish();
       else schedule();
-    } catch {
+    } catch (error) {
       streamDone = true;
-      if (!stopped && total === 0) finish();
+      if (!stopped && total === 0) {
+        // Nothing was heard. Say so, instead of ending as if the line had played.
+        const reason = error instanceof Error ? error.message : "speech failed";
+        trace({ type: "speak-error", reason });
+        opts.onError?.(reason);
+        finish();
+      }
     } finally {
       window.clearTimeout(firstByteGuard);
       window.clearTimeout(wholeLineGuard);
@@ -1310,8 +1328,8 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
           if (result.isFinal) {
             // Her words are stripped whatever the clock says: a late final
             // result can land long after playback, and it is still her voice.
-            const cleaned = stripAssistantEcho(raw, assistantLines());
-            if (!cleaned || isEchoOfAssistant(cleaned, assistantLines())) continue;
+            const cleaned = withoutEcho(raw, assistantLines());
+            if (!cleaned) continue;
             if (assistantActive() && !pending && !holding) {
               // Words over her speech with no matching sound: only a genuine
               // cut-in counts; "yeah" and "okay" let her carry on.
@@ -1326,10 +1344,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
           }
         }
         live = live.trim();
-        if (live) {
-          live = stripAssistantEcho(live, assistantLines());
-          if (live && isEchoOfAssistant(live, assistantLines())) live = "";
-        }
+        if (live) live = withoutEcho(live, assistantLines());
         interim = live;
         if (interim && assistantActive() && !pending && !holding && wordsSayInterrupt(interim)) {
           beginCandidate(true);
@@ -1500,10 +1515,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
     utteranceStartedAt = 0;
     let text = takeText();
     const lines = assistantLines();
-    if (text) {
-      text = stripAssistantEcho(text, lines);
-      if (text && isEchoOfAssistant(text, lines)) text = "";
-    }
+    if (text) text = withoutEcho(text, lines);
     trace({
       type: "utterance",
       text,

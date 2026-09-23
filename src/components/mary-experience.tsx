@@ -40,6 +40,7 @@ import {
   primeMicPermission,
   replayLastLine,
   MicUnavailableError,
+  releaseAudioOutput,
   speak,
   startMicSession,
   transcribe,
@@ -283,6 +284,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   const headerRef = useRef<HTMLElement | null>(null);
   const lockupRef = useRef<HTMLDivElement | null>(null);
   const introRef = useRef(false);
+  const introTimersRef = useRef<number[]>([]);
   const [flight, setFlight] = useState<Flight | null>(null);
   const [stage, setStage] = useState<"landing" | "intro" | "live" | "done">("landing");
   const [lines, setLines] = useState<Line[]>([]);
@@ -300,6 +302,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   /** Bumped to ask the browser for the microphone all over again. */
   const [micAttempt, setMicAttempt] = useState(0);
   const [echoHint, setEchoHint] = useState(false);
+  const [voiceFailed, setVoiceFailed] = useState(false);
   /** Her voice had to be pushed to the speakers — the phone may be on silent. */
   const [silentHint, setSilentHint] = useState(false);
   const [result, setResult] = useState<ConversationResult | null>(null);
@@ -520,6 +523,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
         approxDurationSec: approx,
         // Words land in step with the voice the person is actually hearing.
         onProgress: (progress) => setReveal({ id, count: Math.ceil(progress * words) }),
+        onError: () => {
+          setVoiceFailed(true);
+          window.setTimeout(() => setVoiceFailed(false), 9000);
+        },
         onEnd: () => {
           setReveal({ id, count: words });
           if (currentLineRef.current?.handle === handle) currentLineRef.current = null;
@@ -921,7 +928,7 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
 
     setStage("intro");
 
-    window.setTimeout(() => {
+    const flightTimer = window.setTimeout(() => {
       const mark = lockupRef.current?.querySelector("img");
       if (!mark) return;
       const r = mark.getBoundingClientRect();
@@ -946,9 +953,10 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
       });
     }, 520);
 
-    window.setTimeout(() => {
+    const liveTimer = window.setTimeout(() => {
       void enterLive();
     }, 2800);
+    introTimersRef.current = [flightTimer, liveTimer];
   }, [enterLive, reduced]);
 
   const maybeShowEchoHint = useCallback(() => {
@@ -1172,9 +1180,12 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
   }, [draft.length, micLive, micMuted, say, stage]);
 
   useEffect(() => {
+    const introTimers = introTimersRef;
     return () => {
+      for (const timer of introTimers.current) window.clearTimeout(timer);
       speakRef.current?.stop();
       sessionRef.current?.close();
+      releaseAudioOutput();
     };
   }, []);
 
@@ -1471,6 +1482,12 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                 <MaryPresence state={presence} level={level} height={liveOrb} />
               </div>
 
+              {/* Screen readers hear each of her lines once, whole — the visible
+                  line is revealed word by word, which would be read in fragments. */}
+              <p className="sr-only" aria-live="polite" aria-atomic="true">
+                {lastMary ? `MARY: ${lastMary.text}` : ""}
+              </p>
+
               {/* The only thing that scrolls. The inner column is pushed to the
                   bottom with min-h-full + justify-end (not on the scroller
                   itself), so the top of a long thread is always reachable. */}
@@ -1688,6 +1705,21 @@ export function MaryExperience({ introDelay = 0 }: { introDelay?: number }) {
                       </button>
                     </p>
                   )}
+                  <AnimatePresence>
+                    {voiceFailed && (
+                      <motion.p
+                        role="status"
+                        initial={reduced ? false : { opacity: 0, y: 4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -4 }}
+                        transition={SOFT}
+                        className="mt-1.5 inline-flex items-center gap-1.5 text-accent-text"
+                      >
+                        <VolumeX className="size-3" aria-hidden="true" />
+                        My voice didn&apos;t come through just now. The words are on screen.
+                      </motion.p>
+                    )}
+                  </AnimatePresence>
                   <AnimatePresence>
                     {echoHint && micLive && (
                       <motion.p

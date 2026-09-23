@@ -192,7 +192,12 @@ export class NearFieldModel {
     this.confirmations += 1;
     // Rises quickly (a new, louder speaker is believed at once) and falls
     // slowly, so one quiet sentence cannot drag the bar down into the room.
-    this.own = this.own === 0 ? peak : peak > this.own ? this.own * 0.6 + peak * 0.4 : this.own * 0.93 + peak * 0.07;
+    this.own =
+      this.own === 0
+        ? peak
+        : peak > this.own
+          ? this.own * 0.6 + peak * 0.4
+          : this.own * 0.93 + peak * 0.07;
   }
 
   /** Voice-shaped sound that turned out not to be them. */

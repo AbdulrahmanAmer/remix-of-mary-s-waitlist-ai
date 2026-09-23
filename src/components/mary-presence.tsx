@@ -163,8 +163,9 @@ export const MaryPresence = memo(function MaryPresence({
     };
 
     resize();
-    const observer = new ResizeObserver(resize);
-    observer.observe(canvas);
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(resize);
+    observer?.observe(canvas);
+    if (!observer) window.addEventListener("resize", resize);
     window.visualViewport?.addEventListener("resize", resize);
 
     let raf = 0;
@@ -412,7 +413,8 @@ export const MaryPresence = memo(function MaryPresence({
 
     return () => {
       cancelAnimationFrame(raf);
-      observer.disconnect();
+      observer?.disconnect();
+      window.removeEventListener("resize", resize);
       window.visualViewport?.removeEventListener("resize", resize);
     };
   }, [reduced]);

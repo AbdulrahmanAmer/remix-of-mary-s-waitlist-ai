@@ -1,0 +1,13 @@
+THIRD-PARTY CONTENT - read before redistributing this bundle.
+
+The `skills/` directory carries work that is NOT ours. Most of it came from third-party skill
+packs and plugins, and 14 of the 15 skills declare no licence of their own.
+
+That is fine for your own machines. It is NOT automatically fine for shipping to other people.
+Before distributing a bundle that includes skills/, either:
+
+  - confirm each skill's upstream licence permits redistribution and record it here, or
+  - build the core-only bundle instead:  python build-bundle.py --core
+
+The core bundle contains only agent-os itself, which is MIT and yours to ship. Its installer works
+identically; it simply reports "skills: none in this bundle" and installs the adapters.

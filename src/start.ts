@@ -1,5 +1,6 @@
 import { createStart, createCsrfMiddleware, createMiddleware } from "@tanstack/react-start";
 
+import { checkApiRequest } from "./lib/api-guard";
 import { renderErrorPage } from "./lib/error-page";
 
 const errorMiddleware = createMiddleware().server(async ({ next }) => {
@@ -17,6 +18,14 @@ const errorMiddleware = createMiddleware().server(async ({ next }) => {
   }
 });
 
+// The /api routes are file-route handlers, which the CSRF middleware below does
+// not cover (its filter only matches server functions).
+const apiGuardMiddleware = createMiddleware().server(async ({ next, request }) => {
+  const verdict = checkApiRequest(request);
+  if (!verdict.ok) return new Response(verdict.reason, { status: verdict.status });
+  return next();
+});
+
 // Start installs this automatically when src/start.ts is absent; defining the
 // file opts out, so re-add it explicitly to keep server functions protected
 // from cross-site requests.
@@ -25,5 +34,5 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 export const startInstance = createStart(() => ({
-  requestMiddleware: [errorMiddleware, csrfMiddleware],
+  requestMiddleware: [errorMiddleware, apiGuardMiddleware, csrfMiddleware],
 }));

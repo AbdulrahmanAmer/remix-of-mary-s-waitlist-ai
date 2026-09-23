@@ -58,9 +58,8 @@ export const Route = createFileRoute("/api/speech")({
         if (!upstream.ok || !upstream.body) {
           const detail = await upstream.text().catch(() => "");
           console.error(`TTS failed [${upstream.status}]: ${detail}`);
-          return new Response(detail || "Speech unavailable", {
-            status: upstream.status,
-          });
+          // The upstream body stays in the log; the browser only needs to know it failed.
+          return new Response("Speech unavailable", { status: 502 });
         }
 
         return new Response(upstream.body, {
