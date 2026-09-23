@@ -15,6 +15,8 @@ export type HoldTalkDeps = {
     open: () => Promise<void>;
     start: () => void;
     stop: () => HoldClip;
+    /** Nothing to record after all (the hold ended while the mic was opening). */
+    release: () => void;
   };
   /** Held audio goes straight to transcription: it is the person by definition, so no judge. */
   transcribeHeld: (blob: Blob) => Promise<string>;
@@ -78,6 +80,7 @@ export class HoldTalk {
     deps.recorder.open().then(
       () => {
         if (this.phase !== "idle") deps.recorder.start();
+        else deps.recorder.release();
       },
       (error: unknown) => {
         this.reset();

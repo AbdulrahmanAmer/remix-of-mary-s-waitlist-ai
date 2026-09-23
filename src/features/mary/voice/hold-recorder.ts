@@ -4,10 +4,13 @@
  * explicit. Only audio captured while the button is held is ever sent, so nothing
  * the room says can start a turn.
  *
- * The microphone opens once (with the browser's echo cancellation, noise
- * suppression and auto gain) and its track is disabled between holds, so there is
- * no permission prompt or start-up delay on each press.
+ * Elsewhere the microphone opens once (with the browser's echo cancellation,
+ * noise suppression and auto gain) and its track is disabled between holds, so a
+ * press starts instantly. On iPhone and iPad it is released after every hold:
+ * while any microphone is open iOS treats the page as a phone call and her voice
+ * goes to the earpiece, or nowhere. The capture graph stays warm either way.
  */
+import { setAudioSessionType } from "@/lib/audio-engine";
 
 const TARGET_RATE = 16000;
 /** The press itself (a thumb on glass, a click) lands in the first ~100 ms. */
@@ -71,13 +74,18 @@ export class HoldRecorder {
   onLevel: (level: number) => void = () => {};
 
   private stream: MediaStream | null = null;
+  private source: MediaStreamAudioSourceNode | null = null;
   private ctx: AudioContext | null = null;
+  private input: AudioNode | null = null;
   private teardown: (() => void) | null = null;
   private chunks: Float32Array[] = [];
   private recording = false;
   private startedAt = 0;
   private skipUntil = 0;
   private peak = 0;
+
+  /** `releaseBetweenHolds`: let the microphone go after every hold (iPhone, iPad). */
+  constructor(private readonly releaseBetweenHolds = false) {}
 
   /** Open and still live: a backgrounded tab or a phone call can end the track. */
   get isOpen(): boolean {
@@ -86,25 +94,106 @@ export class HoldRecorder {
 
   async open(): Promise<void> {
     if (this.isOpen) return;
-    if (this.stream) this.close();
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-        channelCount: 1,
-      },
-    });
+    this.releaseMic();
+    if (this.releaseBetweenHolds) setAudioSessionType("play-and-record");
+    let stream: MediaStream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+          channelCount: 1,
+        },
+      });
+    } catch (error) {
+      if (this.releaseBetweenHolds) setAudioSessionType("playback");
+      throw error;
+    }
     for (const track of stream.getAudioTracks()) track.enabled = false;
+    let graph: { ctx: AudioContext; input: AudioNode };
+    try {
+      graph = await this.ensureGraph();
+    } catch (error) {
+      for (const track of stream.getTracks()) track.stop();
+      if (this.releaseBetweenHolds) setAudioSessionType("playback");
+      throw error;
+    }
+    this.stream = stream;
+    this.source = graph.ctx.createMediaStreamSource(stream);
+    this.source.connect(graph.input);
+  }
+
+  /** The button went down: start keeping audio. */
+  start(): void {
+    if (!this.stream) return;
+    for (const track of this.stream.getAudioTracks()) track.enabled = true;
+    if (this.ctx && this.ctx.state !== "running") void this.ctx.resume().catch(() => {});
+    this.chunks = [];
+    this.peak = 0;
+    this.startedAt = performance.now();
+    this.skipUntil = this.startedAt + PRESS_THUMP_MS;
+    this.recording = true;
+  }
+
+  /** The button came up: return what was said while it was held. */
+  stop(): HoldClip {
+    const durationMs = this.recording ? performance.now() - this.startedAt : 0;
+    this.recording = false;
+    if (this.stream) for (const track of this.stream.getAudioTracks()) track.enabled = false;
+    this.onLevel(0);
+    const rate = this.ctx?.sampleRate ?? 0;
+    const total = this.chunks.reduce((n, c) => n + c.length, 0);
+    const joined = new Float32Array(total);
+    let offset = 0;
+    for (const chunk of this.chunks) {
+      joined.set(chunk, offset);
+      offset += chunk.length;
+    }
+    this.chunks = [];
+    this.release();
+    if (!total || !rate) return { blob: null, durationMs, peak: this.peak };
+    const samples = downsample(joined, rate, TARGET_RATE);
+    return { blob: wav(samples, TARGET_RATE), durationMs, peak: this.peak };
+  }
+
+  /** Between holds: on iPhone the microphone is let go so her voice gets the speaker. */
+  release(): void {
+    if (this.releaseBetweenHolds && !this.recording) this.releaseMic();
+  }
+
+  close(): void {
+    this.recording = false;
+    this.releaseMic();
+    this.teardown?.();
+    this.teardown = null;
+    this.input = null;
+    void this.ctx?.close().catch(() => {});
+    this.ctx = null;
+    this.chunks = [];
+  }
+
+  private releaseMic(): void {
+    const had = this.stream !== null;
+    this.source?.disconnect();
+    this.source = null;
+    for (const track of this.stream?.getTracks() ?? []) track.stop();
+    this.stream = null;
+    if (had && this.releaseBetweenHolds) setAudioSessionType("playback");
+  }
+
+  /** The capture graph, built once and kept across holds. */
+  private async ensureGraph(): Promise<{ ctx: AudioContext; input: AudioNode }> {
+    if (this.ctx && this.input) {
+      if (this.ctx.state !== "running") void this.ctx.resume().catch(() => {});
+      return { ctx: this.ctx, input: this.input };
+    }
     const Ctor =
       window.AudioContext ??
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
-    if (!Ctor) {
-      for (const track of stream.getTracks()) track.stop();
-      throw new Error("Web Audio unavailable");
-    }
+    if (!Ctor) throw new Error("Web Audio unavailable");
     const ctx = new Ctor();
-    const source = ctx.createMediaStreamSource(stream);
+    if (ctx.state !== "running") void ctx.resume().catch(() => {});
     const silent = ctx.createGain();
     silent.gain.value = 0;
     silent.connect(ctx.destination);
@@ -123,6 +212,7 @@ export class HoldRecorder {
       this.onLevel(Math.min(1, Math.sqrt(sum / chunk.length) * 7));
     };
 
+    let input: AudioNode;
     if (ctx.audioWorklet) {
       const url = URL.createObjectURL(new Blob([WORKLET], { type: "application/javascript" }));
       try {
@@ -132,8 +222,8 @@ export class HoldRecorder {
       }
       const node = new AudioWorkletNode(ctx, "hold-capture");
       node.port.onmessage = (event: MessageEvent<Float32Array>) => onChunk(event.data);
-      source.connect(node);
       node.connect(silent);
+      input = node;
       this.teardown = () => {
         node.port.onmessage = null;
         node.disconnect();
@@ -142,56 +232,15 @@ export class HoldRecorder {
       // Older browsers without AudioWorklet.
       const node = ctx.createScriptProcessor(2048, 1, 1);
       node.onaudioprocess = (event) => onChunk(event.inputBuffer.getChannelData(0).slice(0));
-      source.connect(node);
       node.connect(silent);
+      input = node;
       this.teardown = () => {
         node.onaudioprocess = null;
         node.disconnect();
       };
     }
-    this.stream = stream;
     this.ctx = ctx;
-  }
-
-  /** The button went down: start keeping audio. */
-  start(): void {
-    if (!this.stream) return;
-    for (const track of this.stream.getAudioTracks()) track.enabled = true;
-    if (this.ctx?.state === "suspended") void this.ctx.resume();
-    this.chunks = [];
-    this.peak = 0;
-    this.startedAt = performance.now();
-    this.skipUntil = this.startedAt + PRESS_THUMP_MS;
-    this.recording = true;
-  }
-
-  /** The button came up: return what was said while it was held. */
-  stop(): HoldClip {
-    const durationMs = this.recording ? performance.now() - this.startedAt : 0;
-    this.recording = false;
-    if (this.stream) for (const track of this.stream.getAudioTracks()) track.enabled = false;
-    this.onLevel(0);
-    const total = this.chunks.reduce((n, c) => n + c.length, 0);
-    if (!total || !this.ctx) return { blob: null, durationMs, peak: this.peak };
-    const joined = new Float32Array(total);
-    let offset = 0;
-    for (const chunk of this.chunks) {
-      joined.set(chunk, offset);
-      offset += chunk.length;
-    }
-    this.chunks = [];
-    const samples = downsample(joined, this.ctx.sampleRate, TARGET_RATE);
-    return { blob: wav(samples, TARGET_RATE), durationMs, peak: this.peak };
-  }
-
-  close(): void {
-    this.recording = false;
-    this.teardown?.();
-    this.teardown = null;
-    for (const track of this.stream?.getTracks() ?? []) track.stop();
-    this.stream = null;
-    void this.ctx?.close().catch(() => {});
-    this.ctx = null;
-    this.chunks = [];
+    this.input = input;
+    return { ctx, input };
   }
 }

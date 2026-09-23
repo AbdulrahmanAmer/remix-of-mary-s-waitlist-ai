@@ -124,9 +124,11 @@ export function getAudioContext(): AudioContext {
       (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Ctor) throw new AudioUnsupportedError("no web audio");
     try {
-      // Matching her stream rate avoids a resample; older Safari rejects the
-      // option, in which case the default rate is used and buffers resample.
-      sharedContext = new Ctor({ sampleRate: RATE });
+      // Matching her stream rate avoids a resample. iPhone and iPad get the
+      // hardware rate instead: iOS changes the session rate when the microphone
+      // opens, and a context at a forced rate can go silent when it does.
+      // Buffers carry their own rate, so playback is the same either way.
+      sharedContext = isAppleMobile() ? new Ctor() : new Ctor({ sampleRate: RATE });
     } catch {
       sharedContext = new Ctor();
     }
@@ -213,6 +215,45 @@ function enableDirectOutput() {
   if (directOn) return;
   setRoute(true);
   trace({ type: "directOutput" });
+}
+
+/**
+ * iPhone and iPad (every browser there runs WebKit). iOS decides where sound
+ * goes from what the page is doing: an open microphone or a call-style stream
+ * puts the whole page in "phone call" mode, and her voice then goes to the
+ * earpiece at a whisper or nowhere at all.
+ */
+export function isAppleMobile(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return (
+    /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+  );
+}
+
+/** Her voice goes straight to the speakers: no call route, no hidden element. */
+let directOnly = false;
+
+export function setDirectOutput(on: boolean) {
+  directOnly = on;
+  if (on) sink?.release();
+  if (sharedContext && hub) setRoute(on);
+}
+
+/**
+ * iOS 17+ lets the page say what it is doing instead of iOS guessing:
+ * "playback" (speaker, ignores the silent switch) while she talks,
+ * "play-and-record" only while the person holds to talk.
+ */
+export function setAudioSessionType(type: "playback" | "play-and-record" | "auto") {
+  const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
+  if (!session) return;
+  try {
+    if (session.type !== type) session.type = type;
+    trace({ type: "audioSession", value: type });
+  } catch {
+    /* older WebKit: iOS keeps guessing */
+  }
 }
 
 /** Sends a stream out and back through the browser's call engine. */
@@ -330,7 +371,26 @@ function ensureSink(ctx: AudioContext): Sink {
 /** Must finish before her first line, or that line escapes the canceller. */
 export async function unlockAudio() {
   const ctx = getAudioContext();
-  if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+  if (directOnly) {
+    ensureBus(ctx);
+    setRoute(true);
+    // One silent sample, started inside the tap: iOS then treats this
+    // context as allowed to make sound for the rest of the page's life.
+    try {
+      const blank = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const source = ctx.createBufferSource();
+      source.buffer = blank;
+      source.connect(ctx.destination);
+      source.start(0);
+    } catch {
+      /* nothing to unlock */
+    }
+    // iOS also reports "interrupted", not only "suspended".
+    if (ctx.state !== "running") await ctx.resume().catch(() => {});
+    trace({ type: "unlock", state: ctx.state, rate: ctx.sampleRate });
+    return;
+  }
+  if (ctx.state !== "running") await ctx.resume().catch(() => {});
   // A transient autoplay/WebRTC failure gets one clean rebuild.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const current = ensureSink(ctx);
@@ -355,6 +415,14 @@ export function releaseAudioOutput() {
 
 /** Where a line's audio goes. The hub outlives any rebuild of the route behind it. */
 function outputNode(ctx: AudioContext): AudioNode {
+  // A phone call, Siri or the mic opening can leave the context stopped; every
+  // line starts it again.
+  if (ctx.state !== "running") void ctx.resume().catch(() => {});
+  if (directOnly) {
+    const bus = ensureBus(ctx);
+    if (!directOn) setRoute(true);
+    return bus.hub;
+  }
   const s = ensureSink(ctx);
   if (s.element.paused) s.element.play().catch(() => {});
   return ensureBus(ctx).hub;
@@ -406,6 +474,9 @@ export function audioDiagnostics() {
     elementPaused: sink ? sink.element.paused : true,
     elementTime: sink ? Math.round(sink.element.currentTime * 100) / 100 : 0,
     directOutput: directOn,
+    directOnly,
+    audioSession:
+      (navigator as unknown as { audioSession?: { type: string } }).audioSession?.type ?? "n/a",
     echoCancellationDegraded: directOn || !(sink?.ok ?? false),
     speaking: monitor.active && !monitor.paused,
     lastOutputMovedMsAgo: lastElementProgressAt
@@ -1090,6 +1161,12 @@ export async function primeMicPermission(): Promise<void> {
     primedStream = null;
     throw new MicUnavailableError(micFailureFrom(error));
   }
+}
+
+/** Hold to talk opens its own microphone per hold; the one from the tap is let go. */
+export function releasePrimedMic() {
+  primedStream?.getTracks().forEach((track) => track.stop());
+  primedStream = null;
 }
 
 export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {

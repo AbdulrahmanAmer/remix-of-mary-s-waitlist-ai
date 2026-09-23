@@ -3,8 +3,12 @@ import { AnimatePresence, LayoutGroup } from "motion/react";
 
 import { WaitlistVault } from "@/components/waitlist-vault";
 import {
+  isAppleMobile,
   primeMicPermission,
   micPermissionState,
+  releasePrimedMic,
+  setAudioSessionType,
+  setDirectOutput,
   releaseAudioOutput,
   replayLastLine,
   transcribe,
@@ -130,7 +134,10 @@ function createController(): Controller {
   voice.onSend = (text) => void runner.send(text, "voice");
   voice.isBusy = () => runner.busy;
 
-  const recorder = new HoldRecorder();
+  // iPhone and iPad: an open microphone makes iOS treat the page as a phone
+  // call and her voice goes to the earpiece or nowhere. There the mic is held
+  // only while the button is, and her voice goes straight to the speakers.
+  const recorder = new HoldRecorder(isAppleMobile());
   recorder.onLevel = (level) => voiceLevel.set(level);
   const waiting = () => {
     store.dispatch({ type: "SET_LISTENING", listening: "listening" });
@@ -202,6 +209,16 @@ function useCallEffects(
   // Hold to talk (the default): the microphone is ready, but only held audio counts.
   useEffect(() => {
     if (stage !== "call" || talkMode !== "hold" || !c.voiceWanted.current) return;
+    if (isAppleMobile()) {
+      // The mic opens on each press; permission was granted at the tap.
+      if (!c.store.get().mic.error)
+        c.store.dispatch({ type: "SET_MIC", mic: { live: true, muted: false } });
+      c.store.dispatch({ type: "SET_LISTENING", listening: "listening" });
+      return () => {
+        c.hold.cancel();
+        c.recorder.close();
+      };
+    }
     let alive = true;
     c.recorder.open().then(
       () => {
@@ -354,7 +371,8 @@ export function MaryApp() {
   // synchronously (~1-1.5 s measured). The call's echo-cancelling loopback needs
   // one, so the stack is warmed while the landing is idle instead of on the tap.
   useEffect(() => {
-    if (typeof window.RTCPeerConnection === "undefined") return;
+    // iPhone and iPad never use the call route, so there is nothing to warm.
+    if (typeof window.RTCPeerConnection === "undefined" || isAppleMobile()) return;
     const warm = () => {
       try {
         new window.RTCPeerConnection().close();
@@ -430,11 +448,24 @@ export function MaryApp() {
     async (withVoice: boolean) => {
       if (store.get().stage !== "landing") return;
       c.voiceWanted.current = withVoice;
+      const holdMode = store.get().talkMode === "hold";
+      const apple = isAppleMobile();
+      // iPhone: her voice never takes the call route (it lands in the earpiece).
+      setDirectOutput(apple);
       // iPhone Safari grants the microphone only while the tap is still being handled.
       const primed = withVoice
-        ? primeMicPermission().catch((error: unknown) => {
-            store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
-          })
+        ? primeMicPermission()
+            .then(() => {
+              // Hold to talk opens its own microphone per hold. Letting this one go
+              // takes iOS out of phone-call mode before her first word.
+              if (holdMode) {
+                releasePrimedMic();
+                if (apple) setAudioSessionType("playback");
+              }
+            })
+            .catch((error: unknown) => {
+              store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
+            })
         : Promise.resolve();
       await unlockAudio();
       await primed;

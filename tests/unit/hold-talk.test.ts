@@ -11,6 +11,7 @@ function setup(transcript = "my name is Sara") {
     isOpen: true,
     open: vi.fn(async () => {}),
     start: vi.fn(() => log.push("start")),
+    release: vi.fn(),
     stop: vi.fn(() => {
       log.push("stop");
       return { blob: new Blob(["x"]), durationMs: 0, peak: 0.5 };

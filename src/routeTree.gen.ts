@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as SoundcheckRouteImport } from './routes/soundcheck'
 import { Route as ApiAddresseeRouteImport } from './routes/api/addressee'
 import { Route as ApiLeadRouteImport } from './routes/api/lead'
 import { Route as ApiReflectRouteImport } from './routes/api/reflect'
@@ -20,6 +21,11 @@ import { Route as ApiTurnRouteImport } from './routes/api/turn'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SoundcheckRoute = SoundcheckRouteImport.update({
+  id: '/soundcheck',
+  path: '/soundcheck',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiAddresseeRoute = ApiAddresseeRouteImport.update({
@@ -55,6 +61,7 @@ const ApiTurnRoute = ApiTurnRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
   '/api/reflect': typeof ApiReflectRoute
@@ -64,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
   '/api/reflect': typeof ApiReflectRoute
@@ -74,6 +82,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
   '/api/reflect': typeof ApiReflectRoute
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
     | '/api/reflect'
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
     | '/api/reflect'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
     | '/api/reflect'
@@ -113,6 +125,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  SoundcheckRoute: typeof SoundcheckRoute
   ApiAddresseeRoute: typeof ApiAddresseeRoute
   ApiLeadRoute: typeof ApiLeadRoute
   ApiReflectRoute: typeof ApiReflectRoute
@@ -128,6 +141,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/soundcheck': {
+      id: '/soundcheck'
+      path: '/soundcheck'
+      fullPath: '/soundcheck'
+      preLoaderRoute: typeof SoundcheckRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/addressee': {
@@ -177,6 +197,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  SoundcheckRoute: SoundcheckRoute,
   ApiAddresseeRoute: ApiAddresseeRoute,
   ApiLeadRoute: ApiLeadRoute,
   ApiReflectRoute: ApiReflectRoute,
