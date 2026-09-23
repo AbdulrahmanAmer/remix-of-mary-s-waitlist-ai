@@ -6,12 +6,15 @@ import type { SessionStore } from "../conversation/store";
 import { useSession } from "../conversation/store";
 import { voiceLevel } from "../signal/signal";
 import { QUICK } from "./motion";
+import { hasFinePointer } from "./use-viewport";
 
-function holdStatusFor(presence: string, listening: string) {
+function holdStatusFor(presence: string, listening: string, keyboard: boolean) {
   if (listening === "hearing") return "Listening… release when done";
   if (listening === "finishing" || presence === "thinking") return "Thinking…";
   if (presence === "speaking") return "MARY is speaking · hold to cut in";
-  return "Hold the button while you talk, let go when you're done.";
+  return keyboard
+    ? "Hold the button or the space bar while you talk, let go when you're done."
+    : "Hold the button while you talk, let go when you're done.";
 }
 
 /** Live input level while held, so people can see it is working at arm's length. */
@@ -173,7 +176,7 @@ export function Composer({
   const holdMode = talkMode === "hold";
   const typingOnly = !mic.live;
   const status = holdMode
-    ? holdStatusFor(presence, listening)
+    ? holdStatusFor(presence, listening, hasFinePointer())
     : statusFor({
         presence,
         listening,

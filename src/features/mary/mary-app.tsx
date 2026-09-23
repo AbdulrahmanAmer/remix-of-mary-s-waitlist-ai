@@ -222,23 +222,33 @@ function useCallEffects(
     };
   }, [c, stage, micAttempt, talkMode]);
 
-  // Desktop: hold the space bar to talk (not while typing in the answer box).
+  // Desktop: hold the space bar to talk. The answer box is focused after every
+  // reply, so an empty box still means "talk"; once they start typing, space types.
   useEffect(() => {
     if (stage !== "call" || talkMode !== "hold") return;
+    let spaceHeld = false;
     const typing = (target: EventTarget | null) =>
       target instanceof HTMLElement &&
-      (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(target.tagName));
+      (target.isContentEditable ||
+        /^(INPUT|SELECT|BUTTON)$/.test(target.tagName) ||
+        (target instanceof HTMLTextAreaElement && target.value !== ""));
     const down = (event: KeyboardEvent) => {
-      if (event.code !== "Space" || typing(event.target)) return;
+      if (event.code !== "Space" || (!spaceHeld && typing(event.target))) return;
       event.preventDefault();
-      if (!event.repeat) c.hold.press();
+      if (event.repeat || spaceHeld) return;
+      spaceHeld = true;
+      c.hold.press();
     };
     const up = (event: KeyboardEvent) => {
-      if (event.code !== "Space" || typing(event.target)) return;
+      if (event.code !== "Space" || !spaceHeld) return;
       event.preventDefault();
+      spaceHeld = false;
       c.hold.release();
     };
-    const lost = () => c.hold.release();
+    const lost = () => {
+      spaceHeld = false;
+      c.hold.release();
+    };
     window.addEventListener("keydown", down);
     window.addEventListener("keyup", up);
     window.addEventListener("blur", lost);
