@@ -85,6 +85,10 @@ export class HoldRecorder {
   private startedAt = 0;
   private skipUntil = 0;
   private peak = 0;
+  /** Bumped by close(), so an open() still in flight knows it was abandoned. */
+  private generation = 0;
+  private opening: Promise<void> | null = null;
+  private openingFor = -1;
 
   /** `keepTrackLive`: never disable the track between holds (iPhone, iPad). */
   constructor(private readonly keepTrackLive = false) {}
@@ -94,9 +98,21 @@ export class HoldRecorder {
     return this.stream?.getAudioTracks()[0]?.readyState === "live";
   }
 
-  async open(): Promise<void> {
-    if (this.isOpen) return;
+  open(): Promise<void> {
+    if (this.isOpen) return Promise.resolve();
+    // Two presses racing the first open share it: a second microphone would leak.
+    if (this.opening && this.openingFor === this.generation) return this.opening;
+    this.openingFor = this.generation;
+    const opening = this.openLine().finally(() => {
+      if (this.opening === opening) this.opening = null;
+    });
+    this.opening = opening;
+    return opening;
+  }
+
+  private async openLine(): Promise<void> {
     this.releaseMic();
+    const generation = this.generation;
     let stream = takePrimedMic();
     if (!stream) {
       stream = await navigator.mediaDevices.getUserMedia({
@@ -108,17 +124,30 @@ export class HoldRecorder {
         },
       });
     }
-    if (!this.keepTrackLive) for (const track of stream.getAudioTracks()) track.enabled = false;
+    const line = stream;
+    // The call ended (or the mode changed) while the microphone was opening: let it go.
+    const abandoned = () => {
+      if (generation === this.generation) return false;
+      for (const track of line.getTracks()) track.stop();
+      return true;
+    };
+    if (abandoned()) return;
+    if (!this.keepTrackLive) for (const track of line.getAudioTracks()) track.enabled = false;
     let graph: { ctx: AudioContext; input: AudioNode };
     try {
       graph = await this.ensureGraph();
     } catch (error) {
-      for (const track of stream.getTracks()) track.stop();
+      for (const track of line.getTracks()) track.stop();
       throw error;
     }
-    this.stream = stream;
-    noteMicTrack(stream.getAudioTracks()[0] ?? null);
-    this.source = graph.ctx.createMediaStreamSource(stream);
+    if (abandoned()) {
+      // The graph finished after close() ran. Close it too, unless a newer open is using it.
+      if (this.openingFor === generation) this.close();
+      return;
+    }
+    this.stream = line;
+    noteMicTrack(line.getAudioTracks()[0] ?? null);
+    this.source = graph.ctx.createMediaStreamSource(line);
     this.source.connect(graph.input);
   }
 
@@ -159,6 +188,7 @@ export class HoldRecorder {
   release(): void {}
 
   close(): void {
+    this.generation += 1;
     this.recording = false;
     this.releaseMic();
     this.teardown?.();

@@ -147,8 +147,8 @@ export function getAudioContext(): AudioContext {
 //
 // Where the element proves inaudible, the same audio goes straight to the
 // speakers instead: being heard matters more than the canceller's help, and
-// the local echo model covers it. The element keeps playing (silence) then, so
-// iOS still treats the page as playing media.
+// the local echo model covers it. An element that is still playing (silence)
+// then keeps iOS treating the page as playing media.
 //
 // The two legs are exclusive. Everything she says enters one hub, and exactly
 // one of `callGain` (→ element) or `directGain` (→ speakers) is open at any
@@ -506,9 +506,11 @@ function outputNode(ctx: AudioContext): AudioNode {
 /**
  * Watches the element's own clock while she is audibly producing sound. If it
  * does not move for over a second in that state the element is not really
- * playing (blocked autoplay, silent switch, a routing the phone refuses), so
- * the speakers take over. Waiting on the network, a paused line, or a route
- * that was just rebuilt is never mistaken for a dead element.
+ * playing (blocked autoplay, an interruption), so the speakers take over.
+ * Waiting on the network, a paused line, or a route that was just rebuilt is
+ * never mistaken for a dead element. It cannot hear the room: WebKit runs a
+ * MediaStream element's clock on wall time, so an element that plays without
+ * being heard looks healthy. On iPhone the "Can't hear her?" tap covers that.
  */
 function watchOutput() {
   if (watching) return;
@@ -578,22 +580,39 @@ export function audioDiagnostics() {
 
 /** The last thing she said out loud, so it can be played again on demand. */
 let lastSpokenText = "";
+
+/** Back from the speakers to the element (rebuilt, and started, inside the calling tap). */
+function leaveDirectOutput() {
+  if (!directOn || !sharedContext || outputRoute === "direct") return;
+  ensureSink(sharedContext);
+  startInGesture(sharedContext);
+  setRoute(false);
+  trace({ type: "elementOutput" });
+}
+
 /**
  * Plays her last line again — only when she is not already in the middle of
  * one. A line in flight is left alone: restarting it would start a second
  * copy and the conversation's next beat would then cut that copy off.
- * `viaSpeakers` is for the "can't hear her" case: it moves her voice off the
- * call route for good (taking effect mid-line if she is talking), so it should
- * only follow a person saying they hear nothing.
+ * `otherOutput` is for the "can't hear her" tap: it restarts whatever iOS may
+ * have stopped, then moves her voice to the other leg (element or speakers,
+ * taking effect mid-line), so a second tap tries the first leg again.
  */
-export function replayLastLine(opts: { viaSpeakers?: boolean } = {}): SpeakHandle | null {
-  if (opts.viaSpeakers) {
+export function replayLastLine(opts: { otherOutput?: boolean } = {}): SpeakHandle | null {
+  if (opts.otherOutput) {
     restartInGesture();
-    enableDirectOutput();
+    if (directOn) leaveDirectOutput();
+    else enableDirectOutput();
   }
   if (currentHandle) return currentHandle;
   if (!lastSpokenText) return null;
   return speak(lastSpokenText);
+}
+
+/** Ends whatever line is playing, including a replay the conversation did not start. */
+export function stopCurrentLine() {
+  currentHandle?.stop();
+  currentHandle = null;
 }
 
 // ---------------------------------------------------------------------------

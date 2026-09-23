@@ -54,6 +54,8 @@ type Controller = {
   hold: HoldTalk;
   /** Whether the person wants the microphone (false after "Type instead"). */
   voiceWanted: { current: boolean };
+  /** The iPhone "Can't hear her?" row: tapped, or dismissed (and on which output). */
+  hint: { tapped: boolean; dismissed: boolean; dismissedOnSpeakers: boolean };
   focusComposer: { current: () => void };
 };
 
@@ -184,6 +186,7 @@ function createController(): Controller {
     recorder,
     hold,
     voiceWanted: { current: true },
+    hint: { tapped: false, dismissed: false, dismissedOnSpeakers: false },
     focusComposer,
   };
 }
@@ -289,20 +292,33 @@ function useCallEffects(
     return () => stop();
   }, [c, stage, micLive]);
 
-  // iPhone only: a "Can't hear her?" way out until they first answer, and again if her
-  // voice had to move to the speakers. Its tap is a fresh gesture iOS lets sound start from.
+  // iPhone only: a "Can't hear her?" way out. Its tap is a fresh gesture iOS lets sound start
+  // from, and nothing on the page can tell whether she is actually heard (a MediaStream
+  // element's clock runs on wall time), so it stays until they say they hear her, or for the
+  // first three answers. It comes back whenever her voice moves to another output.
   useEffect(() => {
     if (stage !== "call" || !isAppleMobile()) return;
     const update = () => {
       const state = c.store.get();
-      const answered = state.lines.some((line) => line.role === "user");
-      const show = !state.voiceOff && (!answered || c.voice.directOutputUsed());
+      const answers = state.lines.filter((line) => line.role === "user").length;
+      const onSpeakers = c.voice.directOutputUsed();
+      const show =
+        !state.voiceOff &&
+        (c.hint.dismissed
+          ? onSpeakers !== c.hint.dismissedOnSpeakers
+          : answers < 3 || c.hint.tapped || onSpeakers);
       c.store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: show });
     };
     update();
     const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [c, stage]);
+
+  // The call is over: her last line has finished, so the hidden element stops holding the
+  // phone's audio (music can come back). Resume rebuilds it inside its own tap.
+  useEffect(() => {
+    if (stage === "done") releaseAudioOutput();
+  }, [stage]);
 
   // She nudges only when she cannot hear you (muted, or no microphone) and nothing is happening.
   useEffect(() => {
@@ -494,8 +510,21 @@ export function MaryApp() {
     });
   }, [c, store]);
 
-  const onPlaySound = useCallback(() => void replayLastLine({ viaSpeakers: true }), []);
-  const onResume = useCallback(() => c.lead.resume(), [c]);
+  const onPlaySound = useCallback(() => {
+    c.hint.tapped = true;
+    c.hint.dismissed = false;
+    void replayLastLine({ otherOutput: true });
+  }, [c]);
+  const onHearHer = useCallback(() => {
+    c.hint.dismissed = true;
+    c.hint.dismissedOnSpeakers = c.voice.directOutputUsed();
+    store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: false });
+  }, [c, store]);
+  const onResume = useCallback(() => {
+    // Inside the tap: the output element is rebuilt and started where iOS allows it.
+    void unlockAudio();
+    c.lead.resume();
+  }, [c]);
   const onRestart = useCallback(() => {
     c.voice.dispose();
     newSession();
@@ -528,6 +557,7 @@ export function MaryApp() {
               onSend={send}
               onMicButton={onMicButton}
               onPlaySound={onPlaySound}
+              onHearHer={onHearHer}
               onToggleVoice={onToggleVoice}
               onHoldStart={onHoldStart}
               onHoldEnd={onHoldEnd}

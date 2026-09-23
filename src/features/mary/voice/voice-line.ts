@@ -4,6 +4,7 @@ import {
   noteAddresseeVerdict,
   speak,
   startMicSession,
+  stopCurrentLine,
   transcribe,
   type MicSession,
   type SpeakHandle,
@@ -152,6 +153,8 @@ export class VoiceLine {
     // must not keep playing through that render.
     const fraction = handle?.spokenFraction() ?? 0;
     handle?.stop();
+    // A "Play sound" replay is not this line's own; a press or a new line ends it too.
+    stopCurrentLine();
     this.speakHandle = null;
     this.current = null;
     if (current && handle) {

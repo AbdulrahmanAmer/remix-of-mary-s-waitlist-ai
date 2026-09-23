@@ -91,6 +91,14 @@ VERIFIED (headless Chromium, not a real iPhone)
 - Desktop UA: loopback route unchanged (callRoute true, peak 0.40 through it), track disabled between holds.
 - typecheck 0 · lint 0 · test 67/67 · build 0.
 
+REVIEW ROUND (adversarial workflow: 14 findings confirmed, 0 refuted) - fixed in the follow-up commit
+- WebKit runs a MediaStream element's clock on wall time: the watchdog only catches a paused element, never a silent one. So "Can't hear her?" stays until "I can hear her" (or 3 answers), and returns when the output moves; Play sound alternates element <-> speakers inside the tap instead of dropping the element for good.
+- A Play sound replay is stopped by a hold press / new line (stopCurrentLine from VoiceLine.stopSpeaking).
+- HoldRecorder: close() during an in-flight open() wins (generation guard); concurrent opens share one mic.
+- Call end releases the hidden element (iOS gives the audio back); Resume rebuilds it inside its tap.
+- /soundcheck: each route test builds and tears down its own element, Web Audio-only tests first, results kept per ring-switch pass across a reload.
+- Verified again in Chromium (iPhone + desktop profiles); gates 0/0/67/0.
+
 UNPROVEN / NEXT
 - A real iPhone. Operator: merge, Publish -> Update in Lovable, then on the iPhone open /soundcheck (ring switch silent and ring) and a real call.
 - Fix the AI gateway failure first, or no device will hear her.

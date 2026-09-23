@@ -8,6 +8,7 @@ import {
   primeMicPermission,
   releasePrimedMic,
   setAudioSessionType,
+  releaseAudioOutput,
   setOutputRoute,
   speak,
   unlockAudio,
@@ -30,7 +31,8 @@ export const Route = createFileRoute("/soundcheck")({
   ),
 });
 
-type Result = { test: string; heard: "yes" | "no" | "?"; state: string };
+type Ring = "ring" | "silent" | "?";
+type Result = { test: string; ring: Ring; heard: "yes" | "no" | "?"; state: string };
 type SessionType = "playback" | "play-and-record" | "auto";
 
 const RATE = 48000;
@@ -149,31 +151,33 @@ function playChime(into?: AudioNode): Promise<void> {
 
 /**
  * MARY's iPhone route (ElevenLabs' too): Web Audio into a MediaStream, played
- * by a hidden <audio> element. Built and told to play inside the tap.
+ * by a hidden <audio> element. Built and told to play inside the tap, and taken
+ * down afterwards so it cannot change what the next test measures.
  */
-let routeNode: MediaStreamAudioDestinationNode | null = null;
-let routeElement: HTMLAudioElement | null = null;
 function startElementRoute(): {
   node: AudioNode;
   element: HTMLAudioElement;
   ready: Promise<string>;
+  stop: () => void;
 } {
   const c = context();
-  if (!routeNode || !routeElement) {
-    routeNode = c.createMediaStreamDestination();
-    routeElement = document.createElement("audio");
-    routeElement.setAttribute("playsinline", "");
-    routeElement.autoplay = true;
-    routeElement.style.display = "none";
-    document.body.appendChild(routeElement);
-    routeElement.srcObject = routeNode.stream;
-  }
-  const element = routeElement;
+  const node = c.createMediaStreamDestination();
+  const element = document.createElement("audio");
+  element.setAttribute("playsinline", "");
+  element.autoplay = true;
+  element.style.display = "none";
+  document.body.appendChild(element);
+  element.srcObject = node.stream;
   const ready = element.play().then(
     () => "",
     (e: unknown) => `play() ${(e as Error).name}`,
   );
-  return { node: routeNode, element, ready };
+  const stop = () => {
+    element.pause();
+    element.srcObject = null;
+    element.remove();
+  };
+  return { node, element, ready, stop };
 }
 
 function elementState(element: HTMLAudioElement, error: string): string {
@@ -233,19 +237,40 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
     },
   },
   {
+    id: "webaudio",
+    label: "2 · Web Audio only (last week's route)",
+    run: async () => {
+      const note = setSession("auto");
+      await playChime();
+      return note;
+    },
+  },
+  {
+    id: "webaudio-playback",
+    label: "3 · Web Audio only, audio session 'playback'",
+    run: async () => {
+      const note = setSession("playback");
+      await playChime();
+      setSession("auto");
+      return note;
+    },
+  },
+  {
     id: "element",
-    label: "2 · New iPhone route: Web Audio → <audio> element",
+    label: "4 · New iPhone route: Web Audio → <audio> element",
     run: async () => {
       const note = setSession("auto");
       const route = startElementRoute();
       const error = await route.ready;
       await playChime(route.node);
-      return [elementState(route.element, error), note].filter(Boolean).join(" · ");
+      const state = elementState(route.element, error);
+      route.stop();
+      return [state, note].filter(Boolean).join(" · ");
     },
   },
   {
     id: "element-mic",
-    label: "3 · New route with the mic open (as in a call)",
+    label: "5 · New route with the mic open (as in a call)",
     run: async () => {
       const note = setSession("auto");
       const mic = openMic();
@@ -254,13 +279,14 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
       const error = await route.ready;
       await playChime(route.node);
       const state = elementState(route.element, error);
+      route.stop();
       stream.getTracks().forEach((t) => t.stop());
       return [state, "mic was open", note].filter(Boolean).join(" · ");
     },
   },
   {
     id: "mary",
-    label: "4 · MARY's real voice, started the way the app starts a call",
+    label: "6 · MARY's real voice, started the way the app starts a call",
     run: async () => {
       setSession("auto");
       // Same tap order as the app: microphone request, route, unlock; then her line.
@@ -273,8 +299,9 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
       const micNote = await mic;
       const handle = speak("Hi, this is MARY. If you can hear me, the new sound path works.");
       await handle.done;
-      releasePrimedMic();
       const d = audioDiagnostics();
+      releasePrimedMic();
+      releaseAudioOutput();
       return [
         `engine ${d.context} ${d.sampleRate}Hz route=${d.route}`,
         `element=${d.elementPaused ? "paused" : "playing"} direct=${d.directOutput}`,
@@ -282,25 +309,6 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
       ]
         .filter(Boolean)
         .join(" ");
-    },
-  },
-  {
-    id: "webaudio",
-    label: "5 · Web Audio only (last week's route)",
-    run: async () => {
-      const note = setSession("auto");
-      await playChime();
-      return note;
-    },
-  },
-  {
-    id: "webaudio-playback",
-    label: "6 · Web Audio only, audio session 'playback'",
-    run: async () => {
-      const note = setSession("playback");
-      await playChime();
-      setSession("auto");
-      return note;
     },
   },
   {
@@ -313,11 +321,36 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
   },
 ];
 
+/** Results survive a reload, so a silent pass and a ring pass can sit side by side. */
+const STORE_KEY = "mary-soundcheck";
+function loadResults(): Result[] {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(STORE_KEY) ?? "[]") as unknown;
+    return Array.isArray(saved) ? (saved as Result[]) : [];
+  } catch {
+    return [];
+  }
+}
+function saveResults(results: Result[]) {
+  try {
+    sessionStorage.setItem(STORE_KEY, JSON.stringify(results));
+  } catch {
+    /* private mode: results stay on this page only */
+  }
+}
+
 function SoundCheck() {
-  const [results, setResults] = useState<Result[]>([]);
+  const [results, setResultsState] = useState<Result[]>(loadResults);
   const [busy, setBusy] = useState("");
-  const [ring, setRing] = useState<"ring" | "silent" | "?">("?");
+  const [ring, setRing] = useState<Ring>("?");
   const [copied, setCopied] = useState(false);
+
+  const setResults = (update: (all: Result[]) => Result[]) =>
+    setResultsState((all) => {
+      const next = update(all);
+      saveResults(next);
+      return next;
+    });
 
   const run = async (test: (typeof TESTS)[number]) => {
     setBusy(test.id);
@@ -328,20 +361,21 @@ function SoundCheck() {
       detail = `error: ${(error as Error).name} ${(error as Error).message}`;
     }
     setResults((all) => [
-      ...all.filter((r) => r.test !== test.label),
-      { test: test.label, heard: "?", state: describe(detail) },
+      ...all.filter((r) => !(r.test === test.label && r.ring === ring)),
+      { test: test.label, ring, heard: "?", state: describe(detail) },
     ]);
     setBusy("");
   };
 
   const mark = (label: string, heard: "yes" | "no") =>
-    setResults((all) => all.map((r) => (r.test === label ? { ...r, heard } : r)));
+    setResults((all) =>
+      all.map((r) => (r.test === label && r.ring === ring ? { ...r, heard } : r)),
+    );
 
   const summary = [
     deviceLine(),
-    `ring switch: ${ring}`,
     navigator.userAgent,
-    ...results.map((r) => `${r.test}: heard=${r.heard} | ${r.state}`),
+    ...results.map((r) => `[ring switch: ${r.ring}] ${r.test}: heard=${r.heard} | ${r.state}`),
   ].join("\n");
 
   const copy = () => {
@@ -355,9 +389,10 @@ function SoundCheck() {
     <main className="mx-auto min-h-dvh max-w-lg px-4 py-8 text-ink">
       <h1 className="font-display text-2xl font-medium">MARY sound check</h1>
       <p className="mt-2 text-sm text-muted-foreground">
-        Volume up. Tap each test, listen for a two-note chime (or MARY's voice), then mark what you
-        heard. Run it once with the ring switch on silent and once with it on ring, then copy the
-        results and send them over.
+        Volume up. Set the ring switch, say which way it is below, then tap each test in order,
+        listen for a two-note chime (or MARY's voice) and mark what you heard. Then reload this
+        page, flip the ring switch and do it again. Both passes are kept: copy the results and send
+        them over.
       </p>
       <p className="mt-2 font-mono text-[0.7rem] text-muted-foreground">{deviceLine()}</p>
       <div className="mt-4 flex items-center gap-2 text-sm">
@@ -375,7 +410,7 @@ function SoundCheck() {
       </div>
       <ol className="mt-6 space-y-3">
         {TESTS.map((test) => {
-          const result = results.find((r) => r.test === test.label);
+          const result = results.find((r) => r.test === test.label && r.ring === ring);
           return (
             <li key={test.id} className="rounded-2xl bg-card p-3 ring-1 ring-border">
               <button

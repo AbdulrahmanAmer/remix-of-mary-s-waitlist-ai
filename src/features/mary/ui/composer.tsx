@@ -155,6 +155,7 @@ export function Composer({
   onSend,
   onMicButton,
   onPlaySound,
+  onHearHer,
   onHoldStart,
   onHoldEnd,
 }: {
@@ -163,6 +164,7 @@ export function Composer({
   onSend: (text: string) => void;
   onMicButton: () => void;
   onPlaySound: () => void;
+  onHearHer: () => void;
   onHoldStart: () => void;
   onHoldEnd: () => void;
 }) {
@@ -324,6 +326,13 @@ export function Composer({
               className="rounded-full px-2.5 py-0.5 ring-1 ring-border transition-colors hover:bg-muted"
             >
               Play sound
+            </button>
+            <button
+              type="button"
+              onClick={onHearHer}
+              className="rounded-full px-2.5 py-0.5 text-muted-foreground transition-colors hover:bg-muted"
+            >
+              I can hear her
             </button>
           </p>
         )}
