@@ -1,0 +1,137 @@
+flowchart TD
+
+subgraph group_edge["Cloudflare edge"]
+  node_domain["Custom domain + DNS"]
+  node_waf["WAF rate-limit rule<br/>[/api/*]"]
+  node_turnstile["Turnstile<br/>[bot check on Start]"]
+  node_access["Cloudflare Access<br/>[owner view]"]
+end
+
+subgraph group_experience["Waitlist experience (browser)"]
+  node_landing["Landing route<br/>[index.tsx]"]
+  node_boot["Boot gate<br/>[boot-gate.tsx]"]
+  node_experience_ui["MARY experience<br/>[mary-experience.tsx]"]
+  node_presence["MARY presence<br/>[mary-presence.tsx]"]
+  node_progress_ui["Progress display<br/>[progress-constellation.tsx]"]
+  node_call_adapter["Retell call adapter<br/>[retell-call.ts] NEW"]
+  node_typing["Typing fallback<br/>[mary-stream.ts]"]
+  node_local_progress[("Local progress<br/>[waitlist-store.ts]")]
+end
+
+subgraph group_worker["Cloudflare Worker - TanStack Start via Nitro cloudflare-module"]
+  node_assets[("Static assets<br/>[public/ incl. logo]")]
+  node_guard["API guard<br/>[api-guard.ts]"]
+  node_webcall["Start call<br/>[api/retell/web-call] NEW"]
+  node_savelead["Save lead function<br/>[api/retell/functions/save-lead] NEW"]
+  node_webhook["Call webhook<br/>[api/retell/webhook] NEW"]
+  node_llm_socket["MARY brain socket (option A)<br/>[api/retell/llm] NEW"]
+  node_turn_api["Turn stream (typing)<br/>[turn.ts]"]
+  node_lead_api["Lead endpoint<br/>[lead.ts]"]
+  node_prompt_logic["Prompt and grounding<br/>[mary-prompt.server.ts]"]
+  node_grounding["Field grounding<br/>[mary-grounding.ts]"]
+  node_experience_memory["Debrief and field notes<br/>[mary-experience.server.ts]"]
+  node_provider["AI provider seam<br/>[ai-provider.server.ts] NEW"]
+  node_sheets["Sheet bridge<br/>[sheets.server.ts]"]
+end
+
+subgraph group_platform["Cloudflare platform"]
+  node_ratelimit[("Rate Limiting binding")]
+  node_secrets[("Worker secrets<br/>[wrangler secret]")]
+  node_ai_gateway{{"AI Gateway<br/>[logs, cache, limits]"}}
+  node_logs[("Workers Logs")]
+  node_d1[("D1 leads<br/>[optional, D2]")]
+end
+
+subgraph group_delivery["Delivery"]
+  node_repo["GitHub main"]
+  node_ci["CI: typecheck, lint, test, build<br/>[ci.yml]"]
+  node_deploy["wrangler deploy<br/>[wrangler.jsonc] NEW"]
+end
+
+subgraph group_external["External services"]
+  node_retell{{"Retell voice agent<br/>STT, turn-taking, TTS"}}
+  node_llm{{"LLM provider<br/>OpenAI or Anthropic"}}
+  node_spreadsheet[("Google Sheet<br/>[mary-sheets-script]")]
+end
+
+node_visitor(("Visitor"))
+node_owner(("Owner"))
+
+node_visitor -->|"opens"| node_domain
+node_domain -->|"serves"| node_landing
+node_landing -->|"renders"| node_boot
+node_boot -->|"starts"| node_experience_ui
+node_experience_ui -->|"updates state"| node_presence
+node_experience_ui -->|"shows progress"| node_progress_ui
+node_experience_ui -->|"saves progress"| node_local_progress
+node_experience_ui -->|"loads logo"| node_assets
+node_experience_ui -->|"passes check"| node_turnstile
+node_experience_ui -->|"starts voice"| node_call_adapter
+node_call_adapter -->|"requests call"| node_waf
+node_waf -->|"forwards"| node_guard
+node_guard -->|"checks quota"| node_ratelimit
+node_guard -->|"routes"| node_webcall
+node_webcall -->|"verifies token"| node_turnstile
+node_webcall -->|"create-web-call"| node_retell
+node_webcall -.->|"access token"| node_call_adapter
+node_call_adapter <-->|"WebRTC audio + transcript"| node_retell
+node_retell -->|"calls save_lead"| node_savelead
+node_retell -->|"call_ended / call_analyzed"| node_webhook
+node_retell -.->|"asks next reply"| node_llm_socket
+node_llm_socket -.->|"builds prompt"| node_prompt_logic
+node_savelead -->|"grounds fields"| node_grounding
+node_savelead -->|"writes lead"| node_sheets
+node_webhook -->|"writes outcome"| node_sheets
+node_webhook -->|"debriefs"| node_experience_memory
+node_experience_ui -->|"types instead"| node_typing
+node_typing -->|"requests turns"| node_guard
+node_guard -->|"routes"| node_turn_api
+node_turn_api -->|"builds prompt"| node_prompt_logic
+node_prompt_logic -->|"grounds fields"| node_grounding
+node_turn_api -->|"loads notes"| node_experience_memory
+node_turn_api -->|"generates"| node_provider
+node_experience_memory -->|"generates"| node_provider
+node_llm_socket -.->|"generates"| node_provider
+node_provider -->|"routes via"| node_ai_gateway
+node_ai_gateway -->|"calls"| node_llm
+node_experience_memory -->|"stores notes"| node_sheets
+node_sheets -->|"writes rows"| node_spreadsheet
+node_sheets -.->|"mirror (optional)"| node_d1
+node_owner -->|"signs in"| node_access
+node_access -->|"protects"| node_lead_api
+node_lead_api -->|"reads status"| node_sheets
+node_secrets -.->|"keys"| node_guard
+node_guard -.->|"logs"| node_logs
+node_repo -->|"push"| node_ci
+node_ci -->|"green"| node_deploy
+node_deploy -->|"publishes"| node_domain
+
+click node_landing "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/index.tsx"
+click node_boot "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/boot-gate.tsx"
+click node_experience_ui "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/mary-experience.tsx"
+click node_presence "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/mary-presence.tsx"
+click node_progress_ui "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/components/progress-constellation.tsx"
+click node_typing "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/mary-stream.ts"
+click node_local_progress "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/waitlist-store.ts"
+click node_guard "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/api-guard.ts"
+click node_turn_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/turn.ts"
+click node_lead_api "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/routes/api/lead.ts"
+click node_prompt_logic "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/mary-prompt.server.ts"
+click node_grounding "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/mary-grounding.ts"
+click node_experience_memory "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/mary-experience.server.ts"
+click node_sheets "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/src/lib/sheets.server.ts"
+click node_ci "https://github.com/abdulrahmanamer/remix-of-mary-s-waitlist-ai/blob/main/.github/workflows/ci.yml"
+
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
+class node_landing,node_boot,node_experience_ui,node_presence,node_progress_ui,node_typing,node_local_progress toneBlue
+class node_call_adapter,node_webcall,node_savelead,node_webhook,node_llm_socket,node_provider,node_deploy toneMint
+class node_guard,node_turn_api,node_lead_api,node_prompt_logic,node_grounding,node_experience_memory,node_sheets,node_assets toneAmber
+class node_domain,node_waf,node_turnstile,node_access,node_ratelimit,node_secrets,node_ai_gateway,node_logs,node_d1 toneTeal
+class node_repo,node_ci toneNeutral
+class node_visitor,node_owner,node_retell,node_llm,node_spreadsheet toneIndigo

@@ -52,6 +52,7 @@ GAP FE-02. It shows only this browser's data, but it ships to every visitor and 
 | S1 | Workspace tooling lives in-repo: `.agent-os/` (stage gate + skills payload), `.claude/skills/` (14 skills), `.claude/tools/vector-index.mjs`; derived index gitignored. | 2026-09-23 | Reproducible on any machine that clones the repo. |
 | S2 | agent-os adapters: global Claude Code plugin + git pre-commit gate only. No project-local Claude hooks (the global plugin already fires them) and no AGENTS.md injection (Lovable's agent reads AGENTS.md). | 2026-09-23 | Avoid double-firing hooks; avoid a stage-0 "don't write src" block reaching Lovable. |
 | S3 | Repo-local git `core.autocrlf=false`, `core.eol=lf`. | 2026-09-23 | Global autocrlf=true produced ~14,000 CRLF prettier errors. |
+| S4 | Version plan: V1 = the current Lovable-hosted app, fixed and polished now. V2 = Retell voice + self-hosted Cloudflare (`docs/architecture/retell-migration.md`, `cloudflare-migration.md`, `diagram.cloudflare.png`), built later. | 2026-09-23 | Operator: "we will end doing this as version two but for now lets actually properly fix the current setup". |
 
 ## LOG - newest at the bottom, append only
 
@@ -60,3 +61,5 @@ GAP FE-02. It shows only this browser's data, but it ships to every visitor and 
 - 2026-09-23 - Operator: "fix all the programmatic things and errors that we have so we are actually clean and ready to work on things". STAGE 0 -> 3 on that instruction. Scope: every register item that does not depend on D2-D5; plan in `docs/plans/2026-09-23-cleanup.md`.
 - 2026-09-23 - Cleanup plan S1-S7 worked. Gates: typecheck 0 · lint 0 (0 warnings) · test 31/31 · build 0; the same four pass from a clean copy of the commit-able files. Production Worker (wrangler) renders `/` with bounded layout and 0 uncaught; guard verified there (cross-site 403). Remaining open items and their decisions: GAP-REGISTER "STILL OPEN". Nothing committed.
 - 2026-09-23 - Pushed 4542c9e (cleanup) and 605d927 (Retell design, docs only) to origin/main at the operator's request; GitHub CI run 35807448045 green. Kept local (public repo): docs/audit/, .claude/skills/, .agent-os/skills/ via .git/info/exclude.
+- 2026-09-23 - Hardened Apps Script (rewritten, not Lovable's) deployed by the operator; live read-only probe: ping ok (version 2026-09-23, 0 leads), wrong secret -> unauthorized. Pending: operator sets SHEETS_WEBAPP_URL + SHEETS_WEBAPP_SECRET in Lovable, then one real call end to end (closes LD-01 once a lead lands).
+- 2026-09-23 - Operator: V1 polish round - fix the buggy/unsmooth experience, stronger animations, a futuristic orb, better look end to end. V2 (Retell + Cloudflare) deferred.
