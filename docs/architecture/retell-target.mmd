@@ -1,0 +1,53 @@
+flowchart LR
+  visitor(("Visitor"))
+
+  subgraph browser["Browser (kept UI, new call adapter)"]
+    ui["mary-experience.tsx<br/>screen, orb, transcript, end screen"]
+    adapter["lib/retell-call.ts (NEW)<br/>wraps retell-client-js-sdk"]
+    typing["Typing fallback<br/>mary-stream.ts"]
+  end
+
+  subgraph server["Our server - Cloudflare Worker on Lovable"]
+    guard["api-guard.ts<br/>403 cross-site / 413 / 429"]
+    webcall["POST /api/retell/web-call (NEW)<br/>mints the call with RETELL_API_KEY"]
+    savelead["POST /api/retell/functions/save-lead (NEW)<br/>verify x-retell-signature, ground fields"]
+    webhook["POST /api/retell/webhook (NEW)<br/>call_ended / call_analyzed"]
+    brainA["wss /api/retell/llm/{call_id}<br/>Option A: MARY's own brain<br/>mary-prompt + mary-grounding"]
+    turn["POST /api/turn<br/>typing only"]
+    lessons["mary-experience.server.ts<br/>debrief from Retell's transcript"]
+    sheets["sheets.server.ts"]
+  end
+
+  subgraph retell["Retell (managed voice agent)"]
+    session["Real-time voice session<br/>STT, turn-taking, barge-in,<br/>echo handling, TTS"]
+    agent["MARY agent<br/>Option B: Retell LLM + ported prompt"]
+  end
+
+  sheet[("Google Sheet<br/>Waitlist / Experience / Activity")]
+  gateway{{"Lovable AI gateway"}}
+
+  visitor -->|"taps start"| ui
+  ui --> adapter
+  adapter -->|"1. request call"| guard
+  guard --> webcall
+  webcall -->|"2. create-web-call"| session
+  webcall -.->|"access_token"| adapter
+  adapter <-->|"3. WebRTC audio + transcript events"| session
+  session --> agent
+  session <-.->|"4. Option A: response_required / response"| brainA
+  agent -->|"5. save_lead function"| savelead
+  savelead --> sheets
+  session -->|"7. webhooks"| webhook
+  webhook --> sheets
+  webhook --> lessons
+  lessons --> sheets
+  sheets --> sheet
+  ui --> typing --> turn --> gateway
+  brainA -.-> gateway
+
+  classDef newNode fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef keptNode fill:#dbeafe,stroke:#2563eb,color:#172554
+  classDef extNode fill:#fef3c7,stroke:#d97706,color:#78350f
+  class adapter,webcall,savelead,webhook,brainA newNode
+  class ui,typing,guard,turn,lessons,sheets keptNode
+  class session,agent,sheet,gateway extNode
