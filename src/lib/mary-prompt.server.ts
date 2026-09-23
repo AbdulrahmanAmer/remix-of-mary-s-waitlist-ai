@@ -118,9 +118,9 @@ export function buildPrompt(
       : !discoveryDone
         ? "DISCOVER — never mention the waitlist offer again. React to what they just said, sell one point that fits their own situation when there is an opening, and draw out what is still missing with tentative guesses phrased as real questions, labels and threading. Never state their business, industry or setup as a fact they have not given you, and never ask a plain intake question. If you still do not have their name and the conversation has warmth, ask for it lightly and naturally ('Sorry — I got ahead of myself. Who am I speaking with?'). If they have no business at all, or they clearly want to go, switch to EXIT: one warm line, no pitch, set declined true and phase EXIT."
         : !revealed
-          ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert, not yourself. Do not ask for anything in this turn. Set revealed true."
+          ? "REVEAL — you now have their name, business, industry and how they operate, all in their own words. Stop and show them what just happened: no form, and you already know all of it. Credit Convert by name, not yourself. Do not ask for anything in this turn. Set revealed true."
           : !lanesDone
-            ? "LANES — tie Cultivate and Recover to their own situation in one short beat each, in this turn, and land that it is three lanes in one system. Do not offer to explain them later and do not ask which one they want; just say it. End on one question that pulls them forward from what they told you. Set lanesDone true."
+            ? "LANES — tie Cultivate and Recover to their own situation in one short beat each, in this turn, naming both words, and land that it is three loops in one engine that decides the next move for every opportunity, with their own people stepping in when it matters. Do not offer to explain them later and do not ask which one they want; just say it. End on one question that pulls them forward from what they told you. Set lanesDone true."
             : !allCaptured
               ? "CONTACT — everything else is known. Get their email as housekeeping tied to their spot confirmation, and offer the phone as skippable. One ask per turn."
               : wrapAsked

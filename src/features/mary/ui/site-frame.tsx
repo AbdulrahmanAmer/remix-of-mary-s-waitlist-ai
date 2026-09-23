@@ -33,7 +33,7 @@ export function SiteFooter({ className = "" }: { className?: string }) {
     <footer
       className={`flex shrink-0 flex-wrap items-center justify-between gap-2 py-4 text-[0.7rem] text-muted-foreground ${className}`}
     >
-      <span>OmniSuite · AI-native revenue infrastructure</span>
+      <span>OmniSuite · AI + human revenue infrastructure</span>
       <span>
         A product by{" "}
         <span

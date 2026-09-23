@@ -124,8 +124,8 @@ export function assistantOffered(value: string, lastAssistant: string | undefine
   return hits / content.length >= 0.5;
 }
 
-// Words that point at the two verticals OmniSuite is built for. If MARY names
-// one of these and the person never came near it, she assumed.
+// Words that point at real estate and finance, the fields MARY is most tempted
+// to default to. If she names one and the person never came near it, she assumed.
 const VERTICAL_VALUE = [
   "real",
   "estate",
