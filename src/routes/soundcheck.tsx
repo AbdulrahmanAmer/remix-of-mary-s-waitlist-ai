@@ -3,9 +3,10 @@ import { useState } from "react";
 
 import {
   audioDiagnostics,
-  isAppleMobile,
   isInAppBrowser,
+  isWebKitEngine,
   primeMicPermission,
+  primeOutput,
   releasePrimedMic,
   setAudioSessionType,
   releaseAudioOutput,
@@ -294,9 +295,10 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
         () => "",
         (e: unknown) => `mic ${(e as Error).message}`,
       );
-      setOutputRoute(isAppleMobile() ? "element" : "call");
+      setOutputRoute(isWebKitEngine() ? "element" : "call");
       await unlockAudio();
       const micNote = await mic;
+      primeOutput();
       const handle = speak("Hi, this is MARY. If you can hear me, the new sound path works.");
       await handle.done;
       const d = audioDiagnostics();

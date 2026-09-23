@@ -4,7 +4,9 @@ import { AnimatePresence, LayoutGroup } from "motion/react";
 import { WaitlistVault } from "@/components/waitlist-vault";
 import {
   isAppleMobile,
+  isWebKitEngine,
   primeMicPermission,
+  primeOutput,
   micPermissionState,
   releasePrimedMic,
   setOutputRoute,
@@ -376,8 +378,8 @@ export function MaryApp() {
   // synchronously (~1-1.5 s measured). The call's echo-cancelling loopback needs
   // one, so the stack is warmed while the landing is idle instead of on the tap.
   useEffect(() => {
-    // iPhone and iPad never use the call route, so there is nothing to warm.
-    if (typeof window.RTCPeerConnection === "undefined" || isAppleMobile()) return;
+    // Safari, iPhone and iPad never use the call route, so there is nothing to warm.
+    if (typeof window.RTCPeerConnection === "undefined" || isWebKitEngine()) return;
     const warm = () => {
       try {
         new window.RTCPeerConnection().close();
@@ -454,9 +456,9 @@ export function MaryApp() {
     async (withVoice: boolean) => {
       if (store.get().stage !== "landing") return;
       c.voiceWanted.current = withVoice;
-      // Her voice always plays through an <audio> element. iPhone and iPad feed it
+      // Her voice always plays through an <audio> element. Safari, iPhone and iPad feed it
       // straight from Web Audio; a looped-back call stream can arrive muted there.
-      setOutputRoute(isAppleMobile() ? "element" : "call");
+      setOutputRoute(isWebKitEngine() ? "element" : "call");
       // iPhone Safari grants the microphone only while the tap is still being
       // handled. The stream is kept: the line that records next takes it over.
       const primed = withVoice
@@ -466,6 +468,7 @@ export function MaryApp() {
         : Promise.resolve();
       await unlockAudio();
       await primed;
+      primeOutput();
       store.dispatch({ type: "START_CALL", at: Date.now() });
       if (!withVoice) store.dispatch({ type: "SET_LISTENING", listening: "paused" });
       void c.runner.welcome();

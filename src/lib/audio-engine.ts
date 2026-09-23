@@ -239,6 +239,17 @@ export function isAppleMobile(): boolean {
 }
 
 /**
+ * WebKit: Safari on a Mac, and every browser on iPhone and iPad. It can leave a
+ * looped-back call stream muted (fixed only in Safari 27), so her voice takes
+ * the element route there. It still passes WebKit's echo canceller, which
+ * renders MediaStream playback through the same unit as the microphone.
+ */
+export function isWebKitEngine(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return navigator.vendor === "Apple Computer, Inc." || isAppleMobile();
+}
+
+/**
  * How her voice reaches the <audio> element:
  * - "call": out and back through a loopback peer connection (desktop, Android);
  * - "element": the Web Audio stream plays in the element directly (iPhone, iPad);
@@ -467,6 +478,26 @@ export async function unlockAudio() {
     if (!current.element.paused) return;
     current.release();
   }
+}
+
+/**
+ * ElevenLabs' iOS prime, once the microphone is live: about 100 ms of silence
+ * through the element's own path, then play() again, so iOS treats the element
+ * as playing media before her first word arrives.
+ */
+export function primeOutput() {
+  const ctx = sharedContext;
+  if (!ctx || !hub || !sink || sink.stale) return;
+  try {
+    const silence = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.1), ctx.sampleRate);
+    const source = ctx.createBufferSource();
+    source.buffer = silence;
+    source.connect(hub);
+    source.start();
+  } catch {
+    /* nothing to prime */
+  }
+  void sink.element.play().catch(() => {});
 }
 
 /**

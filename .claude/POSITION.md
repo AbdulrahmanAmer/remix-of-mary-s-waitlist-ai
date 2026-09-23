@@ -99,6 +99,13 @@ REVIEW ROUND (adversarial workflow: 14 findings confirmed, 0 refuted) - fixed in
 - /soundcheck: each route test builds and tears down its own element, Web Audio-only tests first, results kept per ring-switch pass across a reload.
 - Verified again in Chromium (iPhone + desktop profiles); gates 0/0/67/0.
 
+FOLLOW-UP (independent diagnosis + 3 skeptics from the research workflow)
+- Added ElevenLabs' element prime: after the mic is granted, ~100 ms of silence through hub -> element, then play() again (primeOutput).
+- Safari on a Mac also takes the element route (isWebKitEngine: navigator.vendor Apple): the looped-back WebRTC track can stay muted there until Safari 27. Chrome/Firefox/Edge desktop keep the loopback.
+- Verified in Chromium: iPhone, desktop and Mac-Safari (vendor) profiles; gates 0/0/67/0.
+- Not done (noted as risks): screen wake lock (ElevenLabs holds one), a "playback" audio-session backstop for no-mic sessions, hands-free switch keeping capture continuous, AirPods staying in call profile while the mic is live.
+- The phone may also have used the Lovable editor preview (iframe, possibly without allow="microphone"); test on the published URL in Safari itself.
+
 UNPROVEN / NEXT
 - A real iPhone. Operator: merge, Publish -> Update in Lovable, then on the iPhone open /soundcheck (ring switch silent and ring) and a real call.
 - Fix the AI gateway failure first, or no device will hear her.
