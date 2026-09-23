@@ -4,11 +4,12 @@ import { AnimatePresence, LayoutGroup } from "motion/react";
 import { WaitlistVault } from "@/components/waitlist-vault";
 import {
   isAppleMobile,
+  isWebKitEngine,
   primeMicPermission,
+  primeOutput,
   micPermissionState,
   releasePrimedMic,
-  setAudioSessionType,
-  setDirectOutput,
+  setOutputRoute,
   releaseAudioOutput,
   replayLastLine,
   transcribe,
@@ -55,6 +56,8 @@ type Controller = {
   hold: HoldTalk;
   /** Whether the person wants the microphone (false after "Type instead"). */
   voiceWanted: { current: boolean };
+  /** The iPhone "Can't hear her?" row: tapped, or dismissed (and on which output). */
+  hint: { tapped: boolean; dismissed: boolean; dismissedOnSpeakers: boolean };
   focusComposer: { current: () => void };
 };
 
@@ -134,9 +137,8 @@ function createController(): Controller {
   voice.onSend = (text) => void runner.send(text, "voice");
   voice.isBusy = () => runner.busy;
 
-  // iPhone and iPad: an open microphone makes iOS treat the page as a phone
-  // call and her voice goes to the earpiece or nowhere. There the mic is held
-  // only while the button is, and her voice goes straight to the speakers.
+  // iPhone and iPad keep the microphone track live between holds (ElevenLabs
+  // does the same): iOS then stays in its loudspeaker call mode for the whole call.
   const recorder = new HoldRecorder(isAppleMobile());
   recorder.onLevel = (level) => voiceLevel.set(level);
   const waiting = () => {
@@ -186,6 +188,7 @@ function createController(): Controller {
     recorder,
     hold,
     voiceWanted: { current: true },
+    hint: { tapped: false, dismissed: false, dismissedOnSpeakers: false },
     focusComposer,
   };
 }
@@ -209,16 +212,6 @@ function useCallEffects(
   // Hold to talk (the default): the microphone is ready, but only held audio counts.
   useEffect(() => {
     if (stage !== "call" || talkMode !== "hold" || !c.voiceWanted.current) return;
-    if (isAppleMobile()) {
-      // The mic opens on each press; permission was granted at the tap.
-      if (!c.store.get().mic.error)
-        c.store.dispatch({ type: "SET_MIC", mic: { live: true, muted: false } });
-      c.store.dispatch({ type: "SET_LISTENING", listening: "listening" });
-      return () => {
-        c.hold.cancel();
-        c.recorder.close();
-      };
-    }
     let alive = true;
     c.recorder.open().then(
       () => {
@@ -301,19 +294,33 @@ function useCallEffects(
     return () => stop();
   }, [c, stage, micLive]);
 
-  // iPhone only: if her voice had to go to the speakers, the ring switch is the usual cause.
+  // iPhone only: a "Can't hear her?" way out. Its tap is a fresh gesture iOS lets sound start
+  // from, and nothing on the page can tell whether she is actually heard (a MediaStream
+  // element's clock runs on wall time), so it stays until they say they hear her, or for the
+  // first three answers. It comes back whenever her voice moves to another output.
   useEffect(() => {
-    if (stage !== "call") return;
-    const apple =
-      /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
-    if (!apple) return;
-    const timer = window.setInterval(() => {
-      if (c.voice.directOutputUsed())
-        c.store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: true });
-    }, 1000);
+    if (stage !== "call" || !isAppleMobile()) return;
+    const update = () => {
+      const state = c.store.get();
+      const answers = state.lines.filter((line) => line.role === "user").length;
+      const onSpeakers = c.voice.directOutputUsed();
+      const show =
+        !state.voiceOff &&
+        (c.hint.dismissed
+          ? onSpeakers !== c.hint.dismissedOnSpeakers
+          : answers < 3 || c.hint.tapped || onSpeakers);
+      c.store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: show });
+    };
+    update();
+    const timer = window.setInterval(update, 1000);
     return () => window.clearInterval(timer);
   }, [c, stage]);
+
+  // The call is over: her last line has finished, so the hidden element stops holding the
+  // phone's audio (music can come back). Resume rebuilds it inside its own tap.
+  useEffect(() => {
+    if (stage === "done") releaseAudioOutput();
+  }, [stage]);
 
   // She nudges only when she cannot hear you (muted, or no microphone) and nothing is happening.
   useEffect(() => {
@@ -371,8 +378,8 @@ export function MaryApp() {
   // synchronously (~1-1.5 s measured). The call's echo-cancelling loopback needs
   // one, so the stack is warmed while the landing is idle instead of on the tap.
   useEffect(() => {
-    // iPhone and iPad never use the call route, so there is nothing to warm.
-    if (typeof window.RTCPeerConnection === "undefined" || isAppleMobile()) return;
+    // Safari, iPhone and iPad never use the call route, so there is nothing to warm.
+    if (typeof window.RTCPeerConnection === "undefined" || isWebKitEngine()) return;
     const warm = () => {
       try {
         new window.RTCPeerConnection().close();
@@ -439,6 +446,7 @@ export function MaryApp() {
       c.hold.cancel();
       c.recorder.close();
       c.lead.dispose();
+      releasePrimedMic();
       releaseAudioOutput();
     },
     [c],
@@ -448,27 +456,19 @@ export function MaryApp() {
     async (withVoice: boolean) => {
       if (store.get().stage !== "landing") return;
       c.voiceWanted.current = withVoice;
-      const holdMode = store.get().talkMode === "hold";
-      const apple = isAppleMobile();
-      // iPhone: her voice never takes the call route (it lands in the earpiece).
-      setDirectOutput(apple);
-      // iPhone Safari grants the microphone only while the tap is still being handled.
+      // Her voice always plays through an <audio> element. Safari, iPhone and iPad feed it
+      // straight from Web Audio; a looped-back call stream can arrive muted there.
+      setOutputRoute(isWebKitEngine() ? "element" : "call");
+      // iPhone Safari grants the microphone only while the tap is still being
+      // handled. The stream is kept: the line that records next takes it over.
       const primed = withVoice
-        ? primeMicPermission()
-            .then(() => {
-              // Hold to talk opens its own microphone per hold. Letting this one go
-              // takes iOS out of phone-call mode before her first word.
-              if (holdMode) {
-                releasePrimedMic();
-                if (apple) setAudioSessionType("playback");
-              }
-            })
-            .catch((error: unknown) => {
-              store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
-            })
+        ? primeMicPermission().catch((error: unknown) => {
+            store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
+          })
         : Promise.resolve();
       await unlockAudio();
       await primed;
+      primeOutput();
       store.dispatch({ type: "START_CALL", at: Date.now() });
       if (!withVoice) store.dispatch({ type: "SET_LISTENING", listening: "paused" });
       void c.runner.welcome();
@@ -513,8 +513,21 @@ export function MaryApp() {
     });
   }, [c, store]);
 
-  const onPlaySound = useCallback(() => void replayLastLine({ viaSpeakers: true }), []);
-  const onResume = useCallback(() => c.lead.resume(), [c]);
+  const onPlaySound = useCallback(() => {
+    c.hint.tapped = true;
+    c.hint.dismissed = false;
+    void replayLastLine({ otherOutput: true });
+  }, [c]);
+  const onHearHer = useCallback(() => {
+    c.hint.dismissed = true;
+    c.hint.dismissedOnSpeakers = c.voice.directOutputUsed();
+    store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: false });
+  }, [c, store]);
+  const onResume = useCallback(() => {
+    // Inside the tap: the output element is rebuilt and started where iOS allows it.
+    void unlockAudio();
+    c.lead.resume();
+  }, [c]);
   const onRestart = useCallback(() => {
     c.voice.dispose();
     newSession();
@@ -547,6 +560,7 @@ export function MaryApp() {
               onSend={send}
               onMicButton={onMicButton}
               onPlaySound={onPlaySound}
+              onHearHer={onHearHer}
               onToggleVoice={onToggleVoice}
               onHoldStart={onHoldStart}
               onHoldEnd={onHoldEnd}

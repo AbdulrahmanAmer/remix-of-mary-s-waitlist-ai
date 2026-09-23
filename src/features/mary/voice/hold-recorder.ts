@@ -4,13 +4,15 @@
  * explicit. Only audio captured while the button is held is ever sent, so nothing
  * the room says can start a turn.
  *
- * Elsewhere the microphone opens once (with the browser's echo cancellation,
- * noise suppression and auto gain) and its track is disabled between holds, so a
- * press starts instantly. On iPhone and iPad it is released after every hold:
- * while any microphone is open iOS treats the page as a phone call and her voice
- * goes to the earpiece, or nowhere. The capture graph stays warm either way.
+ * The microphone opens once for the call (with the browser's echo cancellation,
+ * noise suppression and auto gain), reusing the one opened in the tap, so a press
+ * starts instantly. Elsewhere its track is disabled between holds. On iPhone and
+ * iPad it stays live, as it does in ElevenLabs' and every other voice SDK: while
+ * the page is capturing, iOS keeps it in "play and record" (loudspeaker, not
+ * muted by the ring switch) and lets its audio start without a tap. Frames that
+ * arrive outside a hold are dropped here.
  */
-import { setAudioSessionType } from "@/lib/audio-engine";
+import { noteMicTrack, takePrimedMic } from "@/lib/audio-engine";
 
 const TARGET_RATE = 16000;
 /** The press itself (a thumb on glass, a click) lands in the first ~100 ms. */
@@ -83,21 +85,36 @@ export class HoldRecorder {
   private startedAt = 0;
   private skipUntil = 0;
   private peak = 0;
+  /** Bumped by close(), so an open() still in flight knows it was abandoned. */
+  private generation = 0;
+  private opening: Promise<void> | null = null;
+  private openingFor = -1;
 
-  /** `releaseBetweenHolds`: let the microphone go after every hold (iPhone, iPad). */
-  constructor(private readonly releaseBetweenHolds = false) {}
+  /** `keepTrackLive`: never disable the track between holds (iPhone, iPad). */
+  constructor(private readonly keepTrackLive = false) {}
 
   /** Open and still live: a backgrounded tab or a phone call can end the track. */
   get isOpen(): boolean {
     return this.stream?.getAudioTracks()[0]?.readyState === "live";
   }
 
-  async open(): Promise<void> {
-    if (this.isOpen) return;
+  open(): Promise<void> {
+    if (this.isOpen) return Promise.resolve();
+    // Two presses racing the first open share it: a second microphone would leak.
+    if (this.opening && this.openingFor === this.generation) return this.opening;
+    this.openingFor = this.generation;
+    const opening = this.openLine().finally(() => {
+      if (this.opening === opening) this.opening = null;
+    });
+    this.opening = opening;
+    return opening;
+  }
+
+  private async openLine(): Promise<void> {
     this.releaseMic();
-    if (this.releaseBetweenHolds) setAudioSessionType("play-and-record");
-    let stream: MediaStream;
-    try {
+    const generation = this.generation;
+    let stream = takePrimedMic();
+    if (!stream) {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           echoCancellation: true,
@@ -106,21 +123,31 @@ export class HoldRecorder {
           channelCount: 1,
         },
       });
-    } catch (error) {
-      if (this.releaseBetweenHolds) setAudioSessionType("playback");
-      throw error;
     }
-    for (const track of stream.getAudioTracks()) track.enabled = false;
+    const line = stream;
+    // The call ended (or the mode changed) while the microphone was opening: let it go.
+    const abandoned = () => {
+      if (generation === this.generation) return false;
+      for (const track of line.getTracks()) track.stop();
+      return true;
+    };
+    if (abandoned()) return;
+    if (!this.keepTrackLive) for (const track of line.getAudioTracks()) track.enabled = false;
     let graph: { ctx: AudioContext; input: AudioNode };
     try {
       graph = await this.ensureGraph();
     } catch (error) {
-      for (const track of stream.getTracks()) track.stop();
-      if (this.releaseBetweenHolds) setAudioSessionType("playback");
+      for (const track of line.getTracks()) track.stop();
       throw error;
     }
-    this.stream = stream;
-    this.source = graph.ctx.createMediaStreamSource(stream);
+    if (abandoned()) {
+      // The graph finished after close() ran. Close it too, unless a newer open is using it.
+      if (this.openingFor === generation) this.close();
+      return;
+    }
+    this.stream = line;
+    noteMicTrack(line.getAudioTracks()[0] ?? null);
+    this.source = graph.ctx.createMediaStreamSource(line);
     this.source.connect(graph.input);
   }
 
@@ -140,7 +167,8 @@ export class HoldRecorder {
   stop(): HoldClip {
     const durationMs = this.recording ? performance.now() - this.startedAt : 0;
     this.recording = false;
-    if (this.stream) for (const track of this.stream.getAudioTracks()) track.enabled = false;
+    if (this.stream && !this.keepTrackLive)
+      for (const track of this.stream.getAudioTracks()) track.enabled = false;
     this.onLevel(0);
     const rate = this.ctx?.sampleRate ?? 0;
     const total = this.chunks.reduce((n, c) => n + c.length, 0);
@@ -151,18 +179,16 @@ export class HoldRecorder {
       offset += chunk.length;
     }
     this.chunks = [];
-    this.release();
     if (!total || !rate) return { blob: null, durationMs, peak: this.peak };
     const samples = downsample(joined, rate, TARGET_RATE);
     return { blob: wav(samples, TARGET_RATE), durationMs, peak: this.peak };
   }
 
-  /** Between holds: on iPhone the microphone is let go so her voice gets the speaker. */
-  release(): void {
-    if (this.releaseBetweenHolds && !this.recording) this.releaseMic();
-  }
+  /** The hold ended while the microphone was opening. The line stays open for the call. */
+  release(): void {}
 
   close(): void {
+    this.generation += 1;
     this.recording = false;
     this.releaseMic();
     this.teardown?.();
@@ -174,12 +200,11 @@ export class HoldRecorder {
   }
 
   private releaseMic(): void {
-    const had = this.stream !== null;
+    if (this.stream) noteMicTrack(null);
     this.source?.disconnect();
     this.source = null;
     for (const track of this.stream?.getTracks() ?? []) track.stop();
     this.stream = null;
-    if (had && this.releaseBetweenHolds) setAudioSessionType("playback");
   }
 
   /** The capture graph, built once and kept across holds. */

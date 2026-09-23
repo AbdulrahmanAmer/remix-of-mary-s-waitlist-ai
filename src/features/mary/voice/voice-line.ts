@@ -4,6 +4,7 @@ import {
   noteAddresseeVerdict,
   speak,
   startMicSession,
+  stopCurrentLine,
   transcribe,
   type MicSession,
   type SpeakHandle,
@@ -152,6 +153,8 @@ export class VoiceLine {
     // must not keep playing through that render.
     const fraction = handle?.spokenFraction() ?? 0;
     handle?.stop();
+    // A "Play sound" replay is not this line's own; a press or a new line ends it too.
+    stopCurrentLine();
     this.speakHandle = null;
     this.current = null;
     if (current && handle) {
@@ -289,7 +292,7 @@ export class VoiceLine {
     }, 1000);
   }
 
-  /** iPhone had to route her voice to the speakers: the ring switch is the usual culprit. */
+  /** Her voice had to leave the <audio> element for the speakers: the element was not playing. */
   directOutputUsed(): boolean {
     return audioDiagnostics().directOutput;
   }

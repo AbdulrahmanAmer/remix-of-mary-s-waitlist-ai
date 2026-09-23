@@ -72,3 +72,40 @@ UNPROVEN / NOT DONE
 - Verified in Chromium with iPhone UA: 0 peer connections, 0 live mics while she talks, session flips correctly; checks watched-fail against old behaviour. Desktop harness unchanged.
 - /soundcheck page: 6 output routes with heard/silent marks + device state; the evidence path if the fix is not enough.
 - Hands-free mode on iPhone still keeps the mic open (earpiece risk) - hold is default.
+
+## 2026-09-23 - iPhone still silent: rebuilt on ElevenLabs' route (branch claude/iphone-audio-playback-compat-lmufp8)
+FOUND (evidence, not hypotheses)
+- The published site https://mary-waitlist-buddy.lovable.app never got a5156d2: same bundle (routes-B3mltORF.js) has no audioSession code, /soundcheck is 404, and an instrumented Chromium posing as an iPhone 13 shows the old path (24 kHz context, WebRTC loopback, second mic). Lovable only updates the published URL on Publish -> Update.
+- ElevenLabs, from their shipped SDK (@elevenlabs/client 1.25.0, 2026-09-07) and their live site driven in the same instrumented browser: PCM -> AudioWorklet -> MediaStreamAudioDestinationNode -> hidden `<audio autoplay>`; mic opened first and kept live the whole conversation; never navigator.audioSession; on iOS an AudioContext unlocked in the tap + explicit audioElement.play() (1.8.1 fix for a silent first message). OpenAI, Vapi, Retell, LiveKit all end in an `<audio>` element with the mic live.
+- WebKit source (MediaSessionManagerCocoa.mm, AudioContext.cpp): capture -> PlayAndRecord + DefaultToSpeaker; playing `<audio>` (MediaStream-backed counts as MediaType::Audio) -> MediaPlayback; Web Audio alone -> AmbientSound, which the ring/silent switch mutes. AudioContext may start without a tap while the page is capturing. So a5156d2 (Web Audio only, mic closed) was exposed to the silent switch; the old path's likely failure is the looped-back WebRTC track (Safari 27 notes: remote track not unmuted on first packet).
+- Live AI routes began failing ~08:00 UTC: /api/speech 502 "Speech unavailable", /api/turn {"type":"error"}, /api/transcribe 502 (they returned 200 at 07:59). Upstream Lovable AI gateway (credits or rate limit?) - operator must check; she is silent on every device while this lasts.
+
+DONE (uncommitted -> committed on the branch; see git log)
+- iPhone/iPad route "element": hub -> MediaStreamDestination -> hidden `<audio>`, created and play()ed synchronously in the Start tap; no peer connection; direct leg kept as fallback. Desktop/Android keep the "call" (loopback) route.
+- Mic from the tap handed to the hold recorder (takePrimedMic); iPhone keeps the track live for the call (desktop still disables it between holds). App no longer touches navigator.audioSession.
+- resume()/play() waits capped (settled) so a line never hangs; "Can't hear her? / Play sound" on iPhone until the first answer (tap restarts audio in-gesture, then direct leg).
+- /soundcheck rewritten: device/iOS/browser line, ring switch selector, new route with/without mic, app-order test, old routes, copy button. Diagnostics panel shows route + audio session.
+
+VERIFIED (headless Chromium, not a real iPhone)
+- iPhone UA: 0 RTCPeerConnection, 1 getUserMedia, 0 track stops/disables, 0 audioSession writes, element playing; synthetic 24 kHz PCM reaches the element (peak 0.40); touch hold -> /api/transcribe, mic stays live.
+- Desktop UA: loopback route unchanged (callRoute true, peak 0.40 through it), track disabled between holds.
+- typecheck 0 · lint 0 · test 67/67 · build 0.
+
+REVIEW ROUND (adversarial workflow: 14 findings confirmed, 0 refuted) - fixed in the follow-up commit
+- WebKit runs a MediaStream element's clock on wall time: the watchdog only catches a paused element, never a silent one. So "Can't hear her?" stays until "I can hear her" (or 3 answers), and returns when the output moves; Play sound alternates element <-> speakers inside the tap instead of dropping the element for good.
+- A Play sound replay is stopped by a hold press / new line (stopCurrentLine from VoiceLine.stopSpeaking).
+- HoldRecorder: close() during an in-flight open() wins (generation guard); concurrent opens share one mic.
+- Call end releases the hidden element (iOS gives the audio back); Resume rebuilds it inside its tap.
+- /soundcheck: each route test builds and tears down its own element, Web Audio-only tests first, results kept per ring-switch pass across a reload.
+- Verified again in Chromium (iPhone + desktop profiles); gates 0/0/67/0.
+
+FOLLOW-UP (independent diagnosis + 3 skeptics from the research workflow)
+- Added ElevenLabs' element prime: after the mic is granted, ~100 ms of silence through hub -> element, then play() again (primeOutput).
+- Safari on a Mac also takes the element route (isWebKitEngine: navigator.vendor Apple): the looped-back WebRTC track can stay muted there until Safari 27. Chrome/Firefox/Edge desktop keep the loopback.
+- Verified in Chromium: iPhone, desktop and Mac-Safari (vendor) profiles; gates 0/0/67/0.
+- Not done (noted as risks): screen wake lock (ElevenLabs holds one), a "playback" audio-session backstop for no-mic sessions, hands-free switch keeping capture continuous, AirPods staying in call profile while the mic is live.
+- The phone may also have used the Lovable editor preview (iframe, possibly without allow="microphone"); test on the published URL in Safari itself.
+
+UNPROVEN / NEXT
+- A real iPhone. Operator: merge, Publish -> Update in Lovable, then on the iPhone open /soundcheck (ring switch silent and ring) and a real call.
+- Fix the AI gateway failure first, or no device will hear her.

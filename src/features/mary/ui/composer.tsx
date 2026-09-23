@@ -155,6 +155,7 @@ export function Composer({
   onSend,
   onMicButton,
   onPlaySound,
+  onHearHer,
   onHoldStart,
   onHoldEnd,
 }: {
@@ -163,6 +164,7 @@ export function Composer({
   onSend: (text: string) => void;
   onMicButton: () => void;
   onPlaySound: () => void;
+  onHearHer: () => void;
   onHoldStart: () => void;
   onHoldEnd: () => void;
 }) {
@@ -317,16 +319,20 @@ export function Composer({
         </AnimatePresence>
         {notices.silentHint && (
           <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-accent-text">
-            <span>
-              Can't hear her? Turn the ring switch on the side of your phone on, or plug in
-              headphones.
-            </span>
+            <span>Can't hear her? Turn the volume up and tap Play sound.</span>
             <button
               type="button"
               onClick={onPlaySound}
               className="rounded-full px-2.5 py-0.5 ring-1 ring-border transition-colors hover:bg-muted"
             >
               Play sound
+            </button>
+            <button
+              type="button"
+              onClick={onHearHer}
+              className="rounded-full px-2.5 py-0.5 text-muted-foreground transition-colors hover:bg-muted"
+            >
+              I can hear her
             </button>
           </p>
         )}

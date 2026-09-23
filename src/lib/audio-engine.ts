@@ -137,16 +137,22 @@ export function getAudioContext(): AudioContext {
 }
 
 // ---------------------------------------------------------------------------
-// Output — her voice leaves through a loopback peer connection and out of an
-// <audio> element. That is the one route browsers treat as "sound of the far
-// end", so their echo canceller subtracts it from the microphone. Where that
-// route cannot be built, or proves inaudible (iPhone silent switch, earpiece
-// routing), the same audio goes straight to the speakers instead: being heard
-// matters more than the canceller's help, and the local echo model covers it.
+// Output — her voice always ends in an <audio> element. On desktop and Android
+// it reaches the element through a loopback peer connection: the one route
+// browsers treat as "sound of the far end", so their echo canceller subtracts
+// it from the microphone. On iPhone and iPad the element plays the Web Audio
+// stream directly, with no peer connection (ElevenLabs' route). Either way the
+// page is playing a media element, which is what keeps iOS from classing it as
+// "ambient" sound that the ring/silent switch mutes.
+//
+// Where the element proves inaudible, the same audio goes straight to the
+// speakers instead: being heard matters more than the canceller's help, and
+// the local echo model covers it. An element that is still playing (silence)
+// then keeps iOS treating the page as playing media.
 //
 // The two legs are exclusive. Everything she says enters one hub, and exactly
-// one of `callGain` (→ call route → element) or `directGain` (→ speakers) is
-// open at any moment — never both, or the person hears every line twice.
+// one of `callGain` (→ element) or `directGain` (→ speakers) is open at any
+// moment — never both, or the person hears every line twice.
 // ---------------------------------------------------------------------------
 type Sink = {
   node: MediaStreamAudioDestinationNode;
@@ -218,10 +224,11 @@ function enableDirectOutput() {
 }
 
 /**
- * iPhone and iPad (every browser there runs WebKit). iOS decides where sound
- * goes from what the page is doing: an open microphone or a call-style stream
- * puts the whole page in "phone call" mode, and her voice then goes to the
- * earpiece at a whisper or nowhere at all.
+ * iPhone and iPad (every browser there runs WebKit). iOS picks the page's audio
+ * category from what the page is doing: Web Audio alone is "ambient" (muted by
+ * the ring/silent switch), a playing media element is "playback", and an open
+ * microphone is "play and record" (loudspeaker by default). None of the last
+ * two is silenced by the switch.
  */
 export function isAppleMobile(): boolean {
   if (typeof navigator === "undefined") return false;
@@ -231,19 +238,60 @@ export function isAppleMobile(): boolean {
   );
 }
 
-/** Her voice goes straight to the speakers: no call route, no hidden element. */
-let directOnly = false;
-
-export function setDirectOutput(on: boolean) {
-  directOnly = on;
-  if (on) sink?.release();
-  if (sharedContext && hub) setRoute(on);
+/**
+ * WebKit: Safari on a Mac, and every browser on iPhone and iPad. It can leave a
+ * looped-back call stream muted (fixed only in Safari 27), so her voice takes
+ * the element route there. It still passes WebKit's echo canceller, which
+ * renders MediaStream playback through the same unit as the microphone.
+ */
+export function isWebKitEngine(): boolean {
+  if (typeof navigator === "undefined") return false;
+  return navigator.vendor === "Apple Computer, Inc." || isAppleMobile();
 }
 
 /**
- * iOS 17+ lets the page say what it is doing instead of iOS guessing:
- * "playback" (speaker, ignores the silent switch) while she talks,
- * "play-and-record" only while the person holds to talk.
+ * How her voice reaches the <audio> element:
+ * - "call": out and back through a loopback peer connection (desktop, Android);
+ * - "element": the Web Audio stream plays in the element directly (iPhone, iPad);
+ * - "direct": no element at all, straight to the speakers (sound check only).
+ */
+export type OutputRoute = "call" | "element" | "direct";
+let outputRoute: OutputRoute = "call";
+
+/** Set before the first line, inside the tap that starts the call. */
+export function setOutputRoute(next: OutputRoute) {
+  if (next === outputRoute) return;
+  outputRoute = next;
+  // The next line (or unlock) builds the route that was asked for.
+  sink?.release();
+  if (sharedContext && hub) setRoute(next === "direct");
+}
+
+/**
+ * Starts sound the way iOS only allows inside a tap: one silent sample into
+ * the context and a resume, so the context may make sound for the rest of the
+ * page's life, and a play() on the element, so it may too. Synchronous on
+ * purpose: nothing here may wait, or the tap is over by the time it runs.
+ */
+function startInGesture(ctx: AudioContext) {
+  try {
+    const blank = ctx.createBuffer(1, 1, ctx.sampleRate);
+    const source = ctx.createBufferSource();
+    source.buffer = blank;
+    source.connect(ctx.destination);
+    source.start(0);
+  } catch {
+    /* nothing to unlock */
+  }
+  // iOS also reports "interrupted", not only "suspended".
+  if (ctx.state !== "running") void ctx.resume().catch(() => {});
+  if (sink && !sink.stale && sink.element.paused) void sink.element.play().catch(() => {});
+}
+
+/**
+ * The Audio Session API (Safari 16.4+). The app itself leaves the type on
+ * "auto", as ElevenLabs does: iOS then follows the page (element playing,
+ * microphone open). Kept for the sound check, which compares the types.
  */
 export function setAudioSessionType(type: "playback" | "play-and-record" | "auto") {
   const session = (navigator as unknown as { audioSession?: { type: string } }).audioSession;
@@ -345,6 +393,17 @@ function ensureSink(ctx: AudioContext): Sink {
   // before the loopback negotiation's first await — swapping its source later
   // keeps that permission.
   const primed = attach(element, node.stream, 1500).then(() => !element.paused);
+  sink = created;
+  if (outputRoute !== "call") {
+    // iPhone and iPad: the element plays the Web Audio stream as it is. A
+    // looped-back call stream can arrive muted there, and the element is all
+    // iOS needs to treat the page as playing media.
+    created.ready = primed.then((playing) => {
+      trace({ type: "sinkElement", playing });
+      return playing;
+    });
+    return created;
+  }
   created.ready = loopback(node.stream)
     .then(async (route) => {
       if (created.stale) {
@@ -368,38 +427,85 @@ function ensureSink(ctx: AudioContext): Sink {
   return created;
 }
 
-/** Must finish before her first line, or that line escapes the canceller. */
+/**
+ * Waits for a promise, but never longer than `ms`. WebKit can leave resume()
+ * and play() pending while the audio session is interrupted (a permission
+ * prompt, a phone call), and a line must never hang on that.
+ */
+function settled<T>(promise: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const timer = window.setTimeout(() => resolve(fallback), ms);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      () => {
+        window.clearTimeout(timer);
+        resolve(fallback);
+      },
+    );
+  });
+}
+
+/**
+ * Call inside the tap that starts the call, before anything is awaited. Must
+ * finish before her first line, or that line escapes the canceller.
+ */
 export async function unlockAudio() {
   const ctx = getAudioContext();
-  if (directOnly) {
+  if (outputRoute === "direct") {
     ensureBus(ctx);
     setRoute(true);
-    // One silent sample, started inside the tap: iOS then treats this
-    // context as allowed to make sound for the rest of the page's life.
-    try {
-      const blank = ctx.createBuffer(1, 1, ctx.sampleRate);
-      const source = ctx.createBufferSource();
-      source.buffer = blank;
-      source.connect(ctx.destination);
-      source.start(0);
-    } catch {
-      /* nothing to unlock */
-    }
-    // iOS also reports "interrupted", not only "suspended".
-    if (ctx.state !== "running") await ctx.resume().catch(() => {});
+    startInGesture(ctx);
+    if (ctx.state !== "running") await settled(ctx.resume(), 500, undefined);
     trace({ type: "unlock", state: ctx.state, rate: ctx.sampleRate });
     return;
   }
-  if (ctx.state !== "running") await ctx.resume().catch(() => {});
+  // The element is created and told to play in this same tick: iPhone grants
+  // playback only while the tap is being handled.
+  ensureSink(ctx);
+  startInGesture(ctx);
+  if (ctx.state !== "running") await settled(ctx.resume(), 500, undefined);
+  trace({ type: "unlock", state: ctx.state, rate: ctx.sampleRate, route: outputRoute });
   // A transient autoplay/WebRTC failure gets one clean rebuild.
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const current = ensureSink(ctx);
-    if (await current.ready) return;
+    // The call route has its own 3 s negotiation timeout; this only caps a play() that never settles.
+    if (await settled(current.ready, 5000, false)) return;
     if (current.ok) return;
     // Degraded but audible is a valid outcome; only a dead element is retried.
     if (!current.element.paused) return;
     current.release();
   }
+}
+
+/**
+ * ElevenLabs' iOS prime, once the microphone is live: about 100 ms of silence
+ * through the element's own path, then play() again, so iOS treats the element
+ * as playing media before her first word arrives.
+ */
+export function primeOutput() {
+  const ctx = sharedContext;
+  if (!ctx || !hub || !sink || sink.stale) return;
+  try {
+    const silence = ctx.createBuffer(1, Math.round(ctx.sampleRate * 0.1), ctx.sampleRate);
+    const source = ctx.createBufferSource();
+    source.buffer = silence;
+    source.connect(hub);
+    source.start();
+  } catch {
+    /* nothing to prime */
+  }
+  void sink.element.play().catch(() => {});
+}
+
+/**
+ * The person tapped "Play sound": they hear nothing. The tap is a fresh chance
+ * to start everything iOS may have stopped (an interruption, a lost gesture).
+ */
+function restartInGesture() {
+  if (sharedContext) startInGesture(sharedContext);
 }
 
 /**
@@ -418,7 +524,7 @@ function outputNode(ctx: AudioContext): AudioNode {
   // A phone call, Siri or the mic opening can leave the context stopped; every
   // line starts it again.
   if (ctx.state !== "running") void ctx.resume().catch(() => {});
-  if (directOnly) {
+  if (outputRoute === "direct") {
     const bus = ensureBus(ctx);
     if (!directOn) setRoute(true);
     return bus.hub;
@@ -431,9 +537,11 @@ function outputNode(ctx: AudioContext): AudioNode {
 /**
  * Watches the element's own clock while she is audibly producing sound. If it
  * does not move for over a second in that state the element is not really
- * playing (blocked autoplay, silent switch, a routing the phone refuses), so
- * the speakers take over. Waiting on the network, a paused line, or a route
- * that was just rebuilt is never mistaken for a dead element.
+ * playing (blocked autoplay, an interruption), so the speakers take over.
+ * Waiting on the network, a paused line, or a route that was just rebuilt is
+ * never mistaken for a dead element. It cannot hear the room: WebKit runs a
+ * MediaStream element's clock on wall time, so an element that plays without
+ * being heard looks healthy. On iPhone the "Can't hear her?" tap covers that.
  */
 function watchOutput() {
   if (watching) return;
@@ -474,7 +582,7 @@ export function audioDiagnostics() {
     elementPaused: sink ? sink.element.paused : true,
     elementTime: sink ? Math.round(sink.element.currentTime * 100) / 100 : 0,
     directOutput: directOn,
-    directOnly,
+    route: outputRoute,
     audioSession:
       (navigator as unknown as { audioSession?: { type: string } }).audioSession?.type ?? "n/a",
     echoCancellationDegraded: directOn || !(sink?.ok ?? false),
@@ -503,19 +611,39 @@ export function audioDiagnostics() {
 
 /** The last thing she said out loud, so it can be played again on demand. */
 let lastSpokenText = "";
+
+/** Back from the speakers to the element (rebuilt, and started, inside the calling tap). */
+function leaveDirectOutput() {
+  if (!directOn || !sharedContext || outputRoute === "direct") return;
+  ensureSink(sharedContext);
+  startInGesture(sharedContext);
+  setRoute(false);
+  trace({ type: "elementOutput" });
+}
+
 /**
  * Plays her last line again — only when she is not already in the middle of
  * one. A line in flight is left alone: restarting it would start a second
  * copy and the conversation's next beat would then cut that copy off.
- * `viaSpeakers` is for the "can't hear her" case: it moves her voice off the
- * call route for good (taking effect mid-line if she is talking), so it should
- * only follow a person saying they hear nothing.
+ * `otherOutput` is for the "can't hear her" tap: it restarts whatever iOS may
+ * have stopped, then moves her voice to the other leg (element or speakers,
+ * taking effect mid-line), so a second tap tries the first leg again.
  */
-export function replayLastLine(opts: { viaSpeakers?: boolean } = {}): SpeakHandle | null {
-  if (opts.viaSpeakers) enableDirectOutput();
+export function replayLastLine(opts: { otherOutput?: boolean } = {}): SpeakHandle | null {
+  if (opts.otherOutput) {
+    restartInGesture();
+    if (directOn) leaveDirectOutput();
+    else enableDirectOutput();
+  }
   if (currentHandle) return currentHandle;
   if (!lastSpokenText) return null;
   return speak(lastSpokenText);
+}
+
+/** Ends whatever line is playing, including a replay the conversation did not start. */
+export function stopCurrentLine() {
+  currentHandle?.stop();
+  currentHandle = null;
 }
 
 // ---------------------------------------------------------------------------
@@ -1163,10 +1291,28 @@ export async function primeMicPermission(): Promise<void> {
   }
 }
 
-/** Hold to talk opens its own microphone per hold; the one from the tap is let go. */
+/**
+ * Hands over the microphone opened during the tap, so the line that records
+ * next never opens a second one (on iPhone every open reconfigures the audio
+ * session). Null when there is none, or it has died since.
+ */
+export function takePrimedMic(): MediaStream | null {
+  const stream = primedStream;
+  primedStream = null;
+  if (stream?.getAudioTracks().some((track) => track.readyState === "live")) return stream;
+  stream?.getTracks().forEach((track) => track.stop());
+  return null;
+}
+
+/** Nobody took the microphone from the tap (the call ended first): let it go. */
 export function releasePrimedMic() {
   primedStream?.getTracks().forEach((track) => track.stop());
   primedStream = null;
+}
+
+/** The microphone recording right now, for the on-phone diagnostics panel. */
+export function noteMicTrack(track: MediaStreamTrack | null) {
+  activeMicTrack = track;
 }
 
 export async function startMicSession(options: MicSessionOptions): Promise<MicSession> {
@@ -1183,12 +1329,10 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   let stream: MediaStream;
   // A stream captured during the tap is reused: iPhone Safari only reliably
   // grants the microphone while the tap is still being handled.
-  const primed = primedStream;
-  primedStream = null;
-  if (primed && primed.getAudioTracks().some((track) => track.readyState === "live")) {
+  const primed = takePrimedMic();
+  if (primed) {
     stream = primed;
   } else {
-    primed?.getTracks().forEach((track) => track.stop());
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -1234,7 +1378,7 @@ export async function startMicSession(options: MicSessionOptions): Promise<MicSe
   const ctx = new Ctor();
   // iPhone Safari hands back a suspended context whenever the gesture that
   // started the call has already settled; without this the line is deaf.
-  if (ctx.state === "suspended") await ctx.resume().catch(() => {});
+  if (ctx.state === "suspended") await settled(ctx.resume(), 1000, undefined);
   const source = ctx.createMediaStreamSource(stream);
   const analyser = ctx.createAnalyser();
   // 1024 gives ~47Hz bins at 48k: fine enough to separate the speech band from

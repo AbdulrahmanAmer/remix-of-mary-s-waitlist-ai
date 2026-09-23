@@ -92,6 +92,7 @@ export function CallStage({
   onSend,
   onMicButton,
   onPlaySound,
+  onHearHer,
   onToggleVoice,
   onHoldStart,
   onHoldEnd,
@@ -105,6 +106,7 @@ export function CallStage({
   onSend: (text: string) => void;
   onMicButton: () => void;
   onPlaySound: () => void;
+  onHearHer: () => void;
   onToggleVoice: () => void;
   onHoldStart: () => void;
   onHoldEnd: () => void;
@@ -274,6 +276,7 @@ export function CallStage({
           onSend={onSend}
           onMicButton={onMicButton}
           onPlaySound={onPlaySound}
+          onHearHer={onHearHer}
           onHoldStart={onHoldStart}
           onHoldEnd={onHoldEnd}
         />

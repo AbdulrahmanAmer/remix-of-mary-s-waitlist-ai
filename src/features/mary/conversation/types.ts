@@ -43,7 +43,7 @@ export type Notices = {
   echoHint: boolean;
   /** A line's audio never arrived. */
   voiceFailed: boolean;
-  /** iPhone had to route her voice to the speakers: the ring switch is the usual cause. */
+  /** iPhone: a "Can't hear her?" way out, until they answer or when her voice had to move. */
   silentHint: boolean;
   /** A hold produced no words: "Didn't catch that". */
   missedHold: boolean;
