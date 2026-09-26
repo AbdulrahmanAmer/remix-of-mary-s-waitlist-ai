@@ -62,6 +62,42 @@ describe("checkApiRequest", () => {
   });
 });
 
+describe("Retell budgets", () => {
+  it("takes a large webhook body and refuses a larger one", () => {
+    const webhook = (bytes: number) =>
+      checkApiRequest(post("/api/retell/webhook", { "content-length": String(bytes) }));
+    expect(webhook(1.5 * 1024 * 1024)).toEqual({ ok: true });
+    expect(webhook(3 * 1024 * 1024)).toMatchObject({ ok: false, status: 413 });
+  });
+
+  it("lets Retell's one IP call its functions freely", () => {
+    const t0 = 2_000_000;
+    const retell = { "cf-connecting-ip": "100.20.5.228" };
+    for (let i = 0; i < 100; i++) {
+      expect(checkApiRequest(post("/api/retell/functions/save-lead", retell), t0 + i).ok).toBe(
+        true,
+      );
+    }
+  });
+
+  it("limits how many web calls one IP can mint", () => {
+    const t0 = 3_000_000;
+    for (let i = 0; i < 20; i++) {
+      expect(checkApiRequest(post("/api/retell/web-call"), t0 + i).ok).toBe(true);
+    }
+    expect(checkApiRequest(post("/api/retell/web-call"), t0 + 20)).toMatchObject({
+      ok: false,
+      status: 429,
+    });
+  });
+
+  it("refuses a cross-site web call", () => {
+    expect(
+      checkApiRequest(post("/api/retell/web-call", { origin: "https://evil.test" })),
+    ).toMatchObject({ ok: false, status: 403 });
+  });
+});
+
 describe("TurnInput bounds", () => {
   const base = { collected: {}, flags: { revealed: false, lanesDone: false } };
 

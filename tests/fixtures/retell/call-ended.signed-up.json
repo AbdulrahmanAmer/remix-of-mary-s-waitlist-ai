@@ -1,0 +1,210 @@
+{
+  "event": "call_ended",
+  "call": {
+    "call_type": "web_call",
+    "call_id": "call_fixture_live_0001",
+    "agent_id": "agent_mary_test",
+    "agent_version": 3,
+    "agent_name": "MARY waitlist",
+    "call_status": "ended",
+    "start_timestamp": 1789999800000,
+    "end_timestamp": 1789999992000,
+    "duration_ms": 192000,
+    "disconnection_reason": "agent_hangup",
+    "metadata": {
+      "v": 1,
+      "app": "mary-waitlist",
+      "sessionId": "w_lx3k2_ab12cd",
+      "known": {},
+      "context": {
+        "page": "https://mary.example.com/",
+        "referrer": "https://www.google.com/",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15",
+        "language": "en-US",
+        "timezone": "Europe/Berlin"
+      },
+      "startedAt": "2026-09-21T14:10:49.412Z",
+      "lead": {
+        "saved": true,
+        "configured": true,
+        "outcome": "signed_up",
+        "position": 412,
+        "collected": {
+          "name": "Leo Marsh",
+          "business": "Marsh Plumbing",
+          "industry": "plumbing",
+          "operations": "calls come in, whoever's free grabs them",
+          "email": "leo@marshplumbing.com",
+          "phone": "skipped"
+        },
+        "at": 1789999980000
+      }
+    },
+    "retell_llm_dynamic_variables": {
+      "opening_line": "Hey — good to meet you. I'm MARY, the AI Revenue Concierge from Omnikom. OmniSuite is the revenue engine I run on — so what should I call you?",
+      "known_summary": "nothing yet",
+      "field_notes": "none yet"
+    },
+    "transcript": "Agent: Hey — good to meet you. I'm MARY, the AI Revenue Concierge from Omnikom. OmniSuite is the revenue engine I run on — so what should I call you?\nUser: I'm Leo, Leo Marsh.\nAgent: Good to meet you, Leo. What's the business?\nUser: We're Marsh Plumbing — we do plumbing, mostly emergency call-outs.\nAgent: Emergency work lives or dies on speed. When a call comes in today, what happens to it?\nUser: Calls come in and whoever's free grabs them, honestly.\nAgent: Here's the thing — no form. You already gave me all of it. That's Convert: every call-out answered and booked while your team is on a job.\nUser: Okay, that's actually useful.\nAgent: Cultivate keeps past customers warm, and Recover calls back the ones you missed. Where should I send your early access?\nAgent: Got it — leo@marshplumbing.com. Want to add a phone number, or is email enough?\nUser: Email's fine, skip the phone.\nAgent: You're number 412, Leo. Thanks for signing up — we'll be in touch as soon as OmniSuite launches, a product by Omnikom.\n",
+    "transcript_object": [
+      {
+        "role": "agent",
+        "content": "Hey — good to meet you. I'm MARY, the AI Revenue Concierge from Omnikom. OmniSuite is the revenue engine I run on — so what should I call you?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "I'm Leo, Leo Marsh.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Good to meet you, Leo. What's the business?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "We're Marsh Plumbing — we do plumbing, mostly emergency call-outs.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Emergency work lives or dies on speed. When a call comes in today, what happens to it?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Calls come in and whoever's free grabs them, honestly.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Here's the thing — no form. You already gave me all of it. That's Convert: every call-out answered and booked while your team is on a job.",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Okay, that's actually useful.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Cultivate keeps past customers warm, and Recover calls back the ones you missed. Where should I send your early access?",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Got it — leo@marshplumbing.com. Want to add a phone number, or is email enough?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Email's fine, skip the phone.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "You're number 412, Leo. Thanks for signing up — we'll be in touch as soon as OmniSuite launches, a product by Omnikom.",
+        "words": []
+      }
+    ],
+    "transcript_with_tool_calls": [
+      {
+        "role": "agent",
+        "content": "Hey — good to meet you. I'm MARY, the AI Revenue Concierge from Omnikom. OmniSuite is the revenue engine I run on — so what should I call you?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "I'm Leo, Leo Marsh.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Good to meet you, Leo. What's the business?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "We're Marsh Plumbing — we do plumbing, mostly emergency call-outs.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Emergency work lives or dies on speed. When a call comes in today, what happens to it?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Calls come in and whoever's free grabs them, honestly.",
+        "words": []
+      },
+      {
+        "role": "tool_call_invocation",
+        "tool_call_id": "tc_note_1",
+        "name": "note_details",
+        "arguments": "{\"name\":\"Leo Marsh\",\"name_evidence\":\"I'm Leo, Leo Marsh\",\"business\":\"Marsh Plumbing\",\"business_evidence\":\"we're Marsh Plumbing\",\"industry\":\"plumbing\",\"industry_evidence\":\"we do plumbing, mostly emergency call-outs\",\"operations\":\"calls come in, whoever's free grabs them\",\"operations_evidence\":\"whoever's free grabs them\"}"
+      },
+      {
+        "role": "tool_call_result",
+        "tool_call_id": "tc_note_1",
+        "content": "{\"recorded\":true,\"saved\":false,\"configured\":true,\"outcome\":\"in_progress\",\"position\":null,\"collected\":{\"name\":\"Leo Marsh\",\"business\":\"Marsh Plumbing\",\"industry\":\"plumbing\",\"operations\":\"calls come in, whoever's free grabs them\"},\"missing\":[],\"rejected\":[],\"message\":\"Noted. Now the reveal: no form, you already have it all — credit Convert by name, and ask nothing in that turn.\"}",
+        "successful": true
+      },
+      {
+        "role": "agent",
+        "content": "Here's the thing — no form. You already gave me all of it. That's Convert: every call-out answered and booked while your team is on a job.",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Okay, that's actually useful.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Cultivate keeps past customers warm, and Recover calls back the ones you missed. Where should I send your early access?",
+        "words": []
+      },
+      {
+        "role": "injected",
+        "content": "The visitor typed this instead of saying it: leo@marshplumbing.com",
+        "time_sec": 71.4
+      },
+      {
+        "role": "agent",
+        "content": "Got it — leo@marshplumbing.com. Want to add a phone number, or is email enough?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Email's fine, skip the phone.",
+        "words": []
+      },
+      {
+        "role": "tool_call_invocation",
+        "tool_call_id": "tc_save_1",
+        "name": "save_lead",
+        "arguments": "{\"stage\":\"final\",\"name\":\"Leo Marsh\",\"name_evidence\":\"I'm Leo, Leo Marsh\",\"email\":\"leo@marshplumbing.com\",\"phone\":\"skipped\",\"business\":\"Marsh Plumbing\",\"business_evidence\":\"we're Marsh Plumbing\",\"industry\":\"plumbing\",\"industry_evidence\":\"we do plumbing, mostly emergency call-outs\",\"operations\":\"calls come in, whoever's free grabs them\",\"operations_evidence\":\"whoever's free grabs them\",\"callback_requested\":false}"
+      },
+      {
+        "role": "tool_call_result",
+        "tool_call_id": "tc_save_1",
+        "content": "{\"recorded\":true,\"saved\":true,\"configured\":true,\"outcome\":\"signed_up\",\"position\":412,\"collected\":{\"name\":\"Leo Marsh\",\"business\":\"Marsh Plumbing\",\"industry\":\"plumbing\",\"operations\":\"calls come in, whoever's free grabs them\",\"email\":\"leo@marshplumbing.com\",\"phone\":\"skipped\"},\"missing\":[],\"rejected\":[],\"message\":\"Saved. They are number 412 on the early-access list. Give a short send-off with their first name and the number, then say the close line and call end_call.\"}",
+        "successful": true
+      },
+      {
+        "role": "agent",
+        "content": "You're number 412, Leo. Thanks for signing up — we'll be in touch as soon as OmniSuite launches, a product by Omnikom.",
+        "words": []
+      },
+      {
+        "role": "tool_call_invocation",
+        "tool_call_id": "tc_end_1",
+        "name": "end_call",
+        "arguments": "{}"
+      }
+    ],
+    "data_storage_setting": "everything"
+  }
+}
