@@ -1,0 +1,139 @@
+{
+  "event": "call_ended",
+  "call": {
+    "call_type": "web_call",
+    "call_id": "call_fixture_gone_0002",
+    "agent_id": "agent_mary_test",
+    "agent_version": 3,
+    "agent_name": "MARY waitlist",
+    "call_status": "ended",
+    "start_timestamp": 1789999700000,
+    "end_timestamp": 1789999790000,
+    "duration_ms": 90000,
+    "disconnection_reason": "user_hangup",
+    "metadata": {
+      "v": 1,
+      "app": "mary-waitlist",
+      "sessionId": "w_lx9p1_zz77qq",
+      "known": {},
+      "context": {
+        "page": "https://mary.example.com/",
+        "referrer": "https://www.google.com/",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15",
+        "language": "en-GB",
+        "timezone": "Europe/London"
+      },
+      "startedAt": "2026-09-21T14:08:19.120Z",
+      "lead": {
+        "saved": false,
+        "configured": true,
+        "outcome": "in_progress",
+        "position": null,
+        "collected": {
+          "name": "Priya Shah",
+          "business": "Shah Dental",
+          "industry": "dental clinic",
+          "operations": "the front desk answers and books them"
+        },
+        "at": 1789999760000
+      }
+    },
+    "transcript": "Agent: Hi there. I'm MARY — I'm what OmniSuite sounds like, the system that decides which lead to work, when, and how. What's your name?\nUser: Priya, Priya Shah.\nAgent: Lovely to meet you, Priya. What do you run?\nUser: I run Shah Dental, a dental clinic in Leeds.\nAgent: And when a new patient calls or fills in a form, what happens next?\nUser: Mostly the front desk answers and books them, when they can.\nAgent: Here's the thing — no form. You already gave me all of it. That's Convert: every new patient answered in seconds, even when the desk is busy.\nUser: Sorry, I have to run — someone's at the door.\n",
+    "transcript_object": [
+      {
+        "role": "agent",
+        "content": "Hi there. I'm MARY — I'm what OmniSuite sounds like, the system that decides which lead to work, when, and how. What's your name?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Priya, Priya Shah.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Lovely to meet you, Priya. What do you run?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "I run Shah Dental, a dental clinic in Leeds.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "And when a new patient calls or fills in a form, what happens next?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Mostly the front desk answers and books them, when they can.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Here's the thing — no form. You already gave me all of it. That's Convert: every new patient answered in seconds, even when the desk is busy.",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Sorry, I have to run — someone's at the door.",
+        "words": []
+      }
+    ],
+    "transcript_with_tool_calls": [
+      {
+        "role": "agent",
+        "content": "Hi there. I'm MARY — I'm what OmniSuite sounds like, the system that decides which lead to work, when, and how. What's your name?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Priya, Priya Shah.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Lovely to meet you, Priya. What do you run?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "I run Shah Dental, a dental clinic in Leeds.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "And when a new patient calls or fills in a form, what happens next?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Mostly the front desk answers and books them, when they can.",
+        "words": []
+      },
+      {
+        "role": "tool_call_invocation",
+        "tool_call_id": "tc_note_2",
+        "name": "note_details",
+        "arguments": "{\"name\":\"Priya Shah\",\"name_evidence\":\"Priya, Priya Shah\",\"business\":\"Shah Dental\",\"business_evidence\":\"I run Shah Dental\",\"industry\":\"dental clinic\",\"industry_evidence\":\"a dental clinic in Leeds\",\"operations\":\"the front desk answers and books them\",\"operations_evidence\":\"the front desk answers and books them\"}"
+      },
+      {
+        "role": "tool_call_result",
+        "tool_call_id": "tc_note_2",
+        "content": "{\"recorded\":true,\"saved\":false,\"configured\":true,\"outcome\":\"in_progress\",\"position\":null,\"collected\":{\"name\":\"Priya Shah\",\"business\":\"Shah Dental\",\"industry\":\"dental clinic\",\"operations\":\"the front desk answers and books them\"},\"missing\":[],\"rejected\":[],\"message\":\"Noted. Now the reveal: no form, you already have it all — credit Convert by name, and ask nothing in that turn.\"}",
+        "successful": true
+      },
+      {
+        "role": "agent",
+        "content": "Here's the thing — no form. You already gave me all of it. That's Convert: every new patient answered in seconds, even when the desk is busy.",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Sorry, I have to run — someone's at the door.",
+        "words": []
+      }
+    ]
+  }
+}

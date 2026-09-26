@@ -22,6 +22,11 @@ const BUDGETS: Record<string, Budget> = {
   "/api/transcribe": { perMinute: 60, maxBytes: 12 * KB * KB },
   "/api/reflect": { perMinute: 6, maxBytes: 128 * KB },
   "/api/lead": { perMinute: 20, maxBytes: 128 * KB },
+  "/api/retell/web-call": { perMinute: 20, maxBytes: 8 * KB },
+  "/api/retell/call-status": { perMinute: 60, maxBytes: 2 * KB },
+  "/api/retell/inject": { perMinute: 30, maxBytes: 4 * KB },
+  "/api/retell/functions/save-lead": { perMinute: 600, maxBytes: 1024 * KB }, // all Retell traffic is one IP; HMAC is the gate
+  "/api/retell/webhook": { perMinute: 600, maxBytes: 2048 * KB },
 };
 const DEFAULT_BUDGET: Budget = { perMinute: 30, maxBytes: 64 * KB };
 const WINDOW_MS = 60_000;

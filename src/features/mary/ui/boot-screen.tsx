@@ -14,7 +14,7 @@ export function BootScreen({ leaving = false }: { leaving?: boolean }) {
         <p className="mary-boot-word mt-9 font-display text-lg font-semibold tracking-[0.42em] text-ink">
           MARY
         </p>
-        <p className="mary-boot-caption mt-4 text-[0.68rem] font-medium uppercase tracking-[0.22em] text-muted-foreground">
+        <p className="mary-boot-caption mt-4 text-xs font-medium uppercase tracking-[0.22em] text-muted-foreground">
           Preparing your conversation
         </p>
       </div>

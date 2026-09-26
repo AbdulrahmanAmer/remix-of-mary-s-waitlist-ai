@@ -3,8 +3,10 @@
  *
  * The model returns each captured value together with the person's own words
  * that support it. Before anything is stored, those words are checked against
- * what the person really said. A guess with no words behind it is dropped, so
- * MARY has to keep the conversation going instead of assuming.
+ * what the person really said — and the value itself has to follow from them:
+ * a real quote ("I run a small practice") never licenses a guess ("dental").
+ * A value with no words behind it is dropped, so MARY has to keep the
+ * conversation going instead of assuming.
  *
  * Pure and dependency-free so it runs on the server and in tests.
  */
@@ -12,33 +14,48 @@ import { contentTokens, tokens } from "./voice-logic";
 
 export type Proposed = { value: string | null; evidence: string | null };
 
-const AFFIRMATION_START = new Set([
+/**
+ * Recorded as the business when the person has none — a student, someone
+ * job-hunting, just curious. They still get their spot; industry and
+ * operations stay empty.
+ */
+export const NO_BUSINESS = "none";
+
+/** Words that only ever mean yes. */
+const STRONG_YES = new Set([
   "yes",
   "yeah",
   "yep",
   "yup",
+  "yea",
+  "ya",
   "exactly",
   "correct",
-  "right",
-  "thats",
-  "that's",
-  "pretty",
-  "close",
-  "spot",
-  "sure",
   "indeed",
   "bingo",
-  "you",
   "true",
   "absolutely",
   "definitely",
   "precisely",
-  "mhm",
-  "uh-huh",
-  "yea",
-  "ya",
   "affirmative",
   "totally",
+  "mhm",
+  "uh-huh",
+]);
+/**
+ * Starters that open a yes ("pretty much", "spot on") but just as often a
+ * whole answer of their own ("Right, we're a law firm", "You know, we mostly
+ * do cars"). They count as a yes only when nothing much follows them.
+ */
+const SOFT_YES = new Set([
+  "right",
+  "thats",
+  "youre",
+  "pretty",
+  "close",
+  "spot",
+  "sure",
+  "you",
   "basically",
   "more",
 ]);
@@ -63,12 +80,16 @@ const NEGATION = new Set([
   "different",
 ]);
 
-/** "yeah", "that's right", "pretty much" — a yes with no correction attached. */
+/** "yeah", "that's right", "pretty much" — a yes with no correction or answer attached. */
 export function isAffirmation(text: string): boolean {
   const list = tokens(text);
   if (list.length === 0 || list.length > 7) return false;
-  if (!AFFIRMATION_START.has(list[0]!)) return false;
-  return !list.some((t) => NEGATION.has(t));
+  if (list.some((t) => NEGATION.has(t))) return false;
+  const first = list[0]!;
+  if (STRONG_YES.has(first)) return true;
+  if (!SOFT_YES.has(first)) return false;
+  // "pretty much", "close enough", "you got it": a soft yes carries no answer of its own.
+  return contentTokens(list).length <= 2;
 }
 
 /** "Jon" vs "John": one edit apart, which is what speech recognition does to names. */
@@ -124,8 +145,202 @@ export function assistantOffered(value: string, lastAssistant: string | undefine
   return hits / content.length >= 0.5;
 }
 
-// Words that point at real estate and finance, the fields MARY is most tempted
-// to default to. If she names one and the person never came near it, she assumed.
+/**
+ * Words a person uses that point at an industry MARY may name differently:
+ * "we do cars" supports "automotive", "we're a law firm" supports "legal".
+ * Deliberately no vague words — "practice", "shop", "firm" — those get a
+ * narrowing question, not a record.
+ */
+const INDUSTRY_WORDS: Record<string, readonly string[]> = {
+  automotive: [
+    "auto",
+    "car",
+    "cars",
+    "dealer",
+    "dealers",
+    "dealership",
+    "dealerships",
+    "vehicle",
+    "vehicles",
+    "trucks",
+    "motors",
+  ],
+  auto: ["car", "cars", "dealer", "dealership", "vehicle", "vehicles", "automotive"],
+  dental: [
+    "dentist",
+    "dentists",
+    "dentistry",
+    "teeth",
+    "tooth",
+    "orthodontist",
+    "orthodontics",
+    "hygienist",
+    "hygienists",
+  ],
+  hvac: ["heating", "cooling", "furnace", "furnaces", "air", "conditioning", "ducts", "ductwork"],
+  "real estate": [
+    "realtor",
+    "realtors",
+    "realty",
+    "listings",
+    "listing",
+    "homes",
+    "houses",
+    "property",
+    "properties",
+    "brokerage",
+    "buyers",
+    "sellers",
+  ],
+  staffing: [
+    "recruiting",
+    "recruiter",
+    "recruiters",
+    "recruitment",
+    "placements",
+    "placement",
+    "temp",
+    "temps",
+    "hiring",
+    "candidates",
+    "staff",
+  ],
+  recruiting: [
+    "staffing",
+    "recruiter",
+    "recruiters",
+    "placements",
+    "placement",
+    "candidates",
+    "hiring",
+  ],
+  legal: [
+    "law",
+    "lawyer",
+    "lawyers",
+    "attorney",
+    "attorneys",
+    "solicitor",
+    "solicitors",
+    "paralegal",
+  ],
+  law: ["legal", "lawyer", "lawyers", "attorney", "attorneys"],
+  insurance: ["insurer", "insurers", "policies", "policy", "premiums", "claims", "coverage"],
+  mortgage: ["mortgages", "lender", "lenders", "lending", "loans", "loan", "refinance", "refi"],
+  lending: ["lender", "lenders", "loans", "loan", "mortgage", "mortgages"],
+  finance: [
+    "financial",
+    "advisor",
+    "advisors",
+    "advisory",
+    "wealth",
+    "investment",
+    "investments",
+    "bank",
+    "banking",
+    "credit",
+  ],
+  financial: [
+    "finance",
+    "advisor",
+    "advisors",
+    "advisory",
+    "wealth",
+    "investment",
+    "investments",
+    "bank",
+    "banking",
+  ],
+  roofing: ["roof", "roofs", "roofer", "roofers"],
+  plumbing: ["plumber", "plumbers", "pipes", "drains"],
+  electrical: ["electrician", "electricians", "wiring"],
+  solar: ["panels", "photovoltaic"],
+  landscaping: ["lawn", "lawns", "landscaper", "landscapers", "gardens"],
+  construction: [
+    "builder",
+    "builders",
+    "contractor",
+    "contractors",
+    "remodel",
+    "remodeling",
+    "renovation",
+    "renovations",
+  ],
+  fitness: ["gym", "gyms", "trainer", "trainers"],
+  hospitality: ["hotel", "hotels", "restaurant", "restaurants", "cafe", "catering"],
+  healthcare: [
+    "clinic",
+    "clinics",
+    "medical",
+    "doctor",
+    "doctors",
+    "physician",
+    "physicians",
+    "patients",
+    "chiropractor",
+    "physio",
+    "physiotherapy",
+  ],
+  medical: [
+    "clinic",
+    "clinics",
+    "healthcare",
+    "doctor",
+    "doctors",
+    "physician",
+    "physicians",
+    "patients",
+  ],
+  education: ["school", "schools", "tutoring", "tutor", "tutors", "students", "courses", "academy"],
+  software: ["saas", "app", "apps", "startup", "platform", "developers"],
+  marketing: ["agency", "agencies", "advertising", "branding"],
+  cleaning: ["cleaners", "maid", "maids", "janitorial"],
+  photography: ["photographer", "photographers", "photos", "shoots"],
+  retail: ["boutique", "ecommerce", "e-commerce", "shopify", "storefront"],
+  travel: ["tours", "tour", "agency", "bookings"],
+  wellness: ["spa", "salon", "massage", "clinic"],
+};
+
+/** The value's word and the person's word could be the same word to a transcriber. */
+function wordSupports(theirs: string, ours: string): boolean {
+  if (theirs === ours || nearWord(theirs, ours)) return true;
+  const shorter = theirs.length <= ours.length ? theirs : ours;
+  const longer = shorter === theirs ? ours : theirs;
+  // roof/roofing, auto/automotive, staff/staffing
+  if (shorter.length >= 4 && longer.startsWith(shorter)) return true;
+  // plumbing/plumber, consulting/consultant — but not consulting/construction
+  if (shorter.length >= 6) {
+    let prefix = 0;
+    while (prefix < shorter.length && shorter[prefix] === longer[prefix]) prefix += 1;
+    return prefix >= 5;
+  }
+  return false;
+}
+
+/**
+ * How much of a value the person's own words carry, 0..1: the share of its
+ * content words that they said (or said a synonym of). A value with no content
+ * words ("IT") needs every word said.
+ */
+export function supportRatio(value: string, userText: string): number {
+  const said = tokens(userText);
+  if (said.length === 0) return 0;
+  const all = tokens(value);
+  const content = contentTokens(all);
+  const words = content.length ? content : all;
+  if (words.length === 0) return 0;
+  const phrase = value.trim().toLowerCase();
+  const synonyms = new Set<string>(INDUSTRY_WORDS[phrase] ?? []);
+  for (const w of words) for (const s of INDUSTRY_WORDS[w] ?? []) synonyms.add(s);
+  let hits = 0;
+  for (const w of words) {
+    if (said.some((t) => wordSupports(t, w) || synonyms.has(t))) hits += 1;
+  }
+  return hits / words.length;
+}
+
+// Words that name a vertical MARY is tempted to default to. If she records one
+// and the person never came near it, she assumed.
 const VERTICAL_VALUE = [
   "real",
   "estate",
@@ -151,9 +366,19 @@ const VERTICAL_VALUE = [
   "credit",
   "investment",
   "investments",
+  "dental",
+  "dentistry",
+  "automotive",
+  "auto",
+  "dealership",
+  "dealer",
+  "hvac",
+  "staffing",
+  "recruiting",
 ];
 const VERTICAL_HINTS = new Set([
   ...VERTICAL_VALUE,
+  ...Object.values(INDUSTRY_WORDS).flat(),
   "house",
   "houses",
   "home",
@@ -211,7 +436,8 @@ function assumesVertical(
   return true;
 }
 
-function squash(text: string) {
+/** "dana k at gmail dot com" → "danak@gmail.com": an address the way it is said aloud. */
+export function spokenToEmail(text: string): string {
   return text
     .toLowerCase()
     .replace(/\s+at\s+/g, "@")
@@ -220,6 +446,32 @@ function squash(text: string) {
     .replace(/\s+(dash|hyphen)\s+/g, "-")
     .replace(/[\s,]+/g, "");
 }
+
+/** Words about email that are one slip away from a provider's name. */
+const MAIL_WORDS = new Set(["email", "emails", "mail", "mails"]);
+
+/** Spelling and separators stripped, so "d-a-n-a-k" and "dana.k" both read as "danak". */
+function bareEmailPart(text: string): string {
+  return spokenToEmail(text).replace(/[-._]/g, "");
+}
+
+/**
+ * Whether a line of MARY's reads this address back — the local part and the
+ * domain both in it, spelled out or not — so a spoken address is only ever
+ * relied on once she has said it back and been told it is right.
+ */
+export function readsBackEmail(line: string, email: string): boolean {
+  const [local = "", domain = ""] = email.toLowerCase().split("@");
+  const label = domain.split(".")[0] ?? "";
+  const bareLocal = bareEmailPart(local);
+  if (bareLocal.length < 2 || !label) return false;
+  // Anchored on the @, so "sarah at brightpath" never passes for "sara@brightpath".
+  return bareEmailPart(line).includes(`${bareLocal}@${label}`);
+}
+
+/** The person said they have no business of their own. */
+const NO_BUSINESS_SAID =
+  /\b(student|studying|job[- ]?(seek\w*|hunt\w*)|looking for (a |some )?(job|work)|between jobs|unemployed|retired|no business|not (a|my) business|don'?t (have|own|run) (a |any |the )?(business|company)|no company|just (curious|looking|browsing|here|visiting|interested)|for myself|personal(ly)?|hobby|not (a|an) (owner|business))\b/i;
 
 const NUMBER_WORDS: Record<string, string> = {
   zero: "0",
@@ -247,6 +499,16 @@ function digitsOf(text: string) {
 export type GroundingResult = {
   collected: Record<string, string>;
   rejected: string[];
+};
+
+/** How much of a value the person's words must carry before it is recorded. */
+const SUPPORT_NEEDED: Record<string, number> = {
+  // One word or a synonym of it: "cars" carries "automotive".
+  industry: Number.EPSILON,
+  // Half the name: "Bright Path Realty" from "brightpath realty".
+  business: 0.5,
+  // A summary in MARY's words of what they described, never a description they never gave.
+  operations: 1 / 3,
 };
 
 /**
@@ -296,11 +558,30 @@ export function groundCollected(params: {
         break;
       }
       case "email": {
-        const squashed = squash(scopeText);
         const v = value.toLowerCase();
-        const local = v.split("@")[0] ?? "";
-        ok = squashed.includes(v) || (local.length >= 2 && squashed.includes(local));
-        if (!ok && affirmed) ok = assistantOffered(value, lastAssistant);
+        const [local = "", domain = ""] = v.split("@");
+        const label = domain.split(".")[0] ?? "";
+        const squashed = spokenToEmail(scopeText);
+        // A correction often restates only the part that was wrong, so the
+        // other part may stand as it was first said. The domain is what a guess
+        // invents ("sarah@gmail.com" from "Sarah"), so it has to have been said
+        // too — anywhere in the conversation.
+        const existingLocal = existing?.toLowerCase().split("@")[0] ?? "";
+        const localOk =
+          local.length >= 2 &&
+          (squashed.includes(local) ||
+            (local === existingLocal && spokenToEmail(allUser).includes(local)));
+        const saidWords = tokens(allUser);
+        const domainOk =
+          label.length > 0 &&
+          ((label.length >= 4
+            ? spokenToEmail(allUser).includes(label)
+            : saidWords.includes(label)) ||
+            // "ackme" for acme — but never "email" standing in for gmail.
+            (label.length >= 4 && saidWords.some((t) => !MAIL_WORDS.has(t) && nearWord(t, label))));
+        ok = squashed.includes(v) || (localOk && domainOk);
+        // "Did I get that right?" — "Yes."
+        if (!ok && affirmed && lastAssistant) ok = readsBackEmail(lastAssistant, v);
         break;
       }
       case "phone": {
@@ -327,9 +608,18 @@ export function groundCollected(params: {
       }
       default: {
         // business, industry, operations — the person's words must carry it.
+        if (field === "business" && value.toLowerCase() === NO_BUSINESS) {
+          // "I'm a student", "just curious": no business, and that is recorded
+          // only when they said as much.
+          ok = NO_BUSINESS_SAID.test(scopeText) && (!evidence || quoteGrounded(evidence, scope));
+          break;
+        }
         const evidenceOk = quoteGrounded(evidence, scope) && !isAffirmation(evidence ?? "");
+        // A real quote is not enough on its own: the value has to follow from
+        // their words, or "I run a small practice" turns into "dental".
+        const supported = supportRatio(value, scopeText) >= (SUPPORT_NEEDED[field] ?? 0.5);
         const affirmedOk = affirmed && assistantOffered(value, lastAssistant);
-        ok = evidenceOk || affirmedOk;
+        ok = (evidenceOk && supported) || affirmedOk;
         if (ok && (field === "business" || field === "industry")) {
           if (assumesVertical(value, allUser, lastAssistant, lastUser)) ok = false;
         }

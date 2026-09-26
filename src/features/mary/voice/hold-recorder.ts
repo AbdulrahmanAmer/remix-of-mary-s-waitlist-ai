@@ -12,9 +12,30 @@
  * muted by the ring switch) and lets its audio start without a tap. Frames that
  * arrive outside a hold are dropped here.
  */
-import { noteMicTrack, takePrimedMic } from "@/lib/audio-engine";
+import {
+  MicUnavailableError,
+  noteMicTrack,
+  takePrimedMic,
+  type MicFailure,
+} from "@/lib/audio-engine";
 
 const TARGET_RATE = 16000;
+
+/** Why getUserMedia refused, in the engine's own words, so the person hears the right advice. */
+function micFailureReason(error: unknown): MicFailure {
+  const name = (error as { name?: string } | null)?.name ?? "";
+  if (name === "NotAllowedError" || name === "SecurityError" || name === "PermissionDeniedError")
+    return "denied";
+  if (
+    name === "NotFoundError" ||
+    name === "OverconstrainedError" ||
+    name === "DevicesNotFoundError"
+  )
+    return "no-device";
+  if (name === "NotReadableError" || name === "AbortError" || name === "TrackStartError")
+    return "busy";
+  return "unknown";
+}
 /** The press itself (a thumb on glass, a click) lands in the first ~100 ms. */
 const PRESS_THUMP_MS = 100;
 
@@ -115,14 +136,24 @@ export class HoldRecorder {
     const generation = this.generation;
     let stream = takePrimedMic();
     if (!stream) {
-      stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-          channelCount: 1,
-        },
-      });
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new MicUnavailableError(
+          window.isSecureContext === false ? "insecure" : "unsupported",
+        );
+      }
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+            channelCount: 1,
+          },
+        });
+      } catch (error) {
+        // A raw DOMException reads as "unknown" upstairs, which is the wrong advice.
+        throw new MicUnavailableError(micFailureReason(error));
+      }
     }
     const line = stream;
     // The call ended (or the mode changed) while the microphone was opening: let it go.

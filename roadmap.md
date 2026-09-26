@@ -5,6 +5,19 @@
 - [ ] Connect the Google Sheet: paste `docs/google-sheets/Code.gs` into the sheet's Apps Script, deploy as a web app, then add `SHEETS_WEBAPP_URL` (and optional `SHEETS_WEBAPP_SECRET`) as project secrets — waits on the owner
 - [ ] Real-device pass of the output watcher: confirm on an iPhone (ring switch off/on) and a laptop that her voice never switches to plain speakers while the call route is audible
 - [ ] Owner decisions D2-D5 in `PROJECT-STATE.md` (lead storage, provider seam for local AI, stronger API protection, owner-view auth)
+- [ ] Retell go-live: needs the operator's Retell account (a voice id, the API key with the webhook badge), the sheet (D2) and answers to the six operator questions in `docs/architecture/retell-migration.md`; then the checklist in `retell/README.md` — until then the MARY path is the default and nothing changes for visitors
+
+## V2: Retell voice path (built dormant, 2026-09-26)
+
+Status: the code is on `main` behind `VOICE_PROVIDER` and the `RETELL_*` keys, unit-tested against
+docs-shaped fixtures, and never run against a real Retell account, phone or Lovable deploy. The
+operator asked for the structure to be finished so the backend can switch to a Retell agent as soon
+as one exists; this amends S4's "built later" for the code only. What is built: `GET /api/voice`,
+the five `/api/retell/*` routes (web-call, call-status, inject, the signed `save-lead` function and
+the signed webhook), the lazy-loaded browser adapter over `retell-client-js-sdk` 3.0.1, and the
+agent as code in `retell/` (`bun retell/setup.ts`). What is not: a real call, captions
+(`RETELL_PUBLIC_KEY`, unresolved), Option A (MARY's own brain over a WebSocket), and the Cloudflare
+self-hosting half of V2.
 
 ## Next
 
@@ -13,8 +26,11 @@
 - [ ] Drop the ScriptProcessorNode fallback once no supported browser still needs it (AudioWorklet is already the primary capture path)
 - [ ] Scripted /api/turn conversations for the edge cases (ambiguous "a shop", one-word "consulting", guess-correction) as a repeatable check
 - [ ] Field-notes quality gate: a repeatable script that replays saved transcripts through /api/reflect and flags notes that leak names or contradict the playbook
+- [ ] Retell, after go-live: replace the docs-shaped fixtures in `tests/fixtures/retell/` with real captures; decide on captions (`RETELL_PUBLIC_KEY`) and a condensed Retell-only playbook if the 2x prompt billing is not acceptable; Option A (MARY's own brain via `/api/retell/llm/{call_id}`) once the WebSocket upgrade is proven on Lovable hosting
 
 ## Done
+
+- [x] Retell voice path built dormant (2026-09-26): shared contract, signed function and webhook handlers with grounding through the existing `groundCollected`, web-call minting with the five-field passthrough, call-status and typed-text injection, the lazy browser adapter (orb from the agent's audio, End call, fallback to typing), the agent config generated from `docs/mary-voice.md`, and the setup and signing scripts; 100% dormant with no `RETELL_*` env set
 
 > Audit note (2026-09-23): items below that say "verified with a Playwright simulated room", "verified in a test browser", "verified in a simulated spreadsheet" or "on a phone-sized screen" have no test, script or recorded result in the repo. Treat those verification claims as UNPROVEN. Full register: `docs/audit/GAP-REGISTER.md`.
 

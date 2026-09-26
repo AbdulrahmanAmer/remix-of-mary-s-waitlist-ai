@@ -1,6 +1,7 @@
 import type { Collected, TurnFlags } from "@/lib/mary.functions";
 
-export type Stage = "landing" | "call" | "done";
+/** "fallback": MARY's line is down; a plain form takes the details instead. */
+export type Stage = "landing" | "call" | "fallback" | "done";
 
 /** What the orb shows. */
 export type PresenceState = "idle" | "listening" | "hearing" | "thinking" | "speaking" | "done";
@@ -13,12 +14,20 @@ export type ListeningPhase = "idle" | "listening" | "hearing" | "finishing" | "p
  */
 export type TalkMode = "hold" | "hands-free";
 
+/** Who runs the voice call: MARY's own pipeline, or the Retell agent (hands-free only). */
+export type VoiceVia = "mary" | "retell";
+
 export type Line = {
   id: string;
   role: "user" | "mary";
   text: string;
   /** She was cut off; `text` holds only what was actually heard. */
   interrupted?: boolean;
+  /**
+   * A status line shown in her voice ("you look offline") but never spoken and
+   * never part of the conversation the model sees.
+   */
+  aside?: boolean;
 };
 
 export type ConversationOutcome = "signed_up" | "callback" | "declined";
@@ -68,6 +77,7 @@ export type SessionState = {
   /** "Voice off": she types instead of talking. */
   voiceOff: boolean;
   talkMode: TalkMode;
+  via: VoiceVia;
   notices: Notices;
   /** Whether they spoke, typed, or both — kept for the record. */
   source: { voice: boolean; text: boolean };
@@ -76,6 +86,8 @@ export type SessionState = {
 export type SessionAction =
   | { type: "START_CALL"; at: number }
   | { type: "ADD_LINE"; line: Line }
+  /** Adds the line, or replaces the one with the same id in place (a Retell turn growing). */
+  | { type: "UPSERT_LINE"; line: Line }
   | { type: "CUT_LINE"; id: string; spoken: string }
   | { type: "SET_COLLECTED"; collected: Collected }
   | { type: "MERGE_FLAGS"; flags: Partial<TurnFlags> }
@@ -86,8 +98,11 @@ export type SessionAction =
   | { type: "SET_MIC"; mic: Partial<MicState> }
   | { type: "SET_VOICE_OFF"; off: boolean }
   | { type: "SET_TALK_MODE"; mode: TalkMode }
+  | { type: "SET_VIA"; via: VoiceVia }
   | { type: "SET_NOTICE"; key: keyof Notices; value: boolean }
   | { type: "NOTE_SOURCE"; via: "voice" | "text" }
   | { type: "FINISH"; outcome: ConversationOutcome }
   | { type: "SET_RESULT"; result: ConversationResult }
-  | { type: "RESUME" };
+  | { type: "RESUME" }
+  /** Repeated turn failures: the call gives way to the no-AI details form. */
+  | { type: "ENTER_FALLBACK" };

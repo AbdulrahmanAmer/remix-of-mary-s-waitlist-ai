@@ -1,0 +1,16 @@
+{
+  "call_id": "call_fixture_live_0001",
+  "access_token": "eyJhbGciOiJIUzI1NiJ9.fixture_access_token_live",
+  "transport": "gateway",
+  "ice_servers": [
+    {
+      "urls": ["stun:stun.l.google.com:19302"]
+    },
+    {
+      "urls": "turn:turn.retellai.com:3478?transport=udp",
+      "username": "1790000900:fixture",
+      "credential": "fixture-turn-credential"
+    }
+  ],
+  "expires_at": 1790000900000
+}

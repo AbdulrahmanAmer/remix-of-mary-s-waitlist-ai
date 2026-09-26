@@ -298,8 +298,12 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
       setOutputRoute(isWebKitEngine() ? "element" : "call");
       await unlockAudio();
       const micNote = await mic;
-      primeOutput();
-      const handle = speak("Hi, this is MARY. If you can hear me, the new sound path works.");
+      primeOutput({ micLive: !micNote });
+      // A failed voice request must not read as "silent on this phone".
+      let speechError = "";
+      const handle = speak("Hi, this is MARY. If you can hear me, the new sound path works.", {
+        onError: (reason) => (speechError = `speech failed: ${reason}`),
+      });
       await handle.done;
       const d = audioDiagnostics();
       releasePrimedMic();
@@ -308,6 +312,7 @@ const TESTS: { id: string; label: string; run: () => Promise<string> }[] = [
         `engine ${d.context} ${d.sampleRate}Hz route=${d.route}`,
         `element=${d.elementPaused ? "paused" : "playing"} direct=${d.directOutput}`,
         micNote,
+        speechError,
       ]
         .filter(Boolean)
         .join(" ");

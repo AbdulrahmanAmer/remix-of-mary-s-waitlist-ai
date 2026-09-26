@@ -1,9 +1,10 @@
 /**
- * Waitlist storage — entirely in the browser.
+ * Waitlist storage — the browser's own copy.
  *
- * There is no database and no network hop: every detail MARY grounds is written
- * straight to localStorage the moment it is confirmed, so nothing she says ever
- * waits on a round trip, and a refresh mid-conversation loses nothing.
+ * Every detail MARY grounds is written straight to localStorage the moment it
+ * is confirmed, so nothing she says ever waits on a round trip, and a refresh
+ * mid-conversation loses nothing. The Google Sheet (via /api/lead) is the
+ * record of truth: a position lives here only once the sheet handed it out.
  */
 
 const KEY = "omnisuite.waitlist.v1";
@@ -24,7 +25,12 @@ export type WaitlistEntry = {
   callbackRequested: boolean;
   /** Everything required was captured and MARY closed. */
   complete: boolean;
+  /** The place the sheet handed out; 0 until it did. Never made up locally. */
   position: number;
+  /** When the sheet last confirmed this row; empty while it lives only here. */
+  syncedAt: string;
+  /** The address the sheet sent a confirmation to, when that feature is on. */
+  emailedTo: string;
 };
 
 export type WaitlistFields = Partial<Omit<WaitlistEntry, "id" | "createdAt" | "updatedAt">>;
@@ -53,6 +59,8 @@ function blank(id: string): WaitlistEntry {
     callbackRequested: false,
     complete: false,
     position: 0,
+    syncedAt: "",
+    emailedTo: "",
   };
 }
 
@@ -118,7 +126,11 @@ export function newSession(): void {
   }
 }
 
-/** Deterministic, computed on the spot — the closing line never waits. */
+/**
+ * A stable pseudo-number for a visit, sent to the sheet as `localPosition` for
+ * its own bookkeeping. It is not a waitlist position and is never shown to
+ * anyone: the only position a visitor sees is the one the sheet handed out.
+ */
 export function positionFor(seed: string): number {
   let hash = 0;
   for (let i = 0; i < seed.length; i++) hash = (hash * 31 + seed.charCodeAt(i)) % 100000;
@@ -131,7 +143,6 @@ export function saveProgress(id: string, fields: WaitlistFields): WaitlistEntry 
   const index = entries.findIndex((entry) => entry.id === id);
   const base = index >= 0 ? entries[index]! : blank(id);
   const next: WaitlistEntry = { ...base, ...fields, updatedAt: new Date().toISOString() };
-  if (!next.position) next.position = positionFor(next.email || id);
   if (index >= 0) entries[index] = next;
   else entries.push(next);
   persist(entries);
@@ -155,6 +166,8 @@ const CSV_COLUMNS: (keyof WaitlistEntry)[] = [
   "callbackRequested",
   "complete",
   "position",
+  "syncedAt",
+  "emailedTo",
   "transcript",
 ];
 

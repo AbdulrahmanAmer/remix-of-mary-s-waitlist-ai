@@ -1,0 +1,78 @@
+{
+  "event": "call_analyzed",
+  "call": {
+    "call_type": "web_call",
+    "call_id": "call_fixture_no_0003",
+    "agent_id": "agent_mary_test",
+    "agent_version": 3,
+    "agent_name": "MARY waitlist",
+    "call_status": "ended",
+    "start_timestamp": 1789999910000,
+    "end_timestamp": 1789999970000,
+    "duration_ms": 60000,
+    "disconnection_reason": "user_hangup",
+    "metadata": {
+      "v": 1,
+      "app": "mary-waitlist",
+      "sessionId": "w_lxa0b_cc11dd",
+      "known": {},
+      "context": {
+        "page": "https://mary.example.com/",
+        "referrer": "https://www.google.com/",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15",
+        "language": "en-US",
+        "timezone": "America/Chicago"
+      },
+      "startedAt": "2026-09-21T14:11:49.870Z"
+    },
+    "transcript": "Agent: Hello — thanks for stopping by. I'm MARY, from Omnikom. OmniSuite turns new leads, old lists and missed calls into booked conversations. Who am I talking to?\nUser: Hi, I'm Sam.\nAgent: Hi Sam. What's the business you're running?\nUser: Honestly I'm just browsing, I don't have a business right now.\nAgent: No problem at all, Sam. If that changes, I'm here. Anything you want to know before you go?\nUser: No, I'm good, thanks. Bye.\nAgent: Take care, Sam.\n",
+    "transcript_object": [
+      {
+        "role": "agent",
+        "content": "Hello — thanks for stopping by. I'm MARY, from Omnikom. OmniSuite turns new leads, old lists and missed calls into booked conversations. Who am I talking to?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Hi, I'm Sam.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Hi Sam. What's the business you're running?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Honestly I'm just browsing, I don't have a business right now.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "No problem at all, Sam. If that changes, I'm here. Anything you want to know before you go?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "No, I'm good, thanks. Bye.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Take care, Sam.",
+        "words": []
+      }
+    ],
+    "call_analysis": {
+      "call_summary": "Sam was browsing without a business and politely declined; no details were taken.",
+      "user_sentiment": "Neutral",
+      "call_successful": false,
+      "in_voicemail": false,
+      "custom_analysis_data": {
+        "outcome": "declined",
+        "callback_requested": false,
+        "objections": "no business right now; just browsing"
+      }
+    }
+  }
+}

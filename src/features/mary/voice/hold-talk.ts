@@ -8,6 +8,64 @@ export const REPRESS_GRACE_MS = 250;
 export const MAX_HOLD_MS = 30000;
 /** −50 dBFS: a clip whose loudest moment is below this holds no speech; it never leaves the device. */
 export const SILENT_PEAK = 0.00316;
+/** Transcription that takes longer than this is treated as down, not as the person's fault. */
+export const TRANSCRIBE_TIMEOUT_MS = 10000;
+/** A clip at least this long and this loud held real words, whatever the model made of them. */
+export const REAL_SPEECH_MS = 600;
+export const REAL_SPEECH_PEAK = 0.02;
+
+/** Well-known phrases speech models invent on near-silent audio. */
+const HALLUCINATIONS = [
+  /^thank(s| you)( for watching| so much)?[.!]?$/i,
+  /^(bye|goodbye)[.!]?$/i,
+  /^subtitles? by/i,
+  /^you[.!]?$/i,
+];
+
+export class TranscribeUnavailableError extends Error {
+  constructor(readonly reason: "timeout" | "network" | "server") {
+    super(`transcription ${reason}`);
+    this.name = "TranscribeUnavailableError";
+  }
+}
+
+/**
+ * Sends a held clip to /api/transcribe. Unlike the engine's own helper it says
+ * when the service failed, so the person is not told to speak closer to the
+ * phone because a server answered 502.
+ */
+export async function transcribeHeldAudio(
+  blob: Blob,
+  timeoutMs = TRANSCRIBE_TIMEOUT_MS,
+): Promise<string> {
+  if (blob.size < 2048) return "";
+  const form = new FormData();
+  form.append("file", blob, "recording.wav");
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let response: Response;
+  try {
+    response = await fetch("/api/transcribe", {
+      method: "POST",
+      body: form,
+      signal: controller.signal,
+    });
+  } catch {
+    throw new TranscribeUnavailableError(controller.signal.aborted ? "timeout" : "network");
+  } finally {
+    clearTimeout(timer);
+  }
+  if (!response.ok) throw new TranscribeUnavailableError("server");
+  const data = (await response.json()) as { text?: string };
+  return (data.text ?? "").trim();
+}
+
+/** A stock phrase on a clip too short or too quiet to have carried it. */
+export function isInventedText(text: string, clip: Pick<HoldClip, "durationMs" | "peak">): boolean {
+  if (/^\W*$/.test(text)) return true;
+  if (!HALLUCINATIONS.some((pattern) => pattern.test(text))) return false;
+  return clip.durationMs < REAL_SPEECH_MS || clip.peak < REAL_SPEECH_PEAK;
+}
 
 export type HoldTalkDeps = {
   recorder: {
@@ -20,15 +78,20 @@ export type HoldTalkDeps = {
   };
   /** Held audio goes straight to transcription: it is the person by definition, so no judge. */
   transcribeHeld: (blob: Blob) => Promise<string>;
-  /** Runs synchronously inside the press: MARY must stop in the same event. */
+  /** Runs synchronously inside the press: MARY goes quiet in the same event, but nothing is decided yet. */
   onPress: () => void;
+  /** The hold outlasted a tap: this is their turn, and the rest of hers is dropped. */
+  onCommit: () => void;
   /** The clip is on its way to transcription. */
   onRelease: () => void;
-  /** Too short to be speech: back to waiting. */
-  onCancel: () => void;
+  /** Nothing to send: a tap too short to be speech, or a hold that captured no audio. */
+  onCancel: (reason: "short" | "empty") => void;
   onText: (text: string) => void;
   /** The hold produced no words; `inARow` counts consecutive misses. */
   onMissed: (inARow: number) => void;
+  /** The words could not be transcribed (service down, timeout): not the person's doing. */
+  onTranscribeFailed: (error: unknown) => void;
+  /** The microphone could not open. */
   onError: (error: unknown) => void;
   now: () => number;
   setTimer: (fn: () => void, ms: number) => number;
@@ -41,6 +104,9 @@ type Phase = "idle" | "held" | "grace";
  * Hold-to-talk turn-taking: press is "I have the floor", release is "my turn is
  * over". Nothing heard outside a hold is ever sent, so a loud room cannot start a
  * turn, and there is no silence timer or voice detector deciding when you finished.
+ *
+ * A press shorter than MIN_HOLD_MS is a tap: MARY pauses for it and then carries
+ * on. Only a hold that outlasts it commits, ending her line for good.
  */
 export class HoldTalk {
   private phase: Phase = "idle";
@@ -48,6 +114,8 @@ export class HoldTalk {
   private heldMs = 0;
   private graceTimer = 0;
   private maxTimer = 0;
+  private commitTimer = 0;
+  private committed = false;
   private misses = 0;
 
   constructor(private readonly deps: HoldTalkDeps) {}
@@ -64,13 +132,16 @@ export class HoldTalk {
       this.phase = "held";
       this.pressedAt = deps.now();
       this.armMax();
+      this.armCommit();
       return;
     }
     deps.onPress();
     this.phase = "held";
     this.pressedAt = deps.now();
     this.heldMs = 0;
+    this.committed = false;
     this.armMax();
+    this.armCommit();
     if (deps.recorder.isOpen) {
       deps.recorder.start();
       return;
@@ -94,6 +165,9 @@ export class HoldTalk {
     if (this.phase !== "held") return;
     this.heldMs += deps.now() - this.pressedAt;
     deps.clearTimer(this.maxTimer);
+    deps.clearTimer(this.commitTimer);
+    // A hold that crossed the line in pieces (slip, re-press) still counts.
+    if (this.heldMs >= MIN_HOLD_MS) this.commit();
     this.phase = "grace";
     this.graceTimer = deps.setTimer(() => void this.finish(), REPRESS_GRACE_MS);
   }
@@ -110,9 +184,22 @@ export class HoldTalk {
     this.maxTimer = this.deps.setTimer(() => this.release(), MAX_HOLD_MS - this.heldMs);
   }
 
+  private armCommit(): void {
+    this.deps.clearTimer(this.commitTimer);
+    if (this.committed) return;
+    this.commitTimer = this.deps.setTimer(() => this.commit(), MIN_HOLD_MS - this.heldMs);
+  }
+
+  private commit(): void {
+    if (this.committed) return;
+    this.committed = true;
+    this.deps.onCommit();
+  }
+
   private reset(): void {
     this.deps.clearTimer(this.graceTimer);
     this.deps.clearTimer(this.maxTimer);
+    this.deps.clearTimer(this.commitTimer);
     this.phase = "idle";
   }
 
@@ -120,8 +207,12 @@ export class HoldTalk {
     const { deps } = this;
     this.reset();
     const clip = deps.recorder.isOpen ? deps.recorder.stop() : null;
-    if (!clip?.blob || this.heldMs < MIN_HOLD_MS) {
-      deps.onCancel();
+    if (this.heldMs < MIN_HOLD_MS) {
+      deps.onCancel("short");
+      return;
+    }
+    if (!clip?.blob) {
+      deps.onCancel("empty");
       return;
     }
     if (clip.peak < SILENT_PEAK) {
@@ -134,8 +225,11 @@ export class HoldTalk {
     try {
       text = (await deps.transcribeHeld(clip.blob)).trim();
     } catch (error) {
-      deps.onError(error);
+      deps.onTranscribeFailed(error);
+      return;
     }
+    // The clip runs on through the re-press grace; the hold itself is what they meant to say.
+    if (text && isInventedText(text, { durationMs: this.heldMs, peak: clip.peak })) text = "";
     if (!text) {
       this.misses += 1;
       deps.onMissed(this.misses);
