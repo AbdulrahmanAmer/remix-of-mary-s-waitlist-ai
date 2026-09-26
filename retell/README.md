@@ -50,13 +50,16 @@ is about 3,200 tokens, so a typical call bills at roughly 1.0x to 1.3x. The full
 ## Local checks (no Retell account needed)
 
 The unit tests cover the config (`bun run test`). For the routes, run the production Worker with
-the Retell env in `.dev.vars`:
+the Retell env in `.dev.vars` at the repo root (`bun run preview` copies it next to the built
+`wrangler.json`, where wrangler reads it, and removes that copy when the root file is gone). New
+Retell calls stay off until a sheet URL is set, so include one (any https URL will do locally):
 
 ```
 VOICE_PROVIDER=retell-optin
 RETELL_API_KEY=test
 RETELL_AGENT_ID=agent_test
 RETELL_WEBHOOK_KEY=test
+SHEETS_WEBAPP_URL=https://example.com/sheet
 ```
 
 ```sh
@@ -66,7 +69,8 @@ curl -s http://127.0.0.1:8788/api/voice                       # {"provider":"mar
 SIG=$(RETELL_WEBHOOK_KEY=test bun retell/sign.ts tests/fixtures/retell/call-ended.signed-up.json)
 curl -i -X POST http://127.0.0.1:8788/api/retell/webhook \
   -H "content-type: application/json" -H "x-retell-signature: $SIG" \
-  --data-binary @tests/fixtures/retell/call-ended.signed-up.json    # 204; a wrong key gives 401
+  --data-binary @tests/fixtures/retell/call-ended.signed-up.json    # 401 with a wrong key; 502 here
+# (the placeholder sheet URL refuses the row, so Retell would retry); 204 against a real sheet
 
 SIG=$(RETELL_WEBHOOK_KEY=test bun retell/sign.ts tests/fixtures/retell/function.save-lead.final.json)
 curl -s -X POST http://127.0.0.1:8788/api/retell/functions/save-lead \
@@ -85,31 +89,45 @@ server turns into a 502 and the client into the typing fallback with MARY greeti
 ## Go-live checklist
 
 1. Merge with CI green, then Lovable Publish → Update. The published URL changes only on Publish.
-2. In Retell: find the API key with the webhook badge (use it as `RETELL_API_KEY`, or set
-   `RETELL_WEBHOOK_KEY` separately), and pick a voice.
-3. Run the dry run, review `retell/out/`, the token estimate and the billing multiplier. Then run
+2. Connect the Google Sheet first (`SHEETS_WEBAPP_URL`, `SHEETS_WEBAPP_SECRET`; D2). Until it is
+   set, `/api/voice` keeps answering `"retell":false` and web-call is 404, because a voice
+   sign-up would otherwise live only in Retell's call history. The server log says
+   `[retell] off: SHEETS_WEBAPP_URL is not set`.
+3. In Retell: find the API key with the webhook badge (use it as `RETELL_API_KEY`, or set
+   `RETELL_WEBHOOK_KEY` separately), and pick a voice. Play the opening line with it: if it
+   mispronounces "OmniSuite" or "Omnikom", add `pronunciation_dictionary` entries (IPA) to
+   `agent.json` when the voice supports them, or pick another voice.
+4. Run the dry run, review `retell/out/`, the token estimate and the billing multiplier. Then run
    `--apply --publish` and keep the printed ids.
-4. In the dashboard, check the webhook URL, the two function URLs, the analysis fields (`outcome`,
-   `callback_requested`, `objections`, `call_summary`) and data storage set to everything.
-5. In Lovable, set `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_AGENT_VERSION` (and
+5. In the dashboard, check the webhook URL, the two function URLs, the analysis fields (`outcome`,
+   `callback_requested`, `objections`, `call_summary`), data storage set to everything, the
+   Agent Handbook presets (AI disclosure and scope boundaries on; default personality, filler
+   words and echo verification off) and interruption sensitivity 0.8. Set the data retention
+   to at least 30 days: the call history is the backup copy of every voice lead.
+6. In Lovable, set `RETELL_API_KEY`, `RETELL_AGENT_ID`, `RETELL_AGENT_VERSION` (and
    `RETELL_WEBHOOK_KEY` if needed) and `VOICE_PROVIDER=retell-optin`. Confirm that
    `SHEETS_WEBAPP_URL` and `SHEETS_WEBAPP_SECRET` (D2) and `LOVABLE_API_KEY` are set. Publish.
-6. `GET https://<site>/api/voice` should show `"retell":true,"provider":"mary"`.
-7. Desktop Chrome with `?voice=retell`, one full sign-up:
+7. `GET https://<site>/api/voice` should show `"retell":true,"provider":"mary"`.
+8. Desktop Chrome with `?voice=retell`, one full sign-up:
    - web-call returns 201 and WHIP goes to api.retellai.com;
    - the orb moves, mute works, a typed email reaches her, and the pills fill at note_details;
    - she gives the position and the end screen shows the same one;
    - the sheet row reads Signed up / voice;
    - the Retell call log shows the functions and webhooks returning 2xx;
    - Summary and Experience rows arrive.
-8. The callback path, the decline path (then Resume), a tab closed mid-call, mic denied (falls
+9. The callback path, the decline path (then Resume), a tab closed mid-call, mic denied (falls
    back to typing), and `?voice=mary`.
-9. iPhone Safari on the published URL (not the Lovable editor iframe), ring switch on and off, and
-   AirPods. Then Mac Safari and Android Chrome.
-10. A loud room.
-11. Five scripted calls that reach CLOSE with only grounded fields.
-12. Capture real payloads and replace the fixtures.
-13. Set `VOICE_PROVIDER=retell` and Publish.
+10. iPhone Safari on the published URL (not the Lovable editor iframe), ring switch on and off, and
+    AirPods. Then Mac Safari and Android Chrome.
+11. A loud room. `agent.json` uses interruption sensitivity 0.8 (Retell's noisy-room advice; 1 is
+    the easiest to interrupt) and the strongest denoising, which also removes background voices
+    but costs extra per minute and can drop a quiet visitor. Speak at normal volume about a metre
+    from the phone with stand noise behind: if MARY stops mid-sentence, lower the sensitivity;
+    if she misses the visitor's words, try `denoising_mode: "noise-cancellation"`. Re-apply with
+    `--apply --publish` after each change.
+12. Five scripted calls that reach CLOSE with only grounded fields.
+13. Capture real payloads and replace the fixtures.
+14. Set `VOICE_PROVIDER=retell` and Publish.
 
 Optional captions: set `RETELL_PUBLIC_KEY` (domain-restricted in Retell) and test with
 `?voice=retell`. If the console shows `retell: live transcript unavailable`, unset it.

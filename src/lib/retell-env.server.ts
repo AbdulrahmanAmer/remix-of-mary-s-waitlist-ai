@@ -24,6 +24,8 @@ export type RetellEnv = {
   /** Public by design; turns on live captions. */
   publicKey: string | null;
   lovableKey: string | null;
+  /** SHEETS_WEBAPP_URL is set: a Retell sign-up has a list to land on. */
+  sheets: boolean;
 };
 
 /** Retell's AgentVersionReference string form: latest, latest_published or a tag. */
@@ -56,12 +58,22 @@ export function readRetellEnv(env: Record<string, string | undefined>): RetellEn
     signingKey: read(env, "RETELL_WEBHOOK_KEY") ?? apiKey,
     publicKey: read(env, "RETELL_PUBLIC_KEY"),
     lovableKey: read(env, "LOVABLE_API_KEY"),
+    sheets: Boolean(read(env, "SHEETS_WEBAPP_URL")),
   };
 }
 
 /** web-call, call-status and inject: only when the operator opted in and Retell is configured. */
 export function browserRoutesEnabled(env: RetellEnv): boolean {
   return env.setting !== "mary" && Boolean(env.apiKey && env.agentId);
+}
+
+/**
+ * A new Retell call may start: the browser routes are on AND the sheet is connected.
+ * Without the sheet a voice sign-up would live only in Retell's call history, so the
+ * site stays on MARY (whose browser outbox keeps the row) until it is set.
+ */
+export function newCallsEnabled(env: RetellEnv): boolean {
+  return browserRoutesEnabled(env) && env.sheets;
 }
 
 /** save-lead and the webhook: whenever a signature can be checked, whatever the setting. */
@@ -71,7 +83,7 @@ export function serverRoutesEnabled(env: RetellEnv): boolean {
 
 /** Body of GET /api/voice. */
 export function voiceStatus(env: RetellEnv): VoiceStatus {
-  const retell = browserRoutesEnabled(env);
+  const retell = newCallsEnabled(env);
   return {
     provider: retell && env.setting === "retell" ? "retell" : "mary",
     retell,

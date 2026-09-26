@@ -69,11 +69,21 @@ const edit = (text: string, change: (value: Json) => void) => {
 };
 
 describe("env and GET /api/voice", () => {
-  const KEYS = { RETELL_API_KEY: "key_api", RETELL_AGENT_ID: "agent_1" };
+  const KEYS = {
+    RETELL_API_KEY: "key_api",
+    RETELL_AGENT_ID: "agent_1",
+    SHEETS_WEBAPP_URL: "https://script.google.com/macros/s/x/exec",
+  };
   const status = (env: Record<string, string>) => voiceStatus(readRetellEnv(env));
 
   it("answers MARY when nothing is set", () => {
     expect(status({})).toEqual(MARY_ONLY);
+  });
+
+  it("stays on MARY until the sheet is connected", () => {
+    const { SHEETS_WEBAPP_URL: _sheet, ...noSheet } = KEYS;
+    expect(status({ VOICE_PROVIDER: "retell", ...noSheet })).toEqual(MARY_ONLY);
+    expect(status({ VOICE_PROVIDER: "retell", ...KEYS }).retell).toBe(true);
   });
 
   it("does nothing for retell without the keys", () => {
@@ -152,7 +162,13 @@ describe("POST /api/retell/web-call", () => {
     upstream(d).body!["retell_llm_dynamic_variables"] as Record<string, unknown>;
 
   it("is closed while the setting is mary, and without the keys", async () => {
-    for (const env of [{ setting: "mary" as const }, { apiKey: null }, { agentId: null }]) {
+    for (const env of [
+      { setting: "mary" as const },
+      { apiKey: null },
+      { agentId: null },
+      // No sheet: a voice sign-up would reach no list, so no new Retell call starts.
+      { sheets: false },
+    ]) {
       const d = deps({ env });
       expect((await mint(d)).status).toBe(404);
       expect(d.fetch).not.toHaveBeenCalled();

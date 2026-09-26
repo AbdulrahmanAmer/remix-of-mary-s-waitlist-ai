@@ -10,6 +10,14 @@
   "end_call_after_silence_ms": 45000,
   "reminder_trigger_ms": 8000,
   "reminder_max_count": 2,
+  "interruption_sensitivity": 0.8,
+  "handbook_config": {
+    "default_personality": false,
+    "natural_filler_words": false,
+    "echo_verification": false,
+    "ai_disclosure": true,
+    "scope_boundaries": true
+  },
   "denoising_mode": "noise-and-background-speech-cancellation",
   "boosted_keywords": ["MARY", "OmniSuite", "Omnikom", "Convert", "Cultivate", "Recover"],
   "data_storage_setting": "everything",

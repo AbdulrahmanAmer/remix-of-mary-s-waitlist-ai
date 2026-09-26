@@ -14,6 +14,7 @@ import { z } from "zod";
 import type { ReflectInput } from "@/lib/mary-experience.server";
 import {
   browserRoutesEnabled,
+  newCallsEnabled,
   serverRoutesEnabled,
   voiceStatus,
   type RetellEnv,
@@ -241,6 +242,11 @@ function positionOf(value: unknown): number | null {
 // ---------- GET /api/voice ----------
 
 export function handleVoice(deps: Pick<RetellDeps, "env">): Response {
+  if (browserRoutesEnabled(deps.env) && !deps.env.sheets) {
+    console.warn(
+      "[retell] off: SHEETS_WEBAPP_URL is not set, so a voice sign-up would reach no list",
+    );
+  }
   return Response.json(voiceStatus(deps.env), { headers: NO_STORE });
 }
 
@@ -273,7 +279,7 @@ async function fieldNotesWithin(deps: RetellDeps, industry: string | null): Prom
 export function handleWebCall(request: Request, deps: RetellDeps): Promise<Response> {
   return guarded("web-call", deps, async () => {
     const { env } = deps;
-    if (!browserRoutesEnabled(env)) return notFound();
+    if (!newCallsEnabled(env)) return notFound();
     const raw = await readCapped(request, MAX_CHARS.webCall);
     if (raw === null) return tooLarge();
     const body = parseWith(WebCallBodySchema, raw);

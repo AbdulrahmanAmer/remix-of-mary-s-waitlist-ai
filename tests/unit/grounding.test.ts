@@ -126,6 +126,23 @@ describe("spokenToEmail / readsBackEmail", () => {
     expect(readsBackEmail("Good to meet you, Dana.", "danak@gmail.com")).toBe(false);
     expect(readsBackEmail("d-a-n-a-k, at outlook dot com.", "danak@gmail.com")).toBe(false);
   });
+
+  it("takes digits said as words, and still takes the word itself", () => {
+    const line = "m dot okonkwo underscore seven at proton dot me — did I get that right?";
+    expect(readsBackEmail(line, "m.okonkwo_7@proton.me")).toBe(true);
+    const said = (text: string, email: string) =>
+      groundCollected({
+        previous: {},
+        proposed: { email: { value: email, evidence: null } },
+        userMessages: [text],
+      }).collected["email"];
+    expect(
+      said("it's m dot okonkwo underscore seven at proton dot me", "m.okonkwo_7@proton.me"),
+    ).toBe("m.okonkwo_7@proton.me");
+    expect(said("sarah oh seven at gmail dot com", "sarah07@gmail.com")).toBe("sarah07@gmail.com");
+    expect(said("john one at gmail dot com", "johnone@gmail.com")).toBe("johnone@gmail.com");
+    expect(said("sarah at gmail dot com", "sarah7@gmail.com")).toBeUndefined();
+  });
 });
 
 describe("quoteGrounded / assistantOffered", () => {

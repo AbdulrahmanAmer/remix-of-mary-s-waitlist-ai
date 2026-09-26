@@ -8,7 +8,7 @@
     "dev:local": "LOVABLE_PREVIEW_HOST=id-preview--73ac183b-3cba-490d-b4a7-e290763aaba5.lovable.app vite dev",
     "build": "vite build",
     "build:dev": "vite build --mode development",
-    "preview": "bunx wrangler@4 dev --config .output/server/wrangler.json",
+    "preview": "node -e \"const f=require('fs'),t='.output/server/.dev.vars';f.existsSync('.dev.vars')?f.copyFileSync('.dev.vars',t):f.rmSync(t,{force:true})\" && bunx wrangler@4 dev --config .output/server/wrangler.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "typecheck": "tsc --noEmit -p .",
