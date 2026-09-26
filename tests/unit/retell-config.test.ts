@@ -15,6 +15,7 @@ import {
 
 import {
   applyPlaybookEdits,
+  buildCondensedPrompt,
   buildGeneralPrompt,
   buildRetellConfig,
   estimateTokens,
@@ -28,6 +29,7 @@ const read = (path: string) => readFileSync(`${ROOT}${path}`, "utf8");
 
 const playbook = read("docs/mary-voice.md");
 const header = read("retell/prompt-header.md");
+const condensed = read("retell/playbook-condensed.md");
 const llmJson = JSON.parse(read("retell/llm.json")) as Record<string, unknown>;
 const agentJson = JSON.parse(read("retell/agent.json")) as Record<string, unknown>;
 
@@ -50,8 +52,9 @@ function build(over: Partial<Parameters<typeof buildRetellConfig>[0]> = {}) {
     voiceId: "test_voice",
     llm: llmJson,
     agent: agentJson,
-    header,
-    playbook,
+    playbookKind: "condensed",
+    header: "",
+    playbook: condensed,
     dryRun: false,
     ...over,
   });
@@ -94,6 +97,42 @@ describe("buildGeneralPrompt", () => {
     for (const fn of [...RETELL_FUNCTIONS, "end_call"]) expect(prompt).toContain(fn);
     expect(prompt).toContain("{{known_summary}}");
     expect(prompt.endsWith("{{field_notes}}")).toBe(true);
+  });
+});
+
+describe("condensed playbook (the default general_prompt)", () => {
+  const prompt = buildCondensedPrompt(condensed);
+
+  it("stays under Retell's 4,000-token billing line with room for the tools", () => {
+    expect(condensed.length).toBeLessThanOrEqual(12_800);
+    expect(build().promptTokens).toBeLessThanOrEqual(3_200);
+    expect(build().warnings.some((w) => /tokens/.test(w))).toBe(false);
+  });
+
+  it("is used as written: no header, no second field-notes block", () => {
+    expect(prompt).toBe(condensed.trim());
+    expect(prompt.split("{{field_notes}}")).toHaveLength(2);
+    expect(prompt.endsWith("{{field_notes}}")).toBe(true);
+    expect(() => buildCondensedPrompt("# no notes")).toThrow(/field_notes/);
+  });
+
+  it("names every tool, reads the returning-visitor summary and uses only shared variables", () => {
+    for (const fn of [...RETELL_FUNCTIONS, "end_call"]) expect(prompt).toContain(fn);
+    expect(prompt).toContain("{{known_summary}}");
+    for (const v of variablesIn(prompt)) expect(DYNAMIC_VARIABLES, v).toContain(v);
+  });
+
+  it("keeps none of the voice-app wording or the promises nothing keeps", () => {
+    for (const gone of [
+      "followUp",
+      "hold the button",
+      "holding a button",
+      "Set complete true",
+      "confirmation email",
+      "a product by Omnikom",
+    ]) {
+      expect(prompt, gone).not.toContain(gone);
+    }
   });
 });
 
@@ -192,7 +231,7 @@ describe("buildRetellConfig: guards", () => {
   });
 
   it("warns about the billing multiplier of a long prompt and stays under the model window", () => {
-    const cfg = build();
+    const cfg = build({ playbookKind: "full", header, playbook });
     expect(cfg.promptTokens).toBeGreaterThan(PROMPT_TOKEN_BILLING_STEP);
     expect(cfg.promptTokens).toBeLessThan(32768);
     expect(cfg.warnings.some((w) => /tokens/.test(w) && /x the call minutes/.test(w))).toBe(true);

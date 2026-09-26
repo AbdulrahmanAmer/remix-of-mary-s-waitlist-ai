@@ -8,6 +8,8 @@
   "webhook_timeout_ms": 10000,
   "max_call_duration_ms": 900000,
   "end_call_after_silence_ms": 45000,
+  "reminder_trigger_ms": 8000,
+  "reminder_max_count": 2,
   "denoising_mode": "noise-and-background-speech-cancellation",
   "boosted_keywords": ["MARY", "OmniSuite", "Omnikom", "Convert", "Cultivate", "Recover"],
   "data_storage_setting": "everything",
@@ -21,7 +23,7 @@
     {
       "type": "enum",
       "name": "outcome",
-      "description": "joined = save_lead succeeded with stage final; callback = save_lead succeeded with stage callback; declined = they said no or have no business; incomplete = anything else.",
+      "description": "joined = save_lead succeeded with stage final (a name and an email are enough); callback = save_lead succeeded with stage callback; declined = they said no or left without giving an email; incomplete = anything else.",
       "choices": ["joined", "callback", "declined", "incomplete"]
     },
     {

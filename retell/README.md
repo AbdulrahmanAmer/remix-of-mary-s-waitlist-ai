@@ -6,16 +6,18 @@ re-created or updated from the repo instead of the dashboard.
 
 ## Files
 
-| File               | What it is                                                                                                                                                                                                                   |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `llm.json`         | The Retell LLM (`POST /create-retell-llm` body): `gpt-5.6-terra`, `begin_message` = `{{opening_line}}`, the three dynamic variables, and the tools `end_call`, `note_details` and `save_lead`. `__GENERATED__` is the prompt |
-| `agent.json`       | The agent (`POST /create-agent` body): voice, webhook URL and events, 15 min cap, 45 s silence hang-up, denoising, boosted keywords, `data_storage_setting: "everything"`, post-call analysis fields                         |
-| `prompt-header.md` | This call's rules, which outrank the playbook: phases, the tool discipline, `{{known_summary}}`                                                                                                                              |
-| `config.ts`        | Pure builders: `PLAYBOOK_EDITS`, `buildGeneralPrompt`, `normalizeSite`, `estimateTokens`, `buildRetellConfig`. Imports the shared constants from `src/lib/retell-shared.ts`                                                  |
-| `setup.ts`         | `bun retell/setup.ts --site https://<host> --voice <id> [--apply] [--publish]`: builds, writes `retell/out/` (gitignored), and with `--apply` creates or updates the LLM and agent                                           |
-| `sign.ts`          | `RETELL_WEBHOOK_KEY=… bun retell/sign.ts <file>` prints an `x-retell-signature` for that file's exact bytes, for local curl checks                                                                                           |
+| File                    | What it is                                                                                                                                                                                                                   |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `llm.json`              | The Retell LLM (`POST /create-retell-llm` body): `gpt-5.6-terra`, `begin_message` = `{{opening_line}}`, the three dynamic variables, and the tools `end_call`, `note_details` and `save_lead`. `__GENERATED__` is the prompt |
+| `agent.json`            | The agent (`POST /create-agent` body): voice, webhook URL and events, 15 min cap, 45 s silence hang-up, denoising, boosted keywords, `data_storage_setting: "everything"`, post-call analysis fields                         |
+| `playbook-condensed.md` | The default prompt, used as written: MARY's playbook rewritten for a Retell call, about 3,200 tokens, ending with `{{field_notes}}`. `playbook-condensed.test-notes.md` has the 12 scripted test calls                       |
+| `prompt-header.md`      | Used only with `--playbook full`: this call's rules, which outrank the playbook: phases, the tool discipline, `{{known_summary}}`                                                                                            |
+| `config.ts`             | Pure builders: `PLAYBOOK_EDITS`, `buildGeneralPrompt`, `normalizeSite`, `estimateTokens`, `buildRetellConfig`. Imports the shared constants from `src/lib/retell-shared.ts`                                                  |
+| `setup.ts`              | `bun retell/setup.ts --site https://<host> --voice <id> [--playbook condensed\|full] [--apply] [--publish]`: builds, writes `retell/out/` (gitignored), and with `--apply` creates or updates the LLM and agent              |
+| `sign.ts`               | `RETELL_WEBHOOK_KEY=… bun retell/sign.ts <file>` prints an `x-retell-signature` for that file's exact bytes, for local curl checks                                                                                           |
 
-The prompt is `prompt-header.md`, then `docs/mary-voice.md` with six edits (`PLAYBOOK_EDITS` in
+By default the prompt is `playbook-condensed.md` as written (`buildCondensedPrompt`). With
+`--playbook full` it is `prompt-header.md`, then `docs/mary-voice.md` with six edits (`PLAYBOOK_EDITS` in
 `config.ts`: the hold button, the say/followUp JSON beats and `complete` become call wording), then
 `{{field_notes}}`. `docs/mary-voice.md` itself is never edited; the test
 (`tests/unit/retell-config.test.ts`) fails when one of the six targets stops occurring exactly once.
@@ -40,8 +42,10 @@ it. The script prints `RETELL_LLM_ID`, `RETELL_AGENT_ID` and `RETELL_AGENT_VERSI
 keep the LLM id for later updates. It never prints a key. A non-2xx from Retell prints the status
 and body and exits 1.
 
-The prompt is about 8k tokens. Retell bills prompts over 4,000 tokens at tokens / 4,000 times the
-call minutes, so about 2x; the script warns with the multiplier.
+Retell bills prompts over 4,000 tokens at tokens / 4,000 times the call minutes, and counts the
+tool descriptions (about 1,000 tokens) and the transcript so far toward that. The condensed prompt
+is about 3,200 tokens, so a typical call bills at roughly 1.0x to 1.3x. The full playbook is about
+8k tokens, about 2x; the script warns with the multiplier.
 
 ## Local checks (no Retell account needed)
 

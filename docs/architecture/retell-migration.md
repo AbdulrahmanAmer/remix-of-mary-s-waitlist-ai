@@ -159,9 +159,11 @@ Guard budgets (`api-guard.ts`): web-call 20/min and 8 KB; call-status 60/min and
 from one IP, so the signature is the real gate on the last two; handlers re-check the caps on the
 raw text because a chunked body has no `content-length`.
 
-Billing: the ported prompt is about 8k tokens (`bun retell/setup.ts` prints the estimate). Retell
-scales billed minutes by tokens / 4,000 above 4,000 tokens, so about 2x per minute, plus the LLM.
-A condensed Retell-only playbook would bring that down (section 10).
+Billing: the default prompt is `retell/playbook-condensed.md`, about 3,200 tokens (`bun
+retell/setup.ts` prints the estimate). Retell scales billed minutes by tokens / 4,000 above 4,000
+tokens and counts the tools and the transcript too, so a typical call bills at roughly 1.0x to
+1.3x, plus the LLM. `--playbook full` ships the ported `docs/mary-voice.md` instead: about 8k
+tokens, about 2x.
 
 ## 7. What changed against the 2026-09-23 design
 
@@ -223,8 +225,9 @@ Move to A if the ported prompt loses MARY's grounding discipline on `gpt-5.6-ter
 
 ## 10. Open questions for the operator
 
-1. **Cost.** The ported prompt is about 8k tokens, billed at about 2x per minute. Accept that, or
-   commission a condensed Retell-only playbook?
+1. **Cost and prompt.** The condensed playbook (default, about 3,200 tokens, about 1x) or the full
+   ported playbook (`--playbook full`, about 8k tokens, about 2x)? Run the 12 scripted calls in
+   `retell/playbook-condensed.test-notes.md` on the condensed one before deciding.
 2. **Privacy and disclosure.** Grounding needs unscrubbed transcripts, so the agent ships with
    `data_storage_setting: "everything"`: Retell keeps recordings and transcripts. Is that
    acceptable, and does the landing page need a recording and transcript disclosure?

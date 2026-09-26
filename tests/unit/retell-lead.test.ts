@@ -171,9 +171,26 @@ describe("groundSaveLead", () => {
       "final",
     );
     expect(d.rejected).toEqual(["industry"]);
-    expect(d.missing).toEqual(["industry"]);
+    expect(d.missing).toEqual([]);
     expect(d.outcome).toBe("in_progress");
     expect(d.collected.industry).toBeUndefined();
+  });
+
+  it("gives a spot on name and email alone: the fast lane and a visitor with no business", () => {
+    const d = groundSaveLead(
+      SaveLeadArgsSchema.parse({
+        stage: "final",
+        name: "Leo Marsh",
+        name_evidence: "I'm Leo, Leo Marsh",
+        email: "leo@marshplumbing.com",
+      }),
+      withItems([...LEO, ...CONTACT]),
+      "final",
+    );
+    expect(d.missing).toEqual([]);
+    expect(d.rejected).toEqual([]);
+    expect(d.outcome).toBe("signed_up");
+    expect(d.collected.business).toBeUndefined();
   });
 
   it("grounds a spelled-out email address", () => {
@@ -300,7 +317,7 @@ describe("groundSaveLead", () => {
       name_evidence: "I'm Leo, Leo Marsh",
     });
     const d = groundSaveLead(onlyName, withItems(LEO), "final");
-    expect(d.missing).toEqual(["email", "business", "industry", "operations"]);
+    expect(d.missing).toEqual(["email"]);
     expect(d.outcome).toBe("in_progress");
   });
 
@@ -597,11 +614,15 @@ describe("functionMessage", () => {
   it("asks for the next missing field and names the rejected ones", () => {
     const d = decision({
       outcome: "in_progress",
-      missing: ["email", "industry"],
+      missing: ["email"],
       rejected: ["industry"],
     });
     expect(functionMessage("save_lead", d, { saved: false, position: null })).toBe(
-      "Not finished yet. Still needed: email, industry. Ask for email — one ask — then call save_lead again. Not recorded because they have not said it in their own words: industry. Do not repeat those values; ask about them plainly.",
+      "Not finished yet. Still needed: email. Ask for email — one ask — then call save_lead again. Not recorded because they have not said it in their own words: industry. Do not repeat those values; ask about them plainly, or call save_lead again without them.",
+    );
+    const heldOnly = decision({ outcome: "in_progress", missing: [], rejected: ["industry"] });
+    expect(functionMessage("save_lead", heldOnly, { saved: false, position: null })).toMatch(
+      /^Not saved yet\. Not recorded because they have not said it in their own words: industry\./,
     );
   });
 

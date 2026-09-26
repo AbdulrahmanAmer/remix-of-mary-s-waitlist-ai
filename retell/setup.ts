@@ -1,7 +1,7 @@
 /**
  * Creates or updates MARY's Retell LLM and agent from the files in retell/.
  *
- *   bun retell/setup.ts --site https://<published-host> --voice <voice_id> [--apply] [--publish]
+ *   bun retell/setup.ts --site https://<published-host> --voice <voice_id> [--playbook condensed|full] [--apply] [--publish]
  *
  * Without --apply it is a dry run: it builds the config, prints the prompt token
  * estimate and writes retell/out/{llm,agent}.json (gitignored) for review.
@@ -12,29 +12,46 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
-import { buildRetellConfig } from "./config";
+import { buildRetellConfig, PLAYBOOKS, type PlaybookKind } from "./config";
 
 const RETELL_API = "https://api.retellai.com";
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
 const OUT_DIR = `${ROOT}retell/out/`;
 
-const USAGE = `usage: bun retell/setup.ts --site https://<published-host> --voice <voice_id> [--apply] [--publish]
+const USAGE = `usage: bun retell/setup.ts --site https://<published-host> --voice <voice_id> [--playbook condensed|full] [--apply] [--publish]
 
   --site     the published origin Retell will call back (https only)
   --voice    a Retell voice id from the dashboard (optional on a dry run)
+  --playbook condensed (default): retell/playbook-condensed.md, about 3,200 tokens, 1x billing
+             full: prompt-header.md + docs/mary-voice.md, about 8,000 tokens, about 2x billing
   --apply    create or update the LLM and agent; needs RETELL_API_KEY
              (RETELL_LLM_ID / RETELL_AGENT_ID in the shell switch create to update)
   --publish  with --apply: publish the agent version that was just written`;
 
-type Args = { site: string; voice: string; apply: boolean; publish: boolean };
+type Args = {
+  site: string;
+  voice: string;
+  playbook: PlaybookKind;
+  apply: boolean;
+  publish: boolean;
+};
 
 function parseArgs(argv: string[]): Args {
-  const args: Args = { site: "", voice: "", apply: false, publish: false };
+  const args: Args = { site: "", voice: "", playbook: "condensed", apply: false, publish: false };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === "--site") args.site = argv[++i] ?? "";
     else if (a === "--voice") args.voice = argv[++i] ?? "";
-    else if (a === "--apply") args.apply = true;
+    else if (a === "--playbook") {
+      const kind = argv[++i] ?? "";
+      if (!(PLAYBOOKS as ReadonlyArray<string>).includes(kind)) {
+        console.error(
+          `--playbook must be one of ${PLAYBOOKS.join(", ")}, got ${JSON.stringify(kind)}`,
+        );
+        process.exit(2);
+      }
+      args.playbook = kind as PlaybookKind;
+    } else if (a === "--apply") args.apply = true;
     else if (a === "--publish") args.publish = true;
     else if (a === "--help" || a === "-h") {
       console.log(USAGE);
@@ -93,12 +110,15 @@ async function main(): Promise<void> {
     voiceId: args.voice,
     llm: JSON.parse(read("retell/llm.json")) as Record<string, unknown>,
     agent: JSON.parse(read("retell/agent.json")) as Record<string, unknown>,
-    header: read("retell/prompt-header.md"),
-    playbook: read("docs/mary-voice.md"),
+    playbookKind: args.playbook,
+    header: args.playbook === "full" ? read("retell/prompt-header.md") : "",
+    playbook: read(
+      args.playbook === "full" ? "docs/mary-voice.md" : "retell/playbook-condensed.md",
+    ),
     dryRun: !args.apply,
   });
 
-  console.log(`prompt: about ${config.promptTokens} tokens`);
+  console.log(`prompt (${args.playbook} playbook): about ${config.promptTokens} tokens`);
   for (const w of config.warnings) console.log(`warning: ${w}`);
 
   let llmId = env["RETELL_LLM_ID"] ?? "llm_id_set_by_apply";

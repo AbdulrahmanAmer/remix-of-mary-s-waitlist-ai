@@ -45,7 +45,7 @@ export function applyPlaybookEdits(playbook: string): string {
   return out;
 }
 
-/** The Retell general_prompt: this call's rules, then the edited playbook, then her field notes. */
+/** The full-playbook general_prompt: this call's rules, then the edited playbook, then her field notes. */
 export function buildGeneralPrompt(header: string, playbook: string): string {
   return (
     header.trim() +
@@ -54,6 +54,25 @@ export function buildGeneralPrompt(header: string, playbook: string): string {
     "\n\n# FIELD NOTES\n{{field_notes}}"
   );
 }
+
+/**
+ * retell/playbook-condensed.md is the whole general_prompt: it already carries the call rules
+ * the header adds and ends with the field notes, so it is used as written.
+ */
+export function buildCondensedPrompt(playbook: string): string {
+  const prompt = playbook.trim();
+  if (!prompt.endsWith("{{field_notes}}")) {
+    throw new Error("the condensed playbook must end with {{field_notes}}");
+  }
+  return prompt;
+}
+
+/**
+ * condensed (default): retell/playbook-condensed.md, about 3,200 tokens, billed at 1x.
+ * full: prompt-header.md plus docs/mary-voice.md, about 8,000 tokens, billed at about 2x.
+ */
+export const PLAYBOOKS = ["condensed", "full"] as const;
+export type PlaybookKind = (typeof PLAYBOOKS)[number];
 
 /** An https origin with no path, query or trailing slash; Retell must reach it from the internet. */
 export function normalizeSite(site: string): string {
@@ -109,7 +128,10 @@ export type RetellConfigInput = {
   voiceId: string;
   llm: Record<string, unknown>;
   agent: Record<string, unknown>;
+  playbookKind: PlaybookKind;
+  /** retell/prompt-header.md; used only with the full playbook. */
   header: string;
+  /** retell/playbook-condensed.md or docs/mary-voice.md, matching playbookKind. */
   playbook: string;
   dryRun: boolean;
 };
@@ -131,7 +153,10 @@ export function buildRetellConfig(input: RetellConfigInput): RetellConfig {
     warnings.push("no voice id: agent.json has an empty voice_id and cannot be applied as is");
   }
 
-  const prompt = buildGeneralPrompt(input.header, input.playbook);
+  const prompt =
+    input.playbookKind === "condensed"
+      ? buildCondensedPrompt(input.playbook)
+      : buildGeneralPrompt(input.header, input.playbook);
   const promptTokens = estimateTokens(prompt);
   if (promptTokens > PROMPT_TOKEN_BILLING_STEP) {
     const multiplier = (promptTokens / PROMPT_TOKEN_BILLING_STEP).toFixed(1);

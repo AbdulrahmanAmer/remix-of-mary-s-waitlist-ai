@@ -206,7 +206,8 @@ export type Decision = {
 };
 
 const DISCOVERY_FIELDS = ["name", "business", "industry", "operations"] as const;
-const REQUIRED_FIELDS = ["name", "email", "business", "industry", "operations"] as const;
+/** A spot needs only these: a visitor in a hurry, or with no business at all, still joins. */
+const SIGNUP_FIELDS = ["name", "email"] as const;
 
 /**
  * Grounds the agent's arguments against what the person said on this call.
@@ -255,7 +256,7 @@ export function groundSaveLead(
   const grounded = groundCollected({ previous, proposed, userMessages, lastAssistant });
   const collected = toCollected(grounded.collected);
   const rejected = grounded.rejected;
-  const required = stage === "progress" ? DISCOVERY_FIELDS : REQUIRED_FIELDS;
+  const required = stage === "progress" ? DISCOVERY_FIELDS : SIGNUP_FIELDS;
   let missing: WaitlistField[] = required.filter((field) => !collected[field]);
   let outcome: Decision["outcome"] = "in_progress";
 
@@ -268,7 +269,13 @@ export function groundSaveLead(
       ...(reachable ? [] : ["phone" as const]),
     ];
     outcome = missing.length === 0 ? "callback" : "in_progress";
-  } else if (stage === "final" && missing.length === 0) {
+  } else if (
+    stage === "final" &&
+    missing.length === 0 &&
+    rejected.every((field) => field === "phone")
+  ) {
+    // An ungrounded detail holds the save once, so the agent asks plainly or drops it. The phone
+    // is optional: a rejected one is simply left out.
     outcome = "signed_up";
   }
   return { collected, rejected, missing, outcome };
@@ -466,18 +473,19 @@ export function functionMessage(
     if (open.length) {
       return `Not recorded yet: ${open.join(", ")}. Ask about ${open[0]} plainly — one ask — in their own words, then call note_details again. Do not reveal yet.`;
     }
-    return "Noted. Now the reveal: no form, you already have it all — credit Convert by name, and ask nothing in that turn.";
+    return "Noted. Now the reveal, as your playbook describes it: no form, you already have it all — credit Convert by name.";
   }
   if (d.outcome === "in_progress") {
-    const next = d.missing[0] ?? d.rejected[0] ?? "what is still open";
-    let message = `Not finished yet. Still needed: ${d.missing.join(", ")}. Ask for ${next} — one ask — then call save_lead again.`;
+    let message = d.missing.length
+      ? `Not finished yet. Still needed: ${d.missing.join(", ")}. Ask for ${d.missing[0]} — one ask — then call save_lead again.`
+      : "Not saved yet.";
     if (d.rejected.length) {
-      message += ` Not recorded because they have not said it in their own words: ${d.rejected.join(", ")}. Do not repeat those values; ask about them plainly.`;
+      message += ` Not recorded because they have not said it in their own words: ${d.rejected.join(", ")}. Do not repeat those values; ask about them plainly, or call save_lead again without them.`;
     }
     return message;
   }
   if (!sync.saved) {
-    return "Noted, but the list could not be updated right now. Do not give a position number. Tell them the team will confirm by email, then close as usual.";
+    return "Noted, but the list could not be updated right now. Do not give a position number and do not say it is saved. Thank them by first name, then close as usual.";
   }
   if (d.outcome === "callback") {
     return "Callback request saved. Confirm plainly, using their name, that the team will reach them on that number — no day or time. Then a short goodbye and end_call.";

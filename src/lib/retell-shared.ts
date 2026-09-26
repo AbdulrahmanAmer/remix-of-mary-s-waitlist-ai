@@ -36,9 +36,9 @@ export const NO_FIELD_NOTES = "none yet";
 
 /** WELCOME openers (docs/mary-voice.md section 7), each landing on the name question. */
 export const OPENING_LINES = [
-  "Hey — good to meet you. I'm MARY, the AI Revenue Concierge from Omnikom. OmniSuite is the revenue engine I run on — so what should I call you?",
-  "Hi there. I'm MARY — I'm what OmniSuite sounds like, the system that decides which lead to work, when, and how. What's your name?",
-  "Hello — thanks for stopping by. I'm MARY, from Omnikom. OmniSuite turns new leads, old lists and missed calls into booked conversations. Who am I talking to?",
+  "Hi, I'm MARY. I look after early access for OmniSuite, Omnikom's new revenue engine. Two minutes with me and you're on the list. What should I call you?",
+  "Hey — I'm MARY, the AI behind OmniSuite from Omnikom. Give me two minutes and I'll get you on the early-access list. What's your name?",
+  "Hello, thanks for stopping by. I'm MARY, from Omnikom. Two minutes with me gets you early access to OmniSuite. Who am I talking to?",
 ] as const;
 
 export function welcomeBackLine(name: string): string {

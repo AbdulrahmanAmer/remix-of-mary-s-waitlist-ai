@@ -18,7 +18,7 @@
     {
       "type": "custom",
       "name": "note_details",
-      "description": "Silently record what they have told you. Call once name, business, industry and operations are all in their own words, right before the reveal. If the result lists anything missing or not recorded, ask for it and call again; reveal only after it comes back complete.",
+      "description": "Silent checkpoint right before the reveal, once name, business, industry and operations are in their own words. If the result lists anything missing or not recorded, ask plainly and call again; reveal only when it comes back complete.",
       "url": "__SITE_ORIGIN__/api/retell/functions/save-lead",
       "method": "POST",
       "args_at_root": false,
@@ -63,7 +63,7 @@
     {
       "type": "custom",
       "name": "save_lead",
-      "description": "Record the visitor on the OmniSuite waitlist. Stage \"final\" after they answer the WRAP question and you hold name, email, business, industry and operations. Stage \"callback\" once you have a name and a number after they asked to be called back. Pass every detail you hold, not only new ones.",
+      "description": "Put the visitor on the OmniSuite waitlist. Stage \"final\" once their name and email are confirmed: after the WRAP answer, or straight away on the fast lane. Stage \"callback\" once you have a name and a number after they asked to be called back. Pass every detail you hold.",
       "url": "__SITE_ORIGIN__/api/retell/functions/save-lead",
       "method": "POST",
       "args_at_root": false,
@@ -81,7 +81,7 @@
           "stage": {
             "type": "string",
             "enum": ["final", "callback"],
-            "description": "final = sign-up after the wrap answer; callback = they asked to be called back."
+            "description": "final = on the list (name and email are enough); callback = they asked to be called back."
           },
           "name": { "type": "string", "description": "Their name exactly as they said it." },
           "name_evidence": {

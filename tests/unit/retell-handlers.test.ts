@@ -583,7 +583,7 @@ describe("POST /api/retell/functions/save-lead", () => {
       saved: false,
       outcome: "in_progress",
       rejected: ["industry"],
-      missing: ["industry"],
+      missing: [],
     });
     expect(body.collected.industry).toBeUndefined();
     expect(body.message).toContain(
