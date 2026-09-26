@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SoundcheckRouteImport } from './routes/soundcheck'
 import { Route as ApiAddresseeRouteImport } from './routes/api/addressee'
 import { Route as ApiLeadRouteImport } from './routes/api/lead'
@@ -27,6 +28,11 @@ import { Route as ApiRetellFunctionsSaveLeadRouteImport } from './routes/api/ret
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SoundcheckRoute = SoundcheckRouteImport.update({
@@ -98,6 +104,7 @@ const ApiRetellFunctionsSaveLeadRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/privacy': typeof PrivacyRoute
   '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
@@ -114,6 +121,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/privacy': typeof PrivacyRoute
   '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
@@ -131,6 +139,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/privacy': typeof PrivacyRoute
   '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
@@ -149,6 +158,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/privacy'
     | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
@@ -165,6 +175,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/privacy'
     | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/privacy'
     | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
@@ -198,6 +210,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PrivacyRoute: typeof PrivacyRoute
   SoundcheckRoute: typeof SoundcheckRoute
   ApiAddresseeRoute: typeof ApiAddresseeRoute
   ApiLeadRoute: typeof ApiLeadRoute
@@ -220,6 +233,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/soundcheck': {
@@ -318,6 +338,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PrivacyRoute: PrivacyRoute,
   SoundcheckRoute: SoundcheckRoute,
   ApiAddresseeRoute: ApiAddresseeRoute,
   ApiLeadRoute: ApiLeadRoute,

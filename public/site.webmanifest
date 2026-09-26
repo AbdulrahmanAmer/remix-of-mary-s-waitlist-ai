@@ -4,8 +4,8 @@
   "description": "MARY, the AI Revenue Concierge behind OmniSuite, a product by Omnikom.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#f8f7f2",
-  "theme_color": "#f8f7f2",
+  "background_color": "#fbfaf7",
+  "theme_color": "#fbfaf7",
   "icons": [
     { "src": "/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" },
     { "src": "/favicon.png", "sizes": "64x64", "type": "image/png" }
