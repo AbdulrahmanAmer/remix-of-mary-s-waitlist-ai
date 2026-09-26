@@ -136,6 +136,24 @@ NEXT
 - Integration: merge WP1 + WP2 + WP3, all four gates, bundle check (`livekit` in exactly one lazy chunk, entry chunks grow < 5 KB), render gate with and without the Retell env, Worker smoke test with `.dev.vars`; open the PR (never push to `main`).
 - Operator: answer the six questions in `retell-migration.md` section 10 (cost, transcript storage, voice id, loud-room default, captions, call limits), create the Retell account, then follow `retell/README.md` go-live.
 
+## 2026-09-26 - CHECKPOINT (usage limit) - PR #2 branch claude/iphone-audio-playback-compat-lmufp8
+
+DONE (all pushed, CI green on 783f37c; gates: typecheck 0, lint 0, 394 tests, build 0)
+- Retell built dormant (c9aa879, 43c6b97, 84ee54b, 5f531ad) + condensed playbook as default prompt (bfb87c7).
+- Live phone layout from Lovable brought into git (b488afc); report + patch: `docs/audit/live-drift-2026-09-26.{md,patch}`.
+- V1 fixes merged: conversation 35e5126, call reliability f511644, leads b991dc7, screen 344e40f.
+- Review fixes: 406d586 (hold left MARY silent; fast-lane ending; Retell prompts), 783f37c (Try again/corrections/outbox went to the Retell lifecycle).
+
+IN FLIGHT when the limit hit
+- Experience audit workflow (run `wf_b7f8d06b-fd9`): lenses + merge + 12 of the verifications done; Plan and critic not run. Everything it produced is saved in `docs/audit/experience-2026-09-26/` (README has the resume command; in a new session run the Plan step by hand from `merged-findings.json` + `verdicts.json`).
+- Nothing else is running. Fix worktrees under the session scratchpad (`wt/`) are merged and disposable.
+
+NEXT
+- Map each UX-id to the fix commit, then write the operator plan (the audit's Plan step), leanly.
+- Consolidate the two opener lists (`OPENING_LINES` in retell-shared used by the MARY client, `OPENERS`/`welcomeTurn` in mary.functions).
+- Operator: check Lovable (domain owner, GitHub sync) before Publish; connect the Google Sheet (`SHEETS_WEBAPP_URL`); say "merge" to merge PR #2.
+- MARY cannot be exercised locally (no LOVABLE_API_KEY): verify by code reading and unit tests only.
+
 ## 2026-09-26 - V1 fixes merged onto PR #2 (branch claude/iphone-audio-playback-compat-lmufp8)
 
 DONE
