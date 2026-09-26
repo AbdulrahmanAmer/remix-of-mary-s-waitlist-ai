@@ -612,11 +612,15 @@ describe("POST /api/retell/functions/save-lead", () => {
         phone: `555${" ".repeat(53)}0123`,
         business: `Marsh Plumbing ${"\\".repeat(185)}`,
         industry: `plumbing ${'"'.repeat(111)}`,
-        operations: '\\"'.repeat(200),
+        // Grounding needs words the person said, so the padding follows a real quote.
+        operations: `whoever's free grabs them ${'\\"'.repeat(187)}`,
       };
       const call = v["call"] as Json;
       call["metadata"] = { ...(call["metadata"] as Json), lead: undefined };
-      (call["transcript_with_tool_calls"] as Json[]).push(user("Call me on 555 0123."));
+      (call["transcript_with_tool_calls"] as Json[]).push(
+        user(`It's leo at ${"m".repeat(192)} dot com.`),
+        user("Call me on 555 0123."),
+      );
     });
     const response = await run(d, text);
     const body = await response.text();

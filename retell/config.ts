@@ -29,6 +29,10 @@ export const PLAYBOOK_EDITS: ReadonlyArray<PlaybookEdit> = [
   { find: "- **say** — your reaction", replace: "- **First** — your reaction" },
   { find: "- **followUp** — the one next thing", replace: "- **Then** — the one next thing" },
   { find: "Or null when a reaction alone is", replace: "Or nothing when a reaction alone is" },
+  {
+    find: '"say" is the reveal, and\n  "followUp" is the email ask',
+    replace: "the reveal comes first, and\n  then the email ask",
+  },
 ];
 
 /** Applies PLAYBOOK_EDITS; throws when a target is missing or occurs more than once. */

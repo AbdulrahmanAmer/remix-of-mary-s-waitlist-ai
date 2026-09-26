@@ -65,7 +65,7 @@ export type ReflectInput = {
 const OUTCOME_TEXT: Record<ReflectInput["outcome"], string> = {
   signed_up: "they joined the waitlist and MARY closed properly",
   callback: "they asked to be called back instead; name and number were taken",
-  declined: "they declined or had no business, and MARY let them go",
+  declined: "they declined the spot, or left before giving an email, and MARY let them go",
   abandoned: "they left mid-conversation without finishing",
   in_progress: "the conversation was still going",
 };

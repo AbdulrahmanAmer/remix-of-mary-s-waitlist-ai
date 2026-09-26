@@ -17,10 +17,10 @@ re-created or updated from the repo instead of the dashboard.
 | `sign.ts`               | `RETELL_WEBHOOK_KEY=… bun retell/sign.ts <file>` prints an `x-retell-signature` for that file's exact bytes, for local curl checks                                                                                           |
 
 By default the prompt is `playbook-condensed.md` as written (`buildCondensedPrompt`). With
-`--playbook full` it is `prompt-header.md`, then `docs/mary-voice.md` with six edits (`PLAYBOOK_EDITS` in
+`--playbook full` it is `prompt-header.md`, then `docs/mary-voice.md` with seven edits (`PLAYBOOK_EDITS` in
 `config.ts`: the hold button, the say/followUp JSON beats and `complete` become call wording), then
 `{{field_notes}}`. `docs/mary-voice.md` itself is never edited; the test
-(`tests/unit/retell-config.test.ts`) fails when one of the six targets stops occurring exactly once.
+(`tests/unit/retell-config.test.ts`) fails when one of the seven targets stops occurring exactly once.
 The three dynamic variables are set per call by `/api/retell/web-call`: `opening_line` (one of
 `OPENING_LINES`, or the welcome-back line when the name is known), `known_summary`, `field_notes`.
 
