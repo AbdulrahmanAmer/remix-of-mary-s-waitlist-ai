@@ -447,6 +447,18 @@ export function spokenToEmail(text: string): string {
     .replace(/[\s,]+/g, "");
 }
 
+const DIGIT_WORD = /\b(zero|oh|one|two|three|four|five|six|seven|eight|nine)\b/gi;
+
+/**
+ * The text as said and, when it names digits as words, with those words as
+ * digits too: "okonkwo underscore seven" is okonkwo_7, but "john one" may still
+ * be johnone, so both readings are tried.
+ */
+function digitReadings(text: string): string[] {
+  const numeric = text.replace(DIGIT_WORD, (w) => NUMBER_WORDS[w.toLowerCase()] ?? w);
+  return numeric === text ? [text] : [text, numeric];
+}
+
 /** Words about email that are one slip away from a provider's name. */
 const MAIL_WORDS = new Set(["email", "emails", "mail", "mails"]);
 
@@ -466,7 +478,9 @@ export function readsBackEmail(line: string, email: string): boolean {
   const bareLocal = bareEmailPart(local);
   if (bareLocal.length < 2 || !label) return false;
   // Anchored on the @, so "sarah at brightpath" never passes for "sara@brightpath".
-  return bareEmailPart(line).includes(`${bareLocal}@${label}`);
+  return digitReadings(line).some((reading) =>
+    bareEmailPart(reading).includes(`${bareLocal}@${label}`),
+  );
 }
 
 /** The person said they have no business of their own. */
@@ -561,7 +575,8 @@ export function groundCollected(params: {
         const v = value.toLowerCase();
         const [local = "", domain = ""] = v.split("@");
         const label = domain.split(".")[0] ?? "";
-        const squashed = spokenToEmail(scopeText);
+        const squashed = digitReadings(scopeText).map(spokenToEmail);
+        const allSquashed = digitReadings(allUser).map(spokenToEmail);
         // A correction often restates only the part that was wrong, so the
         // other part may stand as it was first said. The domain is what a guess
         // invents ("sarah@gmail.com" from "Sarah"), so it has to have been said
@@ -569,17 +584,17 @@ export function groundCollected(params: {
         const existingLocal = existing?.toLowerCase().split("@")[0] ?? "";
         const localOk =
           local.length >= 2 &&
-          (squashed.includes(local) ||
-            (local === existingLocal && spokenToEmail(allUser).includes(local)));
+          (squashed.some((s) => s.includes(local)) ||
+            (local === existingLocal && allSquashed.some((s) => s.includes(local))));
         const saidWords = tokens(allUser);
         const domainOk =
           label.length > 0 &&
           ((label.length >= 4
-            ? spokenToEmail(allUser).includes(label)
+            ? allSquashed.some((s) => s.includes(label))
             : saidWords.includes(label)) ||
             // "ackme" for acme — but never "email" standing in for gmail.
             (label.length >= 4 && saidWords.some((t) => !MAIL_WORDS.has(t) && nearWord(t, label))));
-        ok = squashed.includes(v) || (localOk && domainOk);
+        ok = squashed.some((s) => s.includes(v)) || (localOk && domainOk);
         // "Did I get that right?" — "Yes."
         if (!ok && affirmed && lastAssistant) ok = readsBackEmail(lastAssistant, v);
         break;

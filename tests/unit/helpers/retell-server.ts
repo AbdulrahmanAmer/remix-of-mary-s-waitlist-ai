@@ -182,6 +182,7 @@ export function testEnv(over: Partial<RetellEnv> = {}): RetellEnv {
     signingKey: KEY,
     publicKey: null,
     lovableKey: null,
+    sheets: true,
     ...over,
   };
 }

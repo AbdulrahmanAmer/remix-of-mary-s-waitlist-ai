@@ -546,6 +546,28 @@ describe("the mid-call poll", () => {
     expect(t.actions.filter((a) => a.type === "SET_COLLECTED")).toHaveLength(1);
   });
 
+  it("ends the call when the server says it is over, though the browser never heard", async () => {
+    const t = setup();
+    const session = await t.live();
+    const ended = () =>
+      json({
+        found: true,
+        status: "ended",
+        ended: true,
+        disconnectionReason: "inactivity",
+        progress: progress({ collected: { name: "Leo" } }),
+      });
+    t.statusReplies.push(ended, ended, ended, ended, ended, ended);
+    await t.advance(RETELL_POLL_MS);
+    await flush();
+    expect(t.store.get().mic.live).toBe(false);
+    expect(session.end).toHaveBeenCalledTimes(1);
+    await t.advance(60_000);
+    await flush();
+    expect(t.deps.finish).toHaveBeenCalledTimes(1);
+    expect(t.deps.fallback).not.toHaveBeenCalled();
+  });
+
   it("pauses while the page is hidden", async () => {
     const t = setup();
     await t.live();

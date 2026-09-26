@@ -484,6 +484,14 @@ export class RetellCall {
     this.pollDelay = ok ? RETELL_POLL_MS : Math.min(this.pollDelay * 2, RETELL_POLL_MAX_MS);
     const progress = this.progressOf(status);
     if (progress) this.noteProgress(progress);
+    if (status?.found && status.ended) {
+      // Retell already ended the call (its silence hang-up, a dropped peer), but a
+      // connection that only went "disconnected" never tells this browser: end it here.
+      this.onEnd();
+      const session = this.session;
+      if (session) void Promise.resolve(session.end()).catch(noop);
+      return;
+    }
     this.schedulePoll(this.pollDelay);
   }
 

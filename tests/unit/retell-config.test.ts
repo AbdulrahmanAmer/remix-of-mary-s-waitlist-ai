@@ -194,6 +194,13 @@ describe("buildRetellConfig: agent", () => {
   const agent = cfg.agent("llm_abc123");
   const analysis = agent["post_call_analysis_data"] as AnalysisItem[];
 
+  it("discloses it is an AI when asked and is harder to interrupt than Retell's default", () => {
+    expect(agent["handbook_config"]).toMatchObject({ ai_disclosure: true, scope_boundaries: true });
+    const sensitivity = agent["interruption_sensitivity"] as number;
+    expect(sensitivity).toBeGreaterThan(0);
+    expect(sensitivity).toBeLessThan(1);
+  });
+
   it("points the webhook at the site and subscribes to the shared events", () => {
     expect(agent["webhook_url"]).toBe(`${SITE}${RETELL_PATHS.webhook}`);
     expect(agent["webhook_events"]).toEqual([...WEBHOOK_EVENTS]);
