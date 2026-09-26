@@ -36,6 +36,9 @@ export function EndScreen({
   const reduced = useReducedMotion();
   const result = useSession(store, (s) => s.result);
   const collected = useSession(store, (s) => s.collected);
+  // A Retell call's row is written by the server (the webhook retries it), so there is
+  // nothing for this page to retry or re-send.
+  const retell = useSession(store, (s) => s.via === "retell");
   const delivery = useSyncExternalStore(leadDelivery.subscribe, leadDelivery.get, leadDelivery.get);
   const viewportHeight = useViewportHeight();
   if (!result) return null;
@@ -127,7 +130,7 @@ export function EndScreen({
                     <span className="size-1.5 rounded-full ring-2 ring-ink/50" />
                     {view.status.text}
                   </span>
-                  {view.retry && (
+                  {view.retry && !retell && (
                     <button
                       type="button"
                       onClick={() => void retryLeadDelivery(store)}
@@ -213,9 +216,9 @@ export function EndScreen({
                       ? "What the team receives"
                       : "What MARY recorded"}
                   </p>
-                  <p className="text-[0.68rem] text-muted-foreground">
-                    Misheard? Tap Edit to fix it.
-                  </p>
+                  {!retell && (
+                    <p className="text-xs text-muted-foreground">Misheard? Tap Edit to fix it.</p>
+                  )}
                 </div>
                 <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:gap-x-6">
                   {fields.map((field) => (
@@ -223,7 +226,7 @@ export function EndScreen({
                       key={field}
                       field={field}
                       value={collected[field] ?? ""}
-                      editable={EDITABLE.has(field)}
+                      editable={!retell && EDITABLE.has(field)}
                       onSave={(value) => save(field, value)}
                     />
                   ))}

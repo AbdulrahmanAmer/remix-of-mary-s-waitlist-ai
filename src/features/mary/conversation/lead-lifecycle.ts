@@ -46,6 +46,20 @@ export type LeadLifecycleDeps = {
   outbox?: LeadOutbox;
   /** What the end screen reads about delivery. Defaults to the shared signal. */
   delivery?: Signal<LeadDelivery>;
+  /**
+   * A Retell call: the server already wrote the row, so this lifecycle never
+   * takes over the page's retry, corrections, outbox or background flushes.
+   */
+  detached?: boolean;
+};
+
+/** Holds nothing: a detached lifecycle must never queue a row for /api/lead. */
+const INERT_OUTBOX: LeadOutbox = {
+  list: () => [],
+  stash: () => {},
+  failed: () => {},
+  drop: () => {},
+  clear: () => {},
 };
 
 const CHECKPOINT_MS = 5000;
@@ -132,12 +146,18 @@ export class LeadLifecycle {
   private readonly delivery: Signal<LeadDelivery>;
 
   constructor(private readonly deps: LeadLifecycleDeps) {
-    this.outbox = deps.outbox ?? browserOutbox;
+    this.outbox = deps.detached ? INERT_OUTBOX : (deps.outbox ?? browserOutbox);
     this.delivery = deps.delivery ?? leadDelivery;
     this.delivery.set(IDLE_DELIVERY);
-    byStore.set(deps.store, this);
+    this.claim();
+    if (!deps.detached) ensureTriggers();
+  }
+
+  /** This lifecycle drives the page: retry, corrections and background flushes reach it. */
+  private claim(): void {
+    if (this.deps.detached) return;
+    byStore.set(this.deps.store, this);
     setLive(this);
-    ensureTriggers();
   }
 
   /** The row the sheet receives, built from what is known right now. */
@@ -171,7 +191,7 @@ export class LeadLifecycle {
 
   /** Call after every change to the collected details. */
   onCollectedChanged(): void {
-    setLive(this);
+    this.claim();
     const deps = this.deps;
     const { store } = deps;
     const collected = store.get().collected;
@@ -191,7 +211,7 @@ export class LeadLifecycle {
 
   /** The conversation is over: end screen at once, then the sheet's answer, then the debrief. */
   async finalize(collected: Collected, outcome: ConversationOutcome): Promise<void> {
-    setLive(this);
+    this.claim();
     const deps = this.deps;
     const { store } = deps;
     this.finished = true;
@@ -285,14 +305,17 @@ export class LeadLifecycle {
 
   /** They changed their mind after declining — the call picks back up. */
   resume(): void {
+    this.claim();
     this.finished = false;
     this.final = null;
+    // What the declined row saved says nothing about the sign-up that may follow.
+    this.delivery.set(IDLE_DELIVERY);
     this.deps.store.dispatch({ type: "RESUME" });
   }
 
   /** The tab is closing or going to the background mid-call. */
   flush(): void {
-    setLive(this);
+    this.claim();
     const state = this.deps.store.get();
     if (this.finished || (state.stage !== "call" && state.stage !== "fallback")) return;
     const turns = state.lines.filter((line) => line.role === "user").length;

@@ -286,6 +286,8 @@ function createController(): Controller {
     sessionId,
     syncLead: async () => retellSynced,
     beaconLead: () => {},
+    // MARY's lifecycle keeps the page's retry, corrections and outbox; the webhook retries Retell's.
+    detached: true,
     saveProgress,
     reflect: async () => null,
     addLessons,
