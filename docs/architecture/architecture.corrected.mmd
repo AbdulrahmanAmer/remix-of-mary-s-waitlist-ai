@@ -56,6 +56,30 @@ subgraph group_external["External Services (Sheets, AI Gateway)"]
   node_ai_gateway{{"AI gateway (ai.gateway.lovable.dev, openai-compatible)"}}
 end
 
+%% Retell voice path, added 2026-09-26. DORMANT: the routes answer 404 and the lazy chunk is never
+%% loaded until VOICE_PROVIDER is not "mary" and RETELL_API_KEY + RETELL_AGENT_ID are set.
+%% Full picture with the call flow: retell-target.mmd. diagram.corrected.png and diagram.retell.png
+%% predate this subgraph and are stale for it. The client nodes hang off src/features/mary/mary-app.tsx,
+%% which replaced src/components/mary-experience.tsx (the UI group above predates that layering).
+subgraph group_retell["Retell voice path (dormant behind VOICE_PROVIDER + keys)"]
+  node_mary_app["src/features/mary/mary-app.tsx"]
+  node_voice_provider["src/features/mary/voice/voice-provider.ts"]
+  node_retell_loader["src/features/mary/voice/retell-loader.ts (lazy chunk)"]
+  node_retell_call["src/features/mary/voice/retell-call.ts"]
+  node_retell_shared["src/lib/retell-shared.ts"]
+  node_voice_api["src/routes/api/voice.ts (GET /api/voice)"]
+  node_retell_webcall_api["src/routes/api/retell/web-call.ts"]
+  node_retell_status_api["src/routes/api/retell/call-status.ts"]
+  node_retell_inject_api["src/routes/api/retell/inject.ts"]
+  node_retell_savelead_api["src/routes/api/retell/functions/save-lead.ts"]
+  node_retell_webhook_api["src/routes/api/retell/webhook.ts"]
+  node_retell_handlers["src/lib/retell-handlers.server.ts (+ retell-deps, retell-env, retell-signature)"]
+  node_retell_lead["src/lib/retell-lead.server.ts"]
+  node_retell_config["retell/ (llm.json, agent.json, prompt-header.md, setup.ts)"]
+end
+
+node_retell_cloud{{"Retell (api.retellai.com: web calls, WebRTC, LLM agent, webhooks)"}}
+
 node_visitor(("Visitor"))
 
 node_visitor -->|"opens"| node_landing
@@ -127,6 +151,28 @@ node_server_ts -->|"installs capture"| node_error_capture
 node_server_ts -->|"renders fallback page"| node_error_page
 node_start_ts -->|"renders fallback page"| node_error_page
 
+node_mary_app -->|"probes at mount"| node_voice_provider
+node_voice_provider -->|"GET, no-store"| node_voice_api
+node_mary_app -.->|"await import() only when Retell"| node_retell_loader
+node_retell_loader -->|"builds"| node_retell_call
+node_retell_call -->|"create-web-call via proxy fetch"| node_retell_webcall_api
+node_retell_call -->|"progress after the end"| node_retell_status_api
+node_retell_call -->|"typed text"| node_retell_inject_api
+node_retell_call <-->|"WebRTC audio"| node_retell_cloud
+node_retell_webcall_api -->|"POST /v3/create-web-call"| node_retell_cloud
+node_retell_status_api -->|"GET /v2/get-call"| node_retell_cloud
+node_retell_inject_api -->|"PATCH /v2/update-live-call"| node_retell_cloud
+node_retell_cloud -->|"note_details / save_lead (signed)"| node_retell_savelead_api
+node_retell_cloud -->|"call_ended / call_analyzed (signed)"| node_retell_webhook_api
+node_voice_api & node_retell_webcall_api & node_retell_status_api & node_retell_inject_api & node_retell_savelead_api & node_retell_webhook_api -->|"handled by"| node_retell_handlers
+node_retell_handlers -->|"maps and grounds"| node_retell_lead
+node_retell_lead -->|"grounds collected fields"| node_grounding
+node_retell_handlers -->|"writes lead rows"| node_sheets_server
+node_retell_handlers -->|"runs the debrief"| node_experience_server
+node_start_ts -.->|"api-guard.ts budgets run before every /api/* POST"| node_retell_handlers
+node_retell_call & node_retell_handlers & node_retell_config -->|"share paths and schemas"| node_retell_shared
+node_retell_config -.->|"creates the agent (setup.ts --apply)"| node_retell_cloud
+
 classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
 classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
 classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
@@ -142,3 +188,6 @@ class node_waitlist_store,node_experience_store,node_addressee_lib,node_mary_str
 class node_mary_functions,node_turn_api,node_prompt_server,node_grounding,node_experience_server,node_addressee_api,node_reflect_api,node_lead_sync,node_lead_api,node_server_ts,node_start_ts,node_error_capture,node_error_page,node_lovable_error toneAmber
 class node_sheets_server,node_sheets_gs,node_ai_gateway toneIndigo
 class node_visitor toneNeutral
+classDef toneDormant fill:#f1f5f9,stroke:#64748b,stroke-width:1.5px,stroke-dasharray:5 3,color:#0f172a
+class node_mary_app,node_voice_provider,node_retell_loader,node_retell_call,node_retell_shared,node_voice_api,node_retell_webcall_api,node_retell_status_api,node_retell_inject_api,node_retell_savelead_api,node_retell_webhook_api,node_retell_handlers,node_retell_lead,node_retell_config toneDormant
+class node_retell_cloud toneIndigo

@@ -1,0 +1,38 @@
+{
+  "agent_name": "MARY waitlist",
+  "voice_id": "__VOICE_ID__",
+  "language": "en-US",
+  "response_engine": { "type": "retell-llm", "llm_id": "__LLM_ID__" },
+  "webhook_url": "__SITE_ORIGIN__/api/retell/webhook",
+  "webhook_events": ["call_ended", "call_analyzed"],
+  "webhook_timeout_ms": 10000,
+  "max_call_duration_ms": 900000,
+  "end_call_after_silence_ms": 45000,
+  "denoising_mode": "noise-and-background-speech-cancellation",
+  "boosted_keywords": ["MARY", "OmniSuite", "Omnikom", "Convert", "Cultivate", "Recover"],
+  "data_storage_setting": "everything",
+  "post_call_analysis_model": "gpt-5.6-terra",
+  "post_call_analysis_data": [
+    {
+      "type": "system-presets",
+      "name": "call_summary",
+      "description": "Two sentences: what kind of business they run and how the call ended. No names, emails or phone numbers."
+    },
+    {
+      "type": "enum",
+      "name": "outcome",
+      "description": "joined = save_lead succeeded with stage final; callback = save_lead succeeded with stage callback; declined = they said no or have no business; incomplete = anything else.",
+      "choices": ["joined", "callback", "declined", "incomplete"]
+    },
+    {
+      "type": "boolean",
+      "name": "callback_requested",
+      "description": "True only if the visitor explicitly asked to be contacted later."
+    },
+    {
+      "type": "string",
+      "name": "objections",
+      "description": "Objections they actually raised, short phrases separated by '; '. Empty if none."
+    }
+  ]
+}

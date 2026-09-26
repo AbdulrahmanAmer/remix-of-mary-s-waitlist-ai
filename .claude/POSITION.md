@@ -115,3 +115,23 @@ UNPROVEN / NEXT
 - Fixed on the branch (restarted from main): screen wake lock for the call (requested in the tap, re-acquired on return, released at the end); recorder closed whenever the call screen goes away (a Hold press after "Type instead" left the mic on); element restarted once the mic is live so WebKit can join it to the voice-processing unit, as ElevenLabs builds its element after getUserMedia; /soundcheck test 6 reports a failed speech request; diagnostics no longer call the element route "echo cancellation degraded".
 - Verified in Chromium (iPhone, desktop, Mac-Safari profiles): elementRestarted trace, audio still reaches the element (0.40), wake lock requested inside the tap (denied in headless, handled), desktop unchanged; gates 0/0/67/0.
 - Still open (not code): voice backend 502 since ~08:00 UTC; publish main; real-device test (/soundcheck silent + ring, one call, one Type-instead call, Mac Safari call).
+
+## 2026-09-26 - iPhone confirmed; Retell voice path built dormant (branches retell/*, PR pending)
+
+FOUND
+- Operator confirmed on a real iPhone 13 that MARY is audible after PR #1 (the ElevenLabs-style `<audio>` element route, 44318ba + 210a1ea). First real-device proof of the Apple route; Mac Safari, the no-mic path and AirPods are still unproven.
+- Operator asked to finalize the Retell structure so the waitlist backend can switch to a Retell agent as soon as one exists. Decision: build it now, dormant behind `VOICE_PROVIDER` + keys (amends S4's "built later" for the code; going live still waits on the operator's Retell account).
+
+DONE (plan: scratchpad `retell/plan.md`, judged from two designs against the real SDK sources; three work packages in parallel worktrees, merged by an integration step)
+- WP0 contract `src/lib/retell-shared.ts` (c9aa879). WP1 server: env rule, HMAC signature (mirrors `retell-sdk` 6.0.1 `webhook_auth.ts`, golden vectors), call-to-lead mapping through the existing `groundCollected`, six handlers with injected deps, routes, guard budgets, fixtures. WP2 client: `/api/voice` probe at mount, lazy `retell-loader.ts` (the only value import of `retell-client-js-sdk` 3.0.1), `RetellCall` adapter with the proxy fetch, orb from `onAudio`, End call, typed-text inject, post-end poll, fallback to typing.
+- WP3 (this branch): `retell/` agent as code (`llm.json`, `agent.json`, `prompt-header.md`, `config.ts`, `setup.ts` with dry run / `--apply` / `--publish`, `sign.ts`), every Retell field name checked against `retell-sdk` 6.0.1 `resources/{llm,agent}.ts`; `tests/unit/retell-config.test.ts` (15 tests: playbook edits occur exactly once, prompt contents, tools and agent match the shared contract); docs rewritten to the built reality (`retell-migration.md` BUILT/DORMANT, `retell-target.mmd`, corrected diagram subgraph, README env rows, CLAUDE.md facts, roadmap V2 status, sheets README).
+- Dry run works: `bun retell/setup.ts --site https://example.com --voice test_voice` writes gitignored `retell/out/` and prints about 8k prompt tokens (about 2x Retell billing).
+
+UNPROVEN
+- No real Retell call, webhook, phone or Lovable deploy has run; unit tests use docs-shaped fixtures and fakes (`retell-migration.md` section 9 lists everything unverified).
+- Captions (`RETELL_PUBLIC_KEY`) unresolved; Option A (own brain over WebSocket) not built.
+- Whether `gpt-5.6-terra` follows the ported prompt's grounding discipline; five scripted calls must reach CLOSE with only grounded fields before `VOICE_PROVIDER=retell`.
+
+NEXT
+- Integration: merge WP1 + WP2 + WP3, all four gates, bundle check (`livekit` in exactly one lazy chunk, entry chunks grow < 5 KB), render gate with and without the Retell env, Worker smoke test with `.dev.vars`; open the PR (never push to `main`).
+- Operator: answer the six questions in `retell-migration.md` section 10 (cost, transcript storage, voice id, loud-room default, captions, call limits), create the Retell account, then follow `retell/README.md` go-live.
