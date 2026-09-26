@@ -4,12 +4,13 @@ import { AnimatePresence, motion } from "motion/react";
 import { AudioDiagnostics } from "@/components/audio-diagnostics";
 import { Button } from "@/components/ui/button";
 import { clearLessons, loadLessons, type StoredLesson } from "@/lib/experience-store";
+import { browserOutbox, flushOutbox, type OutboxEntry } from "@/lib/lead-sync";
 import { clearEntries, downloadCsv, loadEntries, type WaitlistEntry } from "@/lib/waitlist-store";
 
 type SheetStatus =
   | { state: "checking" }
   | { state: "off" }
-  | { state: "on"; leads: number; lessons: number; version: string }
+  | { state: "on"; leads: number; lessons: number; version: string; confirmationEmail: boolean }
   | { state: "error"; error: string };
 
 type Tab = "entries" | "notes" | "audio";
@@ -30,6 +31,8 @@ export function WaitlistVault() {
   const [entries, setEntries] = useState<WaitlistEntry[]>([]);
   const [lessons, setLessons] = useState<StoredLesson[]>([]);
   const [sheet, setSheet] = useState<SheetStatus>({ state: "checking" });
+  const [outbox, setOutbox] = useState<OutboxEntry[]>([]);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -56,6 +59,7 @@ export function WaitlistVault() {
     if (!open) return;
     setEntries(loadEntries());
     setLessons(loadLessons());
+    setOutbox(browserOutbox.list());
     setSheet({ state: "checking" });
     const controller = new AbortController();
     fetch("/api/lead", { signal: controller.signal })
@@ -67,6 +71,7 @@ export function WaitlistVault() {
           leads?: number;
           lessons?: number;
           version?: string;
+          confirmationEmail?: boolean;
           error?: string;
         }) => {
           if (!body.configured) setSheet({ state: "off" });
@@ -76,6 +81,7 @@ export function WaitlistVault() {
               leads: body.leads ?? 0,
               lessons: body.lessons ?? 0,
               version: body.version ?? "",
+              confirmationEmail: body.confirmationEmail === true,
             });
           else setSheet({ state: "error", error: body.error ?? "The sheet did not answer." });
         },
@@ -93,8 +99,19 @@ export function WaitlistVault() {
       : sheet.state === "off"
         ? "Google Sheet not connected — entries stay on each visitor's device. See docs/google-sheets/README.md."
         : sheet.state === "on"
-          ? `Google Sheet connected · ${sheet.leads} ${sheet.leads === 1 ? "row" : "rows"} · ${sheet.lessons} pooled ${sheet.lessons === 1 ? "note" : "notes"}`
+          ? `Google Sheet connected · ${sheet.leads} ${sheet.leads === 1 ? "row" : "rows"} · ${sheet.lessons} pooled ${sheet.lessons === 1 ? "note" : "notes"} · confirmation email ${sheet.confirmationEmail ? "on" : "off"}`
           : `Google Sheet set but unreachable — ${sheet.error}`;
+
+  const sendOutbox = () => {
+    setSending(true);
+    void flushOutbox({ force: true })
+      .catch(() => {})
+      .finally(() => {
+        setOutbox(browserOutbox.list());
+        setEntries(loadEntries());
+        setSending(false);
+      });
+  };
 
   return (
     <AnimatePresence>
@@ -153,9 +170,11 @@ export function WaitlistVault() {
                       variant="ghost"
                       onClick={() => {
                         clearEntries();
+                        browserOutbox.clear();
                         setEntries([]);
+                        setOutbox([]);
                       }}
-                      disabled={entries.length === 0}
+                      disabled={entries.length === 0 && outbox.length === 0}
                     >
                       Clear
                     </Button>
@@ -204,6 +223,24 @@ export function WaitlistVault() {
 
             {tab === "entries" && (
               <div className="mt-5 space-y-3">
+                {outbox.length > 0 && (
+                  <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-accent/15 p-4 text-sm">
+                    <div>
+                      <p className="font-semibold text-ink">
+                        {outbox.length} {outbox.length === 1 ? "row" : "rows"} waiting to reach the
+                        sheet
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Retried on their own when the page opens, comes back online or is looked at
+                        again.
+                        {outbox[0]?.lastError ? ` Last answer: ${outbox[0].lastError}.` : ""}
+                      </p>
+                    </div>
+                    <Button variant="outline" onClick={sendOutbox} disabled={sending}>
+                      {sending ? "Sending…" : "Send now"}
+                    </Button>
+                  </div>
+                )}
                 {entries.length === 0 && (
                   <p className="text-sm text-muted-foreground">Nothing collected here yet.</p>
                 )}
@@ -220,7 +257,12 @@ export function WaitlistVault() {
                       )}
                       {entry.complete && (
                         <span className="rounded-full bg-primary/20 px-2 py-0.5 text-[0.7rem] font-semibold text-accent-text">
-                          On the list
+                          {entry.syncedAt ? "On the list" : "Signed up here"}
+                        </span>
+                      )}
+                      {(entry.complete || entry.callbackRequested) && !entry.syncedAt && (
+                        <span className="rounded-full bg-destructive/15 px-2 py-0.5 text-[0.7rem] font-semibold text-destructive">
+                          Not in the sheet
                         </span>
                       )}
                       {!entry.complete && !entry.callbackRequested && (
@@ -246,7 +288,8 @@ export function WaitlistVault() {
                     )}
                     <p className="mt-2 text-[0.7rem] uppercase tracking-[0.12em] text-muted-foreground">
                       {new Date(entry.updatedAt).toLocaleString()}
-                      {entry.complete ? ` · #${entry.position}` : ""}
+                      {entry.position > 0 ? ` · #${entry.position}` : ""}
+                      {entry.emailedTo ? ` · confirmation sent` : ""}
                     </p>
                   </div>
                 ))}

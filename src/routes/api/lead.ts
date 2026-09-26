@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-import { LeadPayloadSchema, type LeadSyncResult } from "@/lib/lead-sync";
+import { LeadPayloadSchema, type LeadPayload, type LeadSyncResult } from "@/lib/lead-sync";
 import { reflectAndStore } from "@/lib/mary-experience.server";
 import { sheetGet, sheetPost, sheetsConfigured } from "@/lib/sheets.server";
 
@@ -8,28 +8,52 @@ import { sheetGet, sheetPost, sheetsConfigured } from "@/lib/sheets.server";
  * One row per conversation in the Google Sheet.
  *
  * POST — upsert the conversation (by session id). Called at checkpoints while
- *        the conversation runs, at the end, and as a beacon if the tab closes.
+ *        the conversation runs, at the end, as a beacon if the tab closes, and
+ *        again from the browser's outbox when an earlier write did not confirm.
  *        With `reflect: true` MARY also debriefs the conversation here, which
  *        is how lessons still get written when nobody is left on the page.
  * GET  — connection status for the owner view.
  */
+
+/** Someone actually joined or asked for a call, and left a way to reach them. */
+function isLead(payload: LeadPayload): boolean {
+  return (
+    (payload.outcome === "signed_up" || payload.outcome === "callback") &&
+    Boolean(payload.email.trim() || payload.phone.trim())
+  );
+}
+
+/** The contact fields only: enough to follow up, no transcript in the log. */
+function leadSummary(payload: LeadPayload) {
+  return {
+    sessionId: payload.sessionId,
+    outcome: payload.outcome,
+    name: payload.name,
+    email: payload.email,
+    phone: payload.phone,
+    business: payload.business,
+    industry: payload.industry,
+  };
+}
 export const Route = createFileRoute("/api/lead")({
   server: {
     handlers: {
       GET: async () => {
         if (!sheetsConfigured()) return Response.json({ configured: false });
         try {
-          const ping = await sheetGet<{ leads: number; lessons: number; version: string }>(
-            "ping",
-            {},
-            { timeoutMs: 6000 },
-          );
+          const ping = await sheetGet<{
+            leads: number;
+            lessons: number;
+            version: string;
+            confirmationEmail?: boolean;
+          }>("ping", {}, { timeoutMs: 6000 });
           return Response.json({
             configured: true,
             reachable: true,
             leads: ping.leads,
             lessons: ping.lessons,
             version: ping.version,
+            confirmationEmail: ping.confirmationEmail === true,
           });
         } catch (error) {
           // This route is public: the detail (which can quote the upstream) stays in the log.
@@ -57,18 +81,26 @@ export const Route = createFileRoute("/api/lead")({
         };
         if (result.configured) {
           try {
-            const saved = await sheetPost<{ position: number | null }>(
+            const saved = await sheetPost<{ position: number | null; emailed?: boolean }>(
               "lead",
               { ...payload, reflect: undefined },
               { timeoutMs: 9000 },
             );
             result.saved = true;
             result.position = typeof saved.position === "number" ? saved.position : null;
+            result.emailed = saved.emailed === true;
           } catch (error) {
             const message = error instanceof Error ? error.message : "sheet error";
             console.error(`[mary] lead sync failed: ${message}`);
             result.error = "sheet unavailable";
           }
+        }
+
+        // A real lead that no sheet stored is written to the server log, so the
+        // owner can still find it there. The browser keeps it and retries too.
+        if (!result.saved && isLead(payload)) {
+          const why = result.configured ? "sheet failed" : "no sheet configured";
+          console.warn(`[mary] lead not stored (${why}): ${JSON.stringify(leadSummary(payload))}`);
         }
 
         // Debrief on the server when asked — used when the page is going away
