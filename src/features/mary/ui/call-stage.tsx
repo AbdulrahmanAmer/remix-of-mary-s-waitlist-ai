@@ -139,11 +139,11 @@ export function CallStage({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4, ease: EASE }}
-      className="fixed inset-x-0 top-0 flex h-dvh flex-col overflow-hidden px-4 sm:px-8"
+      className="fixed inset-x-0 top-0 flex h-dvh flex-col overflow-hidden px-3 sm:px-8"
       style={height ? { height } : {}}
     >
       <SiteHeader
-        start={<Logo className="h-6 sm:h-7" />}
+        start={<Logo className="h-5 sm:h-7" />}
         end={
           <div className="flex min-w-0 items-center gap-2">
             <div className="hidden min-w-0 md:block">
@@ -154,7 +154,7 @@ export function CallStage({
                 type="button"
                 onClick={onHangUp}
                 aria-label="End the call"
-                className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink"
+                className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-2 text-[0.65rem] font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink sm:gap-2 sm:px-3 sm:text-xs"
               >
                 <PhoneOff className="size-4" />
                 <span className="hidden sm:inline">End call</span>
@@ -170,7 +170,7 @@ export function CallStage({
                       ? "Quiet room: switch to hands-free talking"
                       : "Loud room: switch to hold to talk"
                   }
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink"
+                  className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-2 text-[0.65rem] font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink sm:gap-2 sm:px-3 sm:text-xs"
                 >
                   {talkMode === "hold" ? <Radio className="size-4" /> : <Hand className="size-4" />}
                   <span className="hidden sm:inline">
@@ -181,7 +181,7 @@ export function CallStage({
                   type="button"
                   onClick={onToggleVoice}
                   aria-label={voiceOff ? "Turn MARY's voice on" : "Turn MARY's voice off"}
-                  className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-ink"
+                  className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-2 text-[0.65rem] font-medium text-muted-foreground transition-colors hover:text-ink sm:gap-2 sm:px-3 sm:text-xs"
                 >
                   {voiceOff ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
                   <span className="hidden sm:inline">{voiceOff ? "Voice off" : "Voice on"}</span>
@@ -200,7 +200,7 @@ export function CallStage({
         {current ? `MARY: ${current.text}` : ""}
       </p>
 
-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-4 py-3 text-center sm:gap-6">
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-2 py-1.5 text-center sm:gap-6 sm:py-3">
         <motion.div
           layoutId="mary-orb"
           transition={{ type: "spring", stiffness: 120, damping: 22 }}
@@ -208,7 +208,7 @@ export function CallStage({
           <MaryOrb state={presence} size={orbSize} />
         </motion.div>
 
-        <div className="flex h-[10.5rem] w-full flex-col items-center justify-start overflow-hidden sm:h-[12.5rem]">
+        <div className="flex h-[8.5rem] w-full flex-col items-center justify-start overflow-hidden sm:h-[11rem]">
           <AnimatePresence mode="popLayout" initial={false}>
             {interim ? (
               <motion.p
@@ -217,7 +217,7 @@ export function CallStage({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={QUICK}
-                className="mb-3 max-w-xl text-pretty text-sm text-muted-foreground"
+                className="mb-2 max-w-xl text-pretty text-xs text-muted-foreground sm:mb-3 sm:text-sm"
               >
                 <span className="font-medium text-ink">You</span> · {interim}
               </motion.p>
@@ -228,7 +228,7 @@ export function CallStage({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0 }}
                 transition={QUICK}
-                className="mb-3 max-w-xl truncate text-sm text-muted-foreground"
+                className="mb-2 max-w-xl truncate text-xs text-muted-foreground sm:mb-3 sm:text-sm"
               >
                 You · “{lastUser.text}”
               </motion.p>
@@ -244,15 +244,15 @@ export function CallStage({
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
                 transition={SOFT}
-                className="mt-3 max-w-2xl"
+                className="mt-2 max-w-2xl sm:mt-3"
               >
                 {before && (
-                  <p className="mb-2 text-pretty text-lg leading-snug text-muted-foreground sm:text-xl">
+                  <p className="mb-1.5 text-pretty text-sm leading-snug text-muted-foreground sm:mb-2 sm:text-base">
                     {before.text}
                   </p>
                 )}
                 <p
-                  className={`text-pretty font-display font-medium leading-tight tracking-[-0.02em] text-ink ${current.text.length > 110 ? "text-xl sm:text-[1.6rem]" : "text-2xl sm:text-[2.1rem]"}`}
+                  className={`text-pretty font-display font-medium leading-tight text-ink ${current.text.length > 110 ? "text-base sm:text-[1.3rem]" : "text-xl sm:text-[1.65rem]"}`}
                 >
                   <RevealedLine
                     text={current.text}
@@ -267,7 +267,7 @@ export function CallStage({
                 initial={reduced ? false : { opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="mt-3 font-display text-2xl text-muted-foreground sm:text-[2.1rem]"
+                className="mt-2 font-display text-xl text-muted-foreground sm:mt-3 sm:text-[1.65rem]"
               >
                 {presence === "thinking" ? "…" : ""}
               </motion.p>
@@ -277,7 +277,7 @@ export function CallStage({
             <button
               type="button"
               onClick={() => setPanel(true)}
-              className="mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-ink"
+              className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-[0.68rem] text-muted-foreground transition-colors hover:bg-muted hover:text-ink sm:mt-4 sm:text-xs"
             >
               <MessageSquareText className="size-3.5" />
               Show conversation
@@ -286,7 +286,7 @@ export function CallStage({
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-xl shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+      <div className="mx-auto w-full max-w-xl shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <Composer
           store={store}
           inputRef={inputRef}

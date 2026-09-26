@@ -11,10 +11,10 @@ export function BootScreen({ leaving = false }: { leaving?: boolean }) {
     >
       <div className="flex flex-col items-center">
         <div className="mary-boot-orb" />
-        <p className="mary-boot-word mt-9 font-display text-lg font-semibold tracking-[0.42em] text-ink">
+        <p className="mary-boot-word mt-7 font-display text-base font-semibold tracking-[0.42em] text-ink sm:mt-9 sm:text-lg">
           MARY
         </p>
-        <p className="mary-boot-caption mt-4 text-[0.68rem] font-medium uppercase tracking-[0.22em] text-muted-foreground">
+        <p className="mary-boot-caption mt-3 text-[0.58rem] font-medium uppercase tracking-[0.22em] text-muted-foreground sm:mt-4 sm:text-[0.68rem]">
           Preparing your conversation
         </p>
       </div>

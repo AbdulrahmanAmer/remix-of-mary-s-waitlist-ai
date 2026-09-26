@@ -730,10 +730,10 @@ export function MaryApp() {
 
   const tight = viewportHeight < 640;
   const landingOrb = Math.round(
-    Math.min(300, Math.max(170, viewportHeight * (tight ? 0.26 : 0.32))),
+    Math.min(300, Math.max(136, viewportHeight * (tight ? 0.208 : 0.256))),
   );
   const callOrb = Math.round(
-    Math.min(280, Math.max(140, (keyboardHeight ?? viewportHeight) * (tight ? 0.24 : 0.3))),
+    Math.min(280, Math.max(112, (keyboardHeight ?? viewportHeight) * (tight ? 0.192 : 0.24))),
   );
 
   return (

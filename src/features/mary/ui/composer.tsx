@@ -80,7 +80,7 @@ function HoldButton({
       animate={reduced ? {} : { scale: held ? 1.03 : 1 }}
       transition={QUICK}
       style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
-      className={`relative flex h-16 w-full select-none items-center justify-center gap-3 overflow-hidden rounded-full font-display text-base font-medium transition-[background-color,box-shadow] duration-200 sm:h-14 ${
+      className={`relative flex h-14 w-full select-none items-center justify-center gap-2.5 overflow-hidden rounded-full font-display text-sm font-medium transition-[background-color,box-shadow] duration-200 sm:gap-3 sm:text-base ${
         held
           ? "bg-ink text-background shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.45),0_18px_40px_-18px_oklch(0.55_0.15_118/0.7)]"
           : "bg-primary text-ink shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
@@ -139,7 +139,7 @@ function Notice({
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={QUICK}
-          className="mt-1.5 flex items-center justify-center gap-1.5 text-accent-text"
+          className="mt-1 flex items-center justify-center gap-1.5 text-[0.68rem] text-accent-text sm:mt-1.5 sm:text-xs"
         >
           {icon}
           {children}
@@ -201,7 +201,7 @@ export function Composer({
         <span className="text-muted-foreground">{mic.error}</span>
       </Notice>
       {holdMode && (
-        <div className="mt-2">
+        <div className="mt-1.5 sm:mt-2">
           {/* Notices sit above the button: the composer grows upward, so the button
               never moves under a thumb that is about to press it again. */}
           <Notice show={notices.missedHold}>
@@ -210,7 +210,7 @@ export function Composer({
           <Notice show={notices.suggestTyping}>
             Loud in here? Type your answer below instead.
           </Notice>
-          <div className="mt-2">
+          <div className="mt-1.5 sm:mt-2">
             <HoldButton
               held={listening === "hearing"}
               busy={listening === "finishing" || presence === "thinking"}
@@ -221,7 +221,7 @@ export function Composer({
         </div>
       )}
       <div
-        className={`mt-2 flex w-full items-end gap-1 rounded-[1.75rem] bg-card/90 px-2 py-1.5 shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)] backdrop-blur-sm transition-shadow duration-300 ${
+        className={`mt-1.5 flex w-full items-end gap-1 rounded-[1.5rem] bg-card/90 px-1.5 py-1 shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)] backdrop-blur-sm transition-shadow duration-300 sm:mt-2 sm:rounded-[1.75rem] sm:px-2 sm:py-1.5 ${
           listening === "hearing"
             ? "shadow-[0_0_0_2px_var(--color-primary),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
             : ""
@@ -281,7 +281,7 @@ export function Composer({
                       ? "Muted, type your answer"
                       : "Speak or type your answer"
           }
-          className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground sm:text-sm"
+          className="max-h-24 min-h-11 flex-1 resize-none bg-transparent px-2.5 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground sm:max-h-28 sm:px-3"
         />
         <AnimatePresence initial={false}>
           {draft.trim() && (
@@ -300,7 +300,7 @@ export function Composer({
           )}
         </AnimatePresence>
       </div>
-      <div className="mt-2 text-center text-[0.7rem] text-muted-foreground">
+      <div className="mt-1.5 text-center text-[0.62rem] text-muted-foreground sm:mt-2 sm:text-[0.7rem]">
         <AnimatePresence mode="wait" initial={false}>
           <motion.p
             key={status}

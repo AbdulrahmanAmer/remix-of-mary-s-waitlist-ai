@@ -11,7 +11,7 @@ export const ProgressPills = memo(function ProgressPills({ collected }: { collec
   const next = WAITLIST_FIELDS.find((field) => !collected[field]);
   return (
     <ul
-      className="no-scrollbar flex max-w-full items-center gap-1.5 overflow-x-auto"
+      className="no-scrollbar flex max-w-full items-center gap-1 overflow-x-auto sm:gap-1.5"
       aria-label="Details MARY has so far"
     >
       {WAITLIST_FIELDS.map((field) => {
@@ -20,7 +20,7 @@ export const ProgressPills = memo(function ProgressPills({ collected }: { collec
         return (
           <li
             key={field}
-            className={`flex shrink-0 items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium ring-1 transition-colors duration-300 ${
+            className={`flex shrink-0 items-center gap-1 rounded-full bg-card px-2 py-1 text-[0.65rem] font-medium ring-1 transition-colors duration-300 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-xs ${
               done
                 ? "text-ink ring-border"
                 : field === next

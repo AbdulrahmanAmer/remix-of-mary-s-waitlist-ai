@@ -42,34 +42,37 @@ export function EndScreen({
       initial={reduced ? false : { opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={{ duration: 0.45, ease: EASE }}
-      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-5 sm:px-8"
+      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-4 sm:px-8"
     >
-      <SiteHeader start={<Logo className="h-6 sm:h-7" />} />
-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-6 text-center">
+      <SiteHeader start={<Logo className="h-5 sm:h-7" />} />
+      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-3 text-center sm:py-6">
         <motion.div
           layoutId="mary-orb"
           transition={{ type: "spring", stiffness: 120, damping: 22 }}
         >
           <MaryOrb state="done" size={orbSize} />
         </motion.div>
-        <motion.p {...at(0.1)} className="eyebrow mt-5">
+        <motion.p {...at(0.1)} className="eyebrow mt-3 sm:mt-5">
           {copy.eyebrow}
         </motion.p>
         <motion.h1
           {...at(0.16)}
-          className="mt-3 text-balance font-display text-4xl font-semibold leading-[1.02] tracking-[-0.04em] text-ink sm:text-6xl"
+          className="mt-2 text-balance font-display text-3xl font-semibold leading-[1.02] text-ink sm:mt-3 sm:text-6xl"
         >
           {copy.title}
         </motion.h1>
         <motion.p
           {...at(0.22)}
-          className="mx-auto mt-4 max-w-lg text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
+          className="mx-auto mt-3 max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:mt-4 sm:max-w-lg sm:text-lg"
         >
           {copy.body}
         </motion.p>
 
         {result.outcome === "signed_up" && (
-          <motion.div {...at(0.28)} className="mt-5 flex min-h-10 items-center justify-center">
+          <motion.div
+            {...at(0.28)}
+            className="mt-3 flex min-h-9 items-center justify-center sm:mt-5 sm:min-h-10"
+          >
             <AnimatePresence mode="wait" initial={false}>
               {result.sync === "pending" ? (
                 <motion.span
@@ -107,7 +110,7 @@ export function EndScreen({
         {result.outcome === "declined" ? (
           <motion.div
             {...at(0.3)}
-            className="mt-8 flex flex-wrap items-center justify-center gap-3"
+            className="mt-5 flex flex-wrap items-center justify-center gap-2.5 sm:mt-8 sm:gap-3"
           >
             <motion.button
               type="button"
@@ -133,17 +136,17 @@ export function EndScreen({
           <>
             <motion.div
               {...at(0.34)}
-              className="mt-10 grid w-full gap-8 rounded-[1.75rem] bg-card p-6 text-left shadow-[0_0_0_1px_var(--color-border),0_30px_60px_-44px_oklch(0.2_0.02_110/0.45)] sm:grid-cols-[1.05fr_1fr] sm:p-8"
+              className="mt-6 grid w-full gap-5 rounded-[1.4rem] bg-card p-4 text-left shadow-[0_0_0_1px_var(--color-border),0_30px_60px_-44px_oklch(0.2_0.02_110/0.45)] sm:mt-10 sm:grid-cols-[1.05fr_1fr] sm:gap-8 sm:rounded-[1.75rem] sm:p-8"
             >
               <div>
                 <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   What happens next
                 </p>
-                <ol className="mt-4 space-y-3.5">
+                <ol className="mt-3 space-y-2.5 sm:mt-4 sm:space-y-3.5">
                   {copy.steps.map((step, index) => (
                     <li
                       key={step}
-                      className="flex items-start gap-3 text-sm leading-relaxed text-ink"
+                      className="flex items-start gap-2.5 text-xs leading-relaxed text-ink sm:gap-3 sm:text-sm"
                     >
                       <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary/25 text-[0.65rem] font-semibold text-accent-text">
                         {index + 1}
@@ -157,14 +160,14 @@ export function EndScreen({
                 <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                   {result.outcome === "callback" ? "What the team receives" : "Details confirmed"}
                 </p>
-                <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4">
+                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:mt-4 sm:gap-x-6 sm:gap-y-4">
                   {fields.map((field) => (
                     <div key={field} className={field === "operations" ? "col-span-2" : ""}>
                       <dt className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                         {FIELD_LABELS[field]}
                       </dt>
                       <dd
-                        className={`mt-0.5 break-words text-sm font-medium ${collected[field] ? "text-ink" : "text-muted-foreground"}`}
+                        className={`mt-0.5 break-words text-xs font-medium sm:text-sm ${collected[field] ? "text-ink" : "text-muted-foreground"}`}
                       >
                         {collected[field] || "Skipped"}
                       </dd>
@@ -177,7 +180,7 @@ export function EndScreen({
               {...at(0.5)}
               type="button"
               onClick={onRestart}
-              className="mt-8 text-xs text-muted-foreground transition-colors hover:text-ink"
+              className="mt-5 min-h-11 text-xs text-muted-foreground transition-colors hover:text-ink sm:mt-8"
             >
               Start another conversation
             </motion.button>

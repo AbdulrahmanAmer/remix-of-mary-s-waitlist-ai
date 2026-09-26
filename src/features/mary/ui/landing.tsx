@@ -29,13 +29,13 @@ function SpeechPreview({ play, className = "" }: { play: boolean; className?: st
   const typing = count < OPENER.length;
   return (
     <div
-      className={`rounded-[1.4rem] rounded-bl-md bg-card px-4 py-3.5 text-left shadow-[0_0_0_1px_var(--color-border),0_22px_44px_-28px_oklch(0.2_0.02_110/0.45)] ${className}`}
+      className={`rounded-[1.15rem] rounded-bl-md bg-card px-3 py-2.5 text-left shadow-[0_0_0_1px_var(--color-border),0_22px_44px_-28px_oklch(0.2_0.02_110/0.45)] sm:rounded-[1.4rem] sm:px-4 sm:py-3.5 ${className}`}
     >
       <p className="flex items-center gap-2 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-accent-text">
         <span className={`size-1.5 rounded-full bg-primary ${typing ? "animate-pulse" : ""}`} />
         MARY · {typing ? "speaking" : "waiting for you"}
       </p>
-      <p className="mt-1.5 min-h-[2.9em] text-[0.98rem] leading-snug text-ink sm:text-[1.05rem]">
+      <p className="mt-1 min-h-[2.9em] text-[0.82rem] leading-snug text-ink sm:mt-1.5 sm:text-[1.05rem]">
         {OPENER.slice(0, count)}
         {typing && (
           <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] animate-pulse bg-ink" />
@@ -84,13 +84,13 @@ export function Landing({
     <motion.section
       key="landing"
       exit={{ opacity: 0, transition: { duration: 0.35, ease: EASE } }}
-      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-5 sm:px-8"
+      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-4 sm:px-8"
     >
-      <SiteHeader centered start={<Logo />} />
-      <div className="flex flex-1 flex-col items-center justify-center py-4 text-center">
+      <SiteHeader centered start={<Logo className="h-6 sm:h-7" />} />
+      <div className="flex flex-1 flex-col items-center justify-center py-2 text-center sm:py-4">
         <div className="relative flex w-full max-w-3xl flex-col items-center">
           {/* Phones: the speech card sits above the orb. */}
-          <motion.div {...show(0.35)} className="mb-3 w-full max-w-sm sm:hidden">
+          <motion.div {...show(0.35)} className="mb-2 w-full max-w-xs sm:hidden">
             <SpeechPreview play={ready} />
           </motion.div>
 
@@ -122,43 +122,43 @@ export function Landing({
             </motion.div>
           </div>
 
-          <motion.div {...show(0.2)} className="mt-1">
+          <motion.div {...show(0.2)} className="mt-0.5 sm:mt-1">
             <Waveform />
           </motion.div>
 
           <motion.h1
             {...show(0.25)}
-            className="mt-5 text-balance font-display text-5xl font-semibold leading-[0.95] tracking-[-0.045em] text-ink sm:text-7xl"
+            className="mt-3 text-balance font-display text-4xl font-semibold leading-[0.95] text-ink sm:mt-5 sm:text-7xl"
           >
             Meet MARY<span className="text-primary">.</span>
           </motion.h1>
           <motion.p
             {...show(0.32)}
-            className="mt-4 max-w-md text-pretty text-base leading-relaxed text-muted-foreground sm:max-w-xl sm:text-lg"
+            className="mt-3 max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground sm:mt-4 sm:max-w-xl sm:text-lg"
           >
             Your AI Revenue Concierge. Talk to her for two minutes and she'll save your spot on the
             OmniSuite launch waitlist.
           </motion.p>
           <motion.div
             {...show(0.4)}
-            className="mt-7 flex flex-wrap items-center justify-center gap-3"
+            className="mt-5 flex flex-wrap items-center justify-center gap-2.5 sm:mt-7 sm:gap-3"
           >
             <motion.button
               type="button"
               onClick={() => onStart(true)}
               whileHover={reduced ? {} : { y: -2 }}
               whileTap={reduced ? {} : { scale: 0.98 }}
-              className="inline-flex h-14 items-center gap-3 rounded-full bg-primary pl-7 pr-2.5 text-base font-semibold text-ink shadow-[inset_0_1px_0_oklch(1_0_0/0.45),0_1px_0_oklch(0.55_0.15_118/0.5),0_18px_34px_-18px_oklch(0.55_0.15_118/0.75)] outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+              className="inline-flex h-12 items-center gap-2.5 rounded-full bg-primary pl-6 pr-2 text-sm font-semibold text-ink shadow-[inset_0_1px_0_oklch(1_0_0/0.45),0_1px_0_oklch(0.55_0.15_118/0.5),0_18px_34px_-18px_oklch(0.55_0.15_118/0.75)] outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-14 sm:gap-3 sm:pl-7 sm:pr-2.5 sm:text-base"
             >
               Start talking
-              <span className="grid size-9 place-items-center rounded-full bg-ink text-primary">
+              <span className="grid size-8 place-items-center rounded-full bg-ink text-primary sm:size-9">
                 <ArrowRight className="size-4" />
               </span>
             </motion.button>
             <button
               type="button"
               onClick={() => onStart(false)}
-              className="inline-flex h-14 items-center gap-2 rounded-full bg-card px-6 text-sm font-medium text-ink ring-1 ring-border transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ink"
+              className="inline-flex h-12 items-center gap-2 rounded-full bg-card px-5 text-xs font-medium text-ink ring-1 ring-border transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ink sm:h-14 sm:px-6 sm:text-sm"
             >
               <Keyboard className="size-4 text-muted-foreground" />
               Type instead

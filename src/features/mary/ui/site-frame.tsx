@@ -31,7 +31,7 @@ export function SiteFooter({ className = "" }: { className?: string }) {
   const onTap = useOwnerTaps();
   return (
     <footer
-      className={`flex shrink-0 flex-wrap items-center justify-between gap-2 py-4 text-[0.7rem] text-muted-foreground ${className}`}
+      className={`flex shrink-0 flex-wrap items-center justify-between gap-1.5 py-2 text-[0.62rem] text-muted-foreground sm:gap-2 sm:py-4 sm:text-[0.7rem] ${className}`}
     >
       <span>OmniSuite · AI + human revenue infrastructure</span>
       <span>
@@ -59,7 +59,7 @@ export function SiteHeader({
 }) {
   return (
     <header
-      className={`flex min-h-14 shrink-0 items-center gap-4 ${centered ? "justify-center" : "justify-between"}`}
+      className={`flex min-h-12 shrink-0 items-center gap-2 sm:min-h-14 sm:gap-4 ${centered ? "justify-center" : "justify-between"}`}
     >
       {start ?? <Logo />}
       {end}
