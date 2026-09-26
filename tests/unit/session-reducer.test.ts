@@ -44,6 +44,31 @@ describe("session reducer", () => {
     expect(s.presence).toBe("idle");
   });
 
+  it("gives way to the details form only from a live call, and comes back with RESUME", () => {
+    const landing = reduce(initialState(), { type: "ENTER_FALLBACK" });
+    expect(landing.stage).toBe("landing");
+    let s = reduce(initialState(), { type: "START_CALL", at: 1 });
+    s = reduce(s, { type: "SET_PRESENCE", presence: "thinking" });
+    s = reduce(s, { type: "SET_INTERIM", interim: "hel" });
+    s = reduce(s, { type: "ENTER_FALLBACK" });
+    expect(s.stage).toBe("fallback");
+    expect(s.presence).toBe("idle");
+    expect(s.interim).toBe("");
+    s = reduce(s, { type: "RESUME" });
+    expect(s.stage).toBe("call");
+    s = reduce(s, { type: "ENTER_FALLBACK" });
+    s = reduce(s, { type: "FINISH", outcome: "signed_up" });
+    expect(s.stage).toBe("done");
+  });
+
+  it("keeps an aside line in the record like any other", () => {
+    const s = reduce(initialState(), {
+      type: "ADD_LINE",
+      line: { id: "a", role: "mary", text: "You look offline.", aside: true },
+    });
+    expect(s.lines[0]?.aside).toBe(true);
+  });
+
   it("only accepts a result update while the end screen is showing", () => {
     const s = reduce(initialState(), {
       type: "SET_RESULT",
@@ -91,5 +116,43 @@ describe("talk mode", () => {
     const hands = reduce(s, { type: "SET_TALK_MODE", mode: "hands-free" });
     expect(hands.talkMode).toBe("hands-free");
     expect(reduce(hands, { type: "SET_TALK_MODE", mode: "hands-free" })).toBe(hands);
+  });
+});
+
+describe("voice via (Retell)", () => {
+  it("starts on MARY's own pipeline", () => {
+    expect(initialState().via).toBe("mary");
+  });
+
+  it("switches the voice and returns the same object when unchanged", () => {
+    const s = reduce(initialState(), { type: "SET_VIA", via: "retell" });
+    expect(s.via).toBe("retell");
+    expect(reduce(s, { type: "SET_VIA", via: "retell" })).toBe(s);
+    expect(reduce(s, { type: "SET_VIA", via: "mary" }).via).toBe("mary");
+  });
+
+  it("keeps the voice through FINISH and RESUME", () => {
+    let s = reduce(initialState(), { type: "SET_VIA", via: "retell" });
+    s = reduce(s, { type: "START_CALL", at: 1 });
+    s = reduce(s, { type: "FINISH", outcome: "declined" });
+    expect(s.via).toBe("retell");
+    s = reduce(s, { type: "RESUME" });
+    expect(s.via).toBe("retell");
+  });
+});
+
+describe("UPSERT_LINE", () => {
+  it("appends a new id, replaces an existing one in place, and skips an identical line", () => {
+    let s = reduce(initialState(), { type: "ADD_LINE", line: mary("a", "Hi") });
+    s = reduce(s, { type: "UPSERT_LINE", line: mary("r1", "Hey") });
+    expect(s.lines.map((l) => l.id)).toEqual(["a", "r1"]);
+    s = reduce(s, { type: "ADD_LINE", line: { id: "u", role: "user", text: "Hello" } });
+    s = reduce(s, { type: "UPSERT_LINE", line: mary("r1", "Hey — good to meet you.") });
+    expect(s.lines).toEqual([
+      mary("a", "Hi"),
+      mary("r1", "Hey — good to meet you."),
+      { id: "u", role: "user", text: "Hello" },
+    ]);
+    expect(reduce(s, { type: "UPSERT_LINE", line: mary("r1", "Hey — good to meet you.") })).toBe(s);
   });
 });

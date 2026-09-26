@@ -19,6 +19,8 @@ import { voiceLevel } from "../signal/signal";
 
 const HOLD_MAX_MS = 5000;
 const NOTICE_MS = 9000;
+/** Voice off: seconds per word as her line is revealed for reading, brisker than speech. */
+const READING_SEC_PER_WORD = 0.22;
 
 /**
  * The live line: her voice out, the person's voice in, and the rules for who has
@@ -35,6 +37,8 @@ export class VoiceLine {
   /** The line being voiced, so a cut-off can keep only what was heard. */
   private current: { id: string; text: string; handle: SpeakHandle } | null = null;
   private session: MicSession | null = null;
+  /** Voice off: the line being revealed for reading, so a reply can end it early. */
+  private reading: { cancel: () => void } | null = null;
   private opening = 0;
   /** A sound over her voice is being checked; she is paused meanwhile. */
   private pendingInterrupt = false;
@@ -60,12 +64,13 @@ export class VoiceLine {
     });
   }
 
-  private later(fn: () => void, ms: number) {
+  private later(fn: () => void, ms: number): number {
     const id = window.setTimeout(() => {
       this.timers.delete(id);
       fn();
     }, ms);
     this.timers.add(id);
+    return id;
   }
 
   private flashNotice(key: "echoHint" | "voiceFailed") {
@@ -88,6 +93,25 @@ export class VoiceLine {
     return this.speakHandle !== null;
   }
 
+  /**
+   * Hold to talk: the button went down. She goes quiet in the same event, but
+   * whether that was a tap or a turn is decided when the hold outlasts a tap.
+   */
+  pauseForPress(): void {
+    this.pendingInterrupt = true;
+    this.speakHandle?.pause();
+  }
+
+  /** The press was only a tap: she carries on where she was. */
+  resumeAfterTap(): void {
+    this.releaseHold();
+  }
+
+  /** A status line in her voice, on screen only: never spoken, never sent to the model. */
+  aside(text: string): void {
+    this.store.dispatch({ type: "ADD_LINE", line: { id: uid(), role: "mary", text, aside: true } });
+  }
+
   /** Voices a line and records it. Resolves when it has been said or cut off. */
   say(text: string, opts: { record?: boolean } = {}): Promise<void> {
     const { store } = this;
@@ -101,20 +125,35 @@ export class VoiceLine {
     const approx = Math.max(1.4, words * 0.42);
 
     if (store.get().voiceOff) {
-      // Voice off: her words appear at speaking pace, without sound.
+      // Voice off: her words appear at reading pace, without sound. A reply typed
+      // meanwhile ends the reveal at once (the whole line stays readable) rather
+      // than waiting behind it.
+      this.stopSpeaking();
       this.setPresence("speaking");
       return new Promise<void>((resolve) => {
         const start = performance.now();
-        const duration = approx * 1000;
-        const step = () => {
-          const progress = Math.min(1, (performance.now() - start) / duration);
-          store.dispatch({ type: "SET_REVEAL", id, count: Math.ceil(progress * words) });
-          if (progress < 1) {
-            this.later(step, 90);
-            return;
-          }
+        const duration = Math.max(1, words * READING_SEC_PER_WORD) * 1000;
+        let timer = 0;
+        const finish = () => {
+          if (this.reading?.cancel === cancel) this.reading = null;
+          store.dispatch({ type: "SET_REVEAL", id, count: words });
           if (store.get().presence === "speaking") this.setPresence("idle");
           resolve();
+        };
+        const cancel = () => {
+          window.clearTimeout(timer);
+          this.timers.delete(timer);
+          finish();
+        };
+        this.reading = { cancel };
+        const step = () => {
+          const progress = Math.min(1, (performance.now() - start) / duration);
+          if (progress < 1) {
+            store.dispatch({ type: "SET_REVEAL", id, count: Math.ceil(progress * words) });
+            timer = this.later(step, 90);
+            return;
+          }
+          finish();
         };
         step();
       });
@@ -147,6 +186,8 @@ export class VoiceLine {
 
   /** Ends whatever she is saying; the transcript keeps only the words that were heard. */
   stopSpeaking(): void {
+    this.reading?.cancel();
+    this.reading = null;
     const current = this.current;
     const handle = this.speakHandle;
     // Silence first: the store update below re-renders the screen, and her voice

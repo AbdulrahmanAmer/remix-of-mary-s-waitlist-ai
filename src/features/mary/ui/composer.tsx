@@ -5,17 +5,9 @@ import { Headphones, Mic, MicOff, Send, VolumeX } from "lucide-react";
 import type { SessionStore } from "../conversation/store";
 import { useSession } from "../conversation/store";
 import { voiceLevel } from "../signal/signal";
+import { floorLine, handsFreeStatus, NOTICE_TEXT, noticeAnnouncement, type Floor } from "./floor";
 import { QUICK } from "./motion";
 import { hasFinePointer } from "./use-viewport";
-
-function holdStatusFor(presence: string, listening: string, keyboard: boolean) {
-  if (listening === "hearing") return "Listening… release when done";
-  if (listening === "finishing" || presence === "thinking") return "Thinking…";
-  if (presence === "speaking") return "MARY is speaking · hold to cut in";
-  return keyboard
-    ? "Hold the button or the space bar while you talk, let go when you're done."
-    : "Hold the button while you talk, let go when you're done.";
-}
 
 /** Live input level while held, so people can see it is working at arm's length. */
 function HoldMeter() {
@@ -38,88 +30,80 @@ function HoldMeter() {
   );
 }
 
+/**
+ * The primary control. Its label never changes underneath a thumb; the floor
+ * shows in its colour (full lime when it is their turn, paler while she has
+ * it) and in the line above it.
+ */
 function HoldButton({
   held,
-  busy,
+  yours,
   onHoldStart,
   onHoldEnd,
 }: {
   held: boolean;
-  busy: boolean;
+  yours: boolean;
   onHoldStart: () => void;
   onHoldEnd: () => void;
 }) {
   const reduced = useReducedMotion();
   return (
-    <motion.button
-      type="button"
-      aria-label="Hold to talk to MARY"
-      aria-pressed={held}
-      onPointerDown={(event) => {
-        if (event.button !== 0) return;
-        event.preventDefault();
-        event.currentTarget.setPointerCapture(event.pointerId);
-        onHoldStart();
-      }}
-      onPointerUp={onHoldEnd}
-      onPointerCancel={onHoldEnd}
-      onLostPointerCapture={onHoldEnd}
-      onContextMenu={(event) => event.preventDefault()}
-      onKeyDown={(event) => {
-        if ((event.key === " " || event.key === "Enter") && !event.repeat) {
-          event.preventDefault();
-          onHoldStart();
-        }
-      }}
-      onKeyUp={(event) => {
-        if (event.key === " " || event.key === "Enter") {
-          event.preventDefault();
-          onHoldEnd();
-        }
-      }}
-      animate={reduced ? {} : { scale: held ? 1.03 : 1 }}
-      transition={QUICK}
-      style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
-      className={`relative flex h-16 w-full select-none items-center justify-center gap-3 overflow-hidden rounded-full font-display text-base font-medium transition-[background-color,box-shadow] duration-200 sm:h-14 ${
-        held
-          ? "bg-ink text-background shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.45),0_18px_40px_-18px_oklch(0.55_0.15_118/0.7)]"
-          : "bg-primary text-ink shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
-      }`}
-    >
-      {held && !reduced && (
-        <span className="absolute inset-0 animate-ping rounded-full bg-primary/25" />
+    <div className="relative">
+      {yours && !held && !reduced && (
+        <span
+          aria-hidden="true"
+          className="mary-turn-ping pointer-events-none absolute inset-0 rounded-full"
+        />
       )}
-      <Mic className="relative size-5" />
-      <span className="relative">
-        {held
-          ? "Listening… release when done"
-          : busy
-            ? "Thinking… hold to talk"
-            : "Hold to talk to MARY"}
-      </span>
-      {held && <HoldMeter />}
-    </motion.button>
+      <motion.button
+        type="button"
+        aria-label="Hold to talk to MARY"
+        aria-pressed={held}
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
+          event.preventDefault();
+          event.currentTarget.setPointerCapture(event.pointerId);
+          onHoldStart();
+        }}
+        onPointerUp={onHoldEnd}
+        onPointerCancel={onHoldEnd}
+        onLostPointerCapture={onHoldEnd}
+        onContextMenu={(event) => event.preventDefault()}
+        onKeyDown={(event) => {
+          if ((event.key === " " || event.key === "Enter") && !event.repeat) {
+            event.preventDefault();
+            onHoldStart();
+          }
+        }}
+        onKeyUp={(event) => {
+          if (event.key === " " || event.key === "Enter") {
+            event.preventDefault();
+            onHoldEnd();
+          }
+        }}
+        animate={reduced ? {} : { scale: held ? 1.03 : 1 }}
+        transition={QUICK}
+        style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
+        className={`relative flex h-16 w-full select-none items-center justify-center gap-3 overflow-hidden rounded-full font-display text-base font-medium transition-[background-color,box-shadow] duration-300 sm:h-14 ${
+          held
+            ? "bg-ink text-background shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.45),0_18px_40px_-18px_oklch(0.55_0.15_118/0.7)]"
+            : yours
+              ? "bg-primary text-ink shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
+              : "bg-primary/60 text-ink shadow-[0_0_0_1px_var(--color-border)]"
+        }`}
+      >
+        {held && !reduced && (
+          <span className="absolute inset-0 animate-ping rounded-full bg-primary/25" />
+        )}
+        <Mic className="relative size-5" />
+        <span className="relative">{held ? "Listening… let go when done" : "Hold to talk"}</span>
+        {held && <HoldMeter />}
+      </motion.button>
+    </div>
   );
 }
 
-function statusFor(state: {
-  presence: string;
-  listening: string;
-  micLive: boolean;
-  micMuted: boolean;
-  typingOnly: boolean;
-}) {
-  if (state.presence === "speaking" && !state.micMuted)
-    return state.typingOnly ? "MARY is speaking." : "MARY is speaking · just talk to cut in";
-  if (state.listening === "hearing") return "Go ahead, I'm listening.";
-  if (state.listening === "finishing") return "Got it. MARY is preparing her reply.";
-  if (state.presence === "thinking") return "MARY is thinking…";
-  if (state.micMuted) return "Your microphone is muted. Unmute to keep talking, or type.";
-  return state.typingOnly
-    ? "Type your reply, MARY is reading."
-    : "MARY is listening. Just talk, she answers when you pause.";
-}
-
+/** A visual notice. Screen readers get the same text from the one status region below. */
 function Notice({
   show,
   icon,
@@ -134,12 +118,12 @@ function Notice({
     <AnimatePresence initial={false}>
       {show && (
         <motion.p
-          role="status"
+          aria-hidden="true"
           initial={reduced ? false : { opacity: 0, y: 4 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -4 }}
           transition={QUICK}
-          className="mt-1.5 flex items-center justify-center gap-1.5 text-accent-text"
+          className="mt-1.5 flex items-center justify-center gap-1.5 text-center text-[0.8125rem] leading-snug text-accent-text"
         >
           {icon}
           {children}
@@ -151,6 +135,7 @@ function Notice({
 
 export function Composer({
   store,
+  floor,
   inputRef,
   onSend,
   onMicButton,
@@ -160,6 +145,8 @@ export function Composer({
   onHoldEnd,
 }: {
   store: SessionStore;
+  /** Whose turn it is, already settled past the pause between her beats. */
+  floor: Floor;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   onSend: (text: string) => void;
   onMicButton: () => void;
@@ -176,17 +163,21 @@ export function Composer({
   const notices = useSession(store, (s) => s.notices);
   const talkMode = useSession(store, (s) => s.talkMode);
   const holdMode = talkMode === "hold";
-  const typingOnly = !mic.live;
-  const status = holdMode
-    ? holdStatusFor(presence, listening, hasFinePointer())
-    : statusFor({
-        presence,
-        listening,
-        micLive: mic.live,
-        micMuted: mic.muted,
-        typingOnly,
-      });
+  const status = handsFreeStatus({
+    presence,
+    listening,
+    micLive: mic.live,
+    micMuted: mic.muted,
+  });
   const listeningLive = mic.live && !mic.muted;
+  const announcement = noticeAnnouncement(notices, mic);
+
+  // The iPhone "Can't hear her?" row keeps its slot once it has appeared, so the
+  // hold button never drops 40px under a thumb when the row goes away.
+  const [hintSlot, setHintSlot] = useState(false);
+  useEffect(() => {
+    if (notices.silentHint) setHintSlot(true);
+  }, [notices.silentHint]);
 
   const submit = () => {
     const text = draft.trim();
@@ -204,27 +195,33 @@ export function Composer({
         <div className="mt-2">
           {/* Notices sit above the button: the composer grows upward, so the button
               never moves under a thumb that is about to press it again. */}
-          <Notice show={notices.missedHold}>
-            Didn't catch that. Hold, speak close to the phone, and try again.
-          </Notice>
-          <Notice show={notices.suggestTyping}>
-            Loud in here? Type your answer below instead.
-          </Notice>
-          <div className="mt-2">
-            <HoldButton
-              held={listening === "hearing"}
-              busy={listening === "finishing" || presence === "thinking"}
-              onHoldStart={onHoldStart}
-              onHoldEnd={onHoldEnd}
-            />
-          </div>
+          <Notice show={notices.missedHold}>{NOTICE_TEXT.missedHold}</Notice>
+          <Notice show={notices.suggestTyping}>{NOTICE_TEXT.suggestTyping}</Notice>
+          <p
+            aria-hidden="true"
+            className={`mb-1.5 mt-1.5 text-center text-sm leading-snug transition-colors duration-300 ${
+              floor === "yours"
+                ? "font-medium text-ink"
+                : floor === "listening"
+                  ? "font-medium text-accent-text"
+                  : "text-muted-foreground"
+            }`}
+          >
+            {floorLine(floor, hasFinePointer())}
+          </p>
+          <HoldButton
+            held={listening === "hearing"}
+            yours={floor === "yours"}
+            onHoldStart={onHoldStart}
+            onHoldEnd={onHoldEnd}
+          />
         </div>
       )}
       <div
-        className={`mt-2 flex w-full items-end gap-1 rounded-[1.75rem] bg-card/90 px-2 py-1.5 shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)] backdrop-blur-sm transition-shadow duration-300 ${
+        className={`mt-2 flex w-full items-end gap-1 rounded-[1.75rem] bg-card/90 px-2 py-1.5 backdrop-blur-sm transition-shadow duration-300 ${
           listening === "hearing"
             ? "shadow-[0_0_0_2px_var(--color-primary),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
-            : ""
+            : "shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)] focus-within:shadow-[0_0_0_2px_oklch(0.15_0.01_110/0.55),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)]"
         }`}
       >
         {!holdMode && (
@@ -281,7 +278,8 @@ export function Composer({
                       ? "Muted, type your answer"
                       : "Speak or type your answer"
           }
-          className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground sm:text-sm"
+          // 16px wherever a finger taps it: iPhone Safari zooms into any smaller field and never zooms back.
+          className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground pointer-fine:text-sm"
         />
         <AnimatePresence initial={false}>
           {draft.trim() && (
@@ -300,51 +298,65 @@ export function Composer({
           )}
         </AnimatePresence>
       </div>
-      <div className="mt-2 text-center text-[0.7rem] text-muted-foreground">
-        <AnimatePresence mode="wait" initial={false}>
-          <motion.p
-            key={status}
-            initial={reduced ? false : { opacity: 0, y: 3 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -3 }}
-            transition={{ duration: 0.2 }}
-            className="flex items-center justify-center gap-2"
-            aria-live="off"
+      <div className="mt-2 text-center text-muted-foreground">
+        {!holdMode && (
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.p
+              key={status}
+              initial={reduced ? false : { opacity: 0, y: 3 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -3 }}
+              transition={{ duration: 0.2 }}
+              className="flex items-center justify-center gap-2 text-sm leading-snug"
+              aria-live="off"
+            >
+              {listeningLive && (
+                <span className="size-1.5 shrink-0 rounded-full bg-primary shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.2)]" />
+              )}
+              {status}
+            </motion.p>
+          </AnimatePresence>
+        )}
+        {(notices.silentHint || hintSlot) && (
+          <p
+            aria-hidden="true"
+            className={`mt-1 flex min-h-11 flex-wrap items-center justify-center gap-x-2 gap-y-1 text-[0.8125rem] text-accent-text transition-opacity duration-300 ${notices.silentHint ? "" : "pointer-events-none opacity-0"}`}
           >
-            {listeningLive && !holdMode && (
-              <span className="size-1.5 rounded-full bg-primary shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.2)]" />
-            )}
-            {status}
-          </motion.p>
-        </AnimatePresence>
-        {notices.silentHint && (
-          <p className="mt-1.5 flex flex-wrap items-center justify-center gap-2 text-accent-text">
-            <span>Can't hear her? Turn the volume up and tap Play sound.</span>
+            <span>Can't hear her?</span>
             <button
               type="button"
+              tabIndex={notices.silentHint ? 0 : -1}
               onClick={onPlaySound}
-              className="rounded-full px-2.5 py-0.5 ring-1 ring-border transition-colors hover:bg-muted"
+              className="inline-flex min-h-11 items-center rounded-full px-3.5 font-medium text-ink ring-1 ring-border transition-colors hover:bg-muted"
             >
               Play sound
             </button>
             <button
               type="button"
+              tabIndex={notices.silentHint ? 0 : -1}
               onClick={onHearHer}
-              className="rounded-full px-2.5 py-0.5 text-muted-foreground transition-colors hover:bg-muted"
+              className="inline-flex min-h-11 items-center rounded-full px-3.5 text-muted-foreground transition-colors hover:bg-muted hover:text-ink"
             >
               I can hear her
             </button>
           </p>
         )}
-        <Notice show={notices.voiceFailed} icon={<VolumeX className="size-3" aria-hidden="true" />}>
-          My voice didn't come through just now. The words are on screen.
+        <Notice
+          show={notices.voiceFailed}
+          icon={<VolumeX className="size-3.5" aria-hidden="true" />}
+        >
+          {NOTICE_TEXT.voiceFailed}
         </Notice>
         <Notice
           show={notices.echoHint && mic.live}
-          icon={<Headphones className="size-3" aria-hidden="true" />}
+          icon={<Headphones className="size-3.5" aria-hidden="true" />}
         >
-          On speakers? Headphones make cutting in smoother.
+          {NOTICE_TEXT.echoHint}
         </Notice>
+        {/* The one live region for notices: always mounted, so it is actually announced. */}
+        <p role="status" className="sr-only">
+          {announcement}
+        </p>
       </div>
     </div>
   );

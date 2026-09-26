@@ -1,0 +1,128 @@
+{
+  "start_speaker": "agent",
+  "begin_message": "{{opening_line}}",
+  "model": "gpt-5.6-terra",
+  "model_temperature": 0.3,
+  "default_dynamic_variables": {
+    "opening_line": "__OPENING_LINE__",
+    "known_summary": "nothing yet",
+    "field_notes": "none yet"
+  },
+  "general_prompt": "__GENERATED__",
+  "general_tools": [
+    {
+      "type": "end_call",
+      "name": "end_call",
+      "description": "End the call right after your closing line, the callback goodbye, the EXIT line, or when they say goodbye. Never before a save_lead you started has returned."
+    },
+    {
+      "type": "custom",
+      "name": "note_details",
+      "description": "Silent checkpoint right before the reveal, once name, business, industry and operations are in their own words. If the result lists anything missing or not recorded, ask plainly and call again; reveal only when it comes back complete.",
+      "url": "__SITE_ORIGIN__/api/retell/functions/save-lead",
+      "method": "POST",
+      "args_at_root": false,
+      "parameter_type": "json",
+      "timeout_ms": 8000,
+      "max_retry": 1,
+      "speak_during_execution": false,
+      "speak_after_execution": true,
+      "parameters": {
+        "type": "object",
+        "required": ["name", "business", "industry", "operations"],
+        "properties": {
+          "name": { "type": "string", "description": "Their name exactly as they said it." },
+          "name_evidence": {
+            "type": "string",
+            "description": "Their own words where they gave the name, verbatim, 2-12 words."
+          },
+          "business": { "type": "string", "description": "Business name as they said it." },
+          "business_evidence": {
+            "type": "string",
+            "description": "Their own words for the business, verbatim, 2-12 words."
+          },
+          "industry": {
+            "type": "string",
+            "description": "Specific industry as they described it. A vague answer is not an industry."
+          },
+          "industry_evidence": {
+            "type": "string",
+            "description": "Their own words for the industry, verbatim, 2-12 words."
+          },
+          "operations": {
+            "type": "string",
+            "description": "How leads come in and what happens to them today, in their terms."
+          },
+          "operations_evidence": {
+            "type": "string",
+            "description": "Their own words about their operations, verbatim, 2-12 words."
+          }
+        }
+      }
+    },
+    {
+      "type": "custom",
+      "name": "save_lead",
+      "description": "Put the visitor on the OmniSuite waitlist. Stage \"final\" once their name and email are confirmed: after the WRAP answer, or straight away on the fast lane. Stage \"callback\" once you have a name and a number after they asked to be called back. Pass every detail you hold.",
+      "url": "__SITE_ORIGIN__/api/retell/functions/save-lead",
+      "method": "POST",
+      "args_at_root": false,
+      "parameter_type": "json",
+      "timeout_ms": 12000,
+      "max_retry": 0,
+      "speak_during_execution": true,
+      "execution_message_type": "static_text",
+      "execution_message_description": "One moment.",
+      "speak_after_execution": true,
+      "parameters": {
+        "type": "object",
+        "required": ["stage", "name"],
+        "properties": {
+          "stage": {
+            "type": "string",
+            "enum": ["final", "callback"],
+            "description": "final = on the list (name and email are enough); callback = they asked to be called back."
+          },
+          "name": { "type": "string", "description": "Their name exactly as they said it." },
+          "name_evidence": {
+            "type": "string",
+            "description": "Their own words where they gave the name, verbatim, 2-12 words."
+          },
+          "email": {
+            "type": "string",
+            "description": "Email exactly as confirmed, e.g. jo@acme.com. Empty if not given."
+          },
+          "phone": {
+            "type": "string",
+            "description": "Phone digits as confirmed, or \"skipped\" if they passed. Empty if not asked."
+          },
+          "business": { "type": "string", "description": "Business name as they said it." },
+          "business_evidence": {
+            "type": "string",
+            "description": "Their own words for the business, verbatim, 2-12 words."
+          },
+          "industry": {
+            "type": "string",
+            "description": "Specific industry as they described it. A vague answer is not an industry."
+          },
+          "industry_evidence": {
+            "type": "string",
+            "description": "Their own words for the industry, verbatim, 2-12 words."
+          },
+          "operations": {
+            "type": "string",
+            "description": "How leads come in and what happens to them today, in their terms."
+          },
+          "operations_evidence": {
+            "type": "string",
+            "description": "Their own words about their operations, verbatim, 2-12 words."
+          },
+          "callback_requested": {
+            "type": "boolean",
+            "description": "True only if they asked to be called back instead of finishing now."
+          }
+        }
+      }
+    }
+  ]
+}

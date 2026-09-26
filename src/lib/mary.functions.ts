@@ -16,6 +16,67 @@ export type WaitlistField = (typeof WAITLIST_FIELDS)[number];
 
 export type Collected = Partial<Record<WaitlistField, string>>;
 
+/**
+ * The two details that secure a spot. Business, industry and operations are
+ * what make the conversation worth having and the lead worth calling — never
+ * a condition for the spot — and phone is always optional.
+ */
+export const REQUIRED_FIELDS = ["name", "email"] as const satisfies readonly WaitlistField[];
+
+/** Name and email are in: this person has their spot whatever else happens. */
+export function spotSecured(collected: Collected): boolean {
+  return REQUIRED_FIELDS.every((field) => Boolean(collected[field]?.trim()));
+}
+
+/** Recorded as the business by someone who has none; they still get their spot. */
+export { NO_BUSINESS } from "./mary-grounding";
+
+/**
+ * MARY's first words: a hello, who she is, what the visitor gets and how long
+ * it takes, landing on their name. Fixed lines, so they can be spoken the
+ * moment the call starts instead of waiting on a model. Every one names
+ * OmniSuite, which is how the client knows the intro was heard in full.
+ */
+export const OPENERS: readonly { say: string; followUp: string }[] = [
+  {
+    say: "Hi — I'm MARY. I look after early access to OmniSuite, Omnikom's new revenue engine.",
+    followUp: "Two minutes with me and you're on the list. What should I call you?",
+  },
+  {
+    say: "Hey, good to meet you. I'm MARY, from Omnikom — I hold the early-access spots for OmniSuite, our revenue engine.",
+    followUp: "It takes about two minutes. Who am I talking to?",
+  },
+  {
+    say: "Hello — thanks for stopping by. I'm MARY. OmniSuite is Omnikom's new revenue engine, and I'm how you get in early.",
+    followUp: "Two minutes, no forms. What do I call you?",
+  },
+  {
+    say: "Hi there. I'm MARY — OmniSuite is Omnikom's revenue engine, and early access goes through me.",
+    followUp: "About two minutes and you're in. And your name is?",
+  },
+];
+
+/** The welcome as a finished turn, ready to speak without a model call. */
+export function welcomeTurn(pick = Math.floor(Math.random() * OPENERS.length)): MaryTurn {
+  const opener = OPENERS[Math.abs(pick) % OPENERS.length]!;
+  return {
+    say: opener.say,
+    followUp: opener.followUp,
+    collected: {},
+    nextField: "name",
+    complete: false,
+    declined: false,
+    callbackRequested: false,
+    intent: "greeting",
+    mode: "neutral",
+    wrapAsked: false,
+    revealed: false,
+    lanesDone: false,
+    introDone: true,
+    rejected: [],
+  };
+}
+
 /** What MARY has actually finished saying — beats she was cut off in don't count. */
 export type TurnFlags = {
   revealed: boolean;

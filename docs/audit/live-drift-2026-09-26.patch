@@ -1,0 +1,474 @@
+diff --git a/src/features/mary/mary-app.tsx b/src/features/mary/mary-app.tsx
+index f2f50e2..a5db828 100644
+--- a/src/features/mary/mary-app.tsx
++++ b/src/features/mary/mary-app.tsx
+@@ -536,10 +536,10 @@ export function MaryApp() {
+ 
+   const tight = viewportHeight < 640;
+   const landingOrb = Math.round(
+-    Math.min(300, Math.max(170, viewportHeight * (tight ? 0.26 : 0.32))),
++    Math.min(300, Math.max(136, viewportHeight * (tight ? 0.208 : 0.256))),
+   );
+   const callOrb = Math.round(
+-    Math.min(280, Math.max(140, (keyboardHeight ?? viewportHeight) * (tight ? 0.24 : 0.3))),
++    Math.min(280, Math.max(112, (keyboardHeight ?? viewportHeight) * (tight ? 0.192 : 0.24))),
+   );
+ 
+   return (
+diff --git a/src/features/mary/ui/boot-screen.tsx b/src/features/mary/ui/boot-screen.tsx
+index bdf0e03..7f7e65e 100644
+--- a/src/features/mary/ui/boot-screen.tsx
++++ b/src/features/mary/ui/boot-screen.tsx
+@@ -11,10 +11,10 @@ export function BootScreen({ leaving = false }: { leaving?: boolean }) {
+     >
+       <div className="flex flex-col items-center">
+         <div className="mary-boot-orb" />
+-        <p className="mary-boot-word mt-9 font-display text-lg font-semibold tracking-[0.42em] text-ink">
++        <p className="mary-boot-word mt-7 font-display text-base font-semibold tracking-[0.42em] text-ink sm:mt-9 sm:text-lg">
+           MARY
+         </p>
+-        <p className="mary-boot-caption mt-4 text-[0.68rem] font-medium uppercase tracking-[0.22em] text-muted-foreground">
++        <p className="mary-boot-caption mt-3 text-[0.58rem] font-medium uppercase tracking-[0.22em] text-muted-foreground sm:mt-4 sm:text-[0.68rem]">
+           Preparing your conversation
+         </p>
+       </div>
+diff --git a/src/features/mary/ui/call-stage.tsx b/src/features/mary/ui/call-stage.tsx
+index 340be2f..332c490 100644
+--- a/src/features/mary/ui/call-stage.tsx
++++ b/src/features/mary/ui/call-stage.tsx
+@@ -136,11 +136,11 @@ export function CallStage({
+       animate={{ opacity: 1 }}
+       exit={{ opacity: 0 }}
+       transition={{ duration: 0.4, ease: EASE }}
+-      className="fixed inset-x-0 top-0 flex h-dvh flex-col overflow-hidden px-4 sm:px-8"
++      className="fixed inset-x-0 top-0 flex h-dvh flex-col overflow-hidden px-3 sm:px-8"
+       style={height ? { height } : {}}
+     >
+       <SiteHeader
+-        start={<Logo className="h-6 sm:h-7" />}
++        start={<Logo className="h-5 sm:h-7" />}
+         end={
+           <div className="flex min-w-0 items-center gap-2">
+             <div className="hidden min-w-0 md:block">
+@@ -155,7 +155,7 @@ export function CallStage({
+                   ? "Quiet room: switch to hands-free talking"
+                   : "Loud room: switch to hold to talk"
+               }
+-              className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink"
++              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-2 text-[0.65rem] font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink sm:gap-2 sm:px-3 sm:text-xs"
+             >
+               {talkMode === "hold" ? <Radio className="size-4" /> : <Hand className="size-4" />}
+               <span className="hidden sm:inline">
+@@ -166,7 +166,7 @@ export function CallStage({
+               type="button"
+               onClick={onToggleVoice}
+               aria-label={voiceOff ? "Turn MARY's voice on" : "Turn MARY's voice off"}
+-              className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-ink"
++              className="inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-full px-2 text-[0.65rem] font-medium text-muted-foreground transition-colors hover:text-ink sm:gap-2 sm:px-3 sm:text-xs"
+             >
+               {voiceOff ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+               <span className="hidden sm:inline">{voiceOff ? "Voice off" : "Voice on"}</span>
+@@ -183,7 +183,7 @@ export function CallStage({
+         {current ? `MARY: ${current.text}` : ""}
+       </p>
+ 
+-      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-4 py-3 text-center sm:gap-6">
++      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col items-center justify-center gap-2 py-1.5 text-center sm:gap-6 sm:py-3">
+         <motion.div
+           layoutId="mary-orb"
+           transition={{ type: "spring", stiffness: 120, damping: 22 }}
+@@ -191,7 +191,7 @@ export function CallStage({
+           <MaryOrb state={presence} size={orbSize} />
+         </motion.div>
+ 
+-        <div className="flex h-[10.5rem] w-full flex-col items-center justify-start overflow-hidden sm:h-[12.5rem]">
++        <div className="flex h-[8.5rem] w-full flex-col items-center justify-start overflow-hidden sm:h-[11rem]">
+           <AnimatePresence mode="popLayout" initial={false}>
+             {interim ? (
+               <motion.p
+@@ -200,7 +200,7 @@ export function CallStage({
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0 }}
+                 transition={QUICK}
+-                className="mb-3 max-w-xl text-pretty text-sm text-muted-foreground"
++                className="mb-2 max-w-xl text-pretty text-xs text-muted-foreground sm:mb-3 sm:text-sm"
+               >
+                 <span className="font-medium text-ink">You</span> · {interim}
+               </motion.p>
+@@ -211,7 +211,7 @@ export function CallStage({
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0 }}
+                 transition={QUICK}
+-                className="mb-3 max-w-xl truncate text-sm text-muted-foreground"
++                className="mb-2 max-w-xl truncate text-xs text-muted-foreground sm:mb-3 sm:text-sm"
+               >
+                 You · “{lastUser.text}”
+               </motion.p>
+@@ -227,15 +227,15 @@ export function CallStage({
+                 animate={{ opacity: 1, y: 0 }}
+                 exit={{ opacity: 0, y: -10 }}
+                 transition={SOFT}
+-                className="mt-3 max-w-2xl"
++                className="mt-2 max-w-2xl sm:mt-3"
+               >
+                 {before && (
+-                  <p className="mb-2 text-pretty text-lg leading-snug text-muted-foreground sm:text-xl">
++                  <p className="mb-1.5 text-pretty text-sm leading-snug text-muted-foreground sm:mb-2 sm:text-base">
+                     {before.text}
+                   </p>
+                 )}
+                 <p
+-                  className={`text-pretty font-display font-medium leading-tight tracking-[-0.02em] text-ink ${current.text.length > 110 ? "text-xl sm:text-[1.6rem]" : "text-2xl sm:text-[2.1rem]"}`}
++                  className={`text-pretty font-display font-medium leading-tight text-ink ${current.text.length > 110 ? "text-base sm:text-[1.3rem]" : "text-xl sm:text-[1.65rem]"}`}
+                 >
+                   <RevealedLine
+                     text={current.text}
+@@ -250,7 +250,7 @@ export function CallStage({
+                 initial={reduced ? false : { opacity: 0 }}
+                 animate={{ opacity: 1 }}
+                 exit={{ opacity: 0 }}
+-                className="mt-3 font-display text-2xl text-muted-foreground sm:text-[2.1rem]"
++                className="mt-2 font-display text-xl text-muted-foreground sm:mt-3 sm:text-[1.65rem]"
+               >
+                 {presence === "thinking" ? "…" : ""}
+               </motion.p>
+@@ -260,7 +260,7 @@ export function CallStage({
+             <button
+               type="button"
+               onClick={() => setPanel(true)}
+-              className="mt-4 inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-ink"
++              className="mt-2 inline-flex min-h-10 items-center gap-1.5 rounded-full px-3 text-[0.68rem] text-muted-foreground transition-colors hover:bg-muted hover:text-ink sm:mt-4 sm:text-xs"
+             >
+               <MessageSquareText className="size-3.5" />
+               Show conversation
+@@ -269,7 +269,7 @@ export function CallStage({
+         </div>
+       </div>
+ 
+-      <div className="mx-auto w-full max-w-xl shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
++      <div className="mx-auto w-full max-w-xl shrink-0 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+         <Composer
+           store={store}
+           inputRef={inputRef}
+diff --git a/src/features/mary/ui/composer.tsx b/src/features/mary/ui/composer.tsx
+index 1d01561..7970093 100644
+--- a/src/features/mary/ui/composer.tsx
++++ b/src/features/mary/ui/composer.tsx
+@@ -80,7 +80,7 @@ function HoldButton({
+       animate={reduced ? {} : { scale: held ? 1.03 : 1 }}
+       transition={QUICK}
+       style={{ touchAction: "none", WebkitTouchCallout: "none", WebkitUserSelect: "none" }}
+-      className={`relative flex h-16 w-full select-none items-center justify-center gap-3 overflow-hidden rounded-full font-display text-base font-medium transition-[background-color,box-shadow] duration-200 sm:h-14 ${
++      className={`relative flex h-14 w-full select-none items-center justify-center gap-2.5 overflow-hidden rounded-full font-display text-sm font-medium transition-[background-color,box-shadow] duration-200 sm:gap-3 sm:text-base ${
+         held
+           ? "bg-ink text-background shadow-[0_0_0_4px_oklch(0.79_0.175_118/0.45),0_18px_40px_-18px_oklch(0.55_0.15_118/0.7)]"
+           : "bg-primary text-ink shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
+@@ -139,7 +139,7 @@ function Notice({
+           animate={{ opacity: 1, y: 0 }}
+           exit={{ opacity: 0, y: -4 }}
+           transition={QUICK}
+-          className="mt-1.5 flex items-center justify-center gap-1.5 text-accent-text"
++          className="mt-1 flex items-center justify-center gap-1.5 text-[0.68rem] text-accent-text sm:mt-1.5 sm:text-xs"
+         >
+           {icon}
+           {children}
+@@ -201,7 +201,7 @@ export function Composer({
+         <span className="text-muted-foreground">{mic.error}</span>
+       </Notice>
+       {holdMode && (
+-        <div className="mt-2">
++        <div className="mt-1.5 sm:mt-2">
+           {/* Notices sit above the button: the composer grows upward, so the button
+               never moves under a thumb that is about to press it again. */}
+           <Notice show={notices.missedHold}>
+@@ -210,7 +210,7 @@ export function Composer({
+           <Notice show={notices.suggestTyping}>
+             Loud in here? Type your answer below instead.
+           </Notice>
+-          <div className="mt-2">
++          <div className="mt-1.5 sm:mt-2">
+             <HoldButton
+               held={listening === "hearing"}
+               busy={listening === "finishing" || presence === "thinking"}
+@@ -221,7 +221,7 @@ export function Composer({
+         </div>
+       )}
+       <div
+-        className={`mt-2 flex w-full items-end gap-1 rounded-[1.75rem] bg-card/90 px-2 py-1.5 shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)] backdrop-blur-sm transition-shadow duration-300 ${
++        className={`mt-1.5 flex w-full items-end gap-1 rounded-[1.5rem] bg-card/90 px-1.5 py-1 shadow-[0_0_0_1px_var(--color-border),0_18px_40px_-24px_oklch(0.2_0.02_110/0.4)] backdrop-blur-sm transition-shadow duration-300 sm:mt-2 sm:rounded-[1.75rem] sm:px-2 sm:py-1.5 ${
+           listening === "hearing"
+             ? "shadow-[0_0_0_2px_var(--color-primary),0_18px_40px_-24px_oklch(0.55_0.15_118/0.55)]"
+             : ""
+@@ -281,7 +281,7 @@ export function Composer({
+                       ? "Muted, type your answer"
+                       : "Speak or type your answer"
+           }
+-          className="max-h-28 min-h-11 flex-1 resize-none bg-transparent px-3 py-2.5 text-base text-ink outline-none placeholder:text-muted-foreground sm:text-sm"
++          className="max-h-24 min-h-11 flex-1 resize-none bg-transparent px-2.5 py-2.5 text-sm text-ink outline-none placeholder:text-muted-foreground sm:max-h-28 sm:px-3"
+         />
+         <AnimatePresence initial={false}>
+           {draft.trim() && (
+@@ -300,7 +300,7 @@ export function Composer({
+           )}
+         </AnimatePresence>
+       </div>
+-      <div className="mt-2 text-center text-[0.7rem] text-muted-foreground">
++      <div className="mt-1.5 text-center text-[0.62rem] text-muted-foreground sm:mt-2 sm:text-[0.7rem]">
+         <AnimatePresence mode="wait" initial={false}>
+           <motion.p
+             key={status}
+diff --git a/src/features/mary/ui/end-screen.tsx b/src/features/mary/ui/end-screen.tsx
+index 3db0a5c..761a9f3 100644
+--- a/src/features/mary/ui/end-screen.tsx
++++ b/src/features/mary/ui/end-screen.tsx
+@@ -42,34 +42,37 @@ export function EndScreen({
+       initial={reduced ? false : { opacity: 0 }}
+       animate={{ opacity: 1 }}
+       transition={{ duration: 0.45, ease: EASE }}
+-      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-5 sm:px-8"
++      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-4 sm:px-8"
+     >
+-      <SiteHeader start={<Logo className="h-6 sm:h-7" />} />
+-      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-6 text-center">
++      <SiteHeader start={<Logo className="h-5 sm:h-7" />} />
++      <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col items-center justify-center py-3 text-center sm:py-6">
+         <motion.div
+           layoutId="mary-orb"
+           transition={{ type: "spring", stiffness: 120, damping: 22 }}
+         >
+           <MaryOrb state="done" size={orbSize} />
+         </motion.div>
+-        <motion.p {...at(0.1)} className="eyebrow mt-5">
++        <motion.p {...at(0.1)} className="eyebrow mt-3 sm:mt-5">
+           {copy.eyebrow}
+         </motion.p>
+         <motion.h1
+           {...at(0.16)}
+-          className="mt-3 text-balance font-display text-4xl font-semibold leading-[1.02] tracking-[-0.04em] text-ink sm:text-6xl"
++          className="mt-2 text-balance font-display text-3xl font-semibold leading-[1.02] text-ink sm:mt-3 sm:text-6xl"
+         >
+           {copy.title}
+         </motion.h1>
+         <motion.p
+           {...at(0.22)}
+-          className="mx-auto mt-4 max-w-lg text-pretty text-base leading-relaxed text-muted-foreground sm:text-lg"
++          className="mx-auto mt-3 max-w-md text-pretty text-sm leading-relaxed text-muted-foreground sm:mt-4 sm:max-w-lg sm:text-lg"
+         >
+           {copy.body}
+         </motion.p>
+ 
+         {result.outcome === "signed_up" && (
+-          <motion.div {...at(0.28)} className="mt-5 flex min-h-10 items-center justify-center">
++          <motion.div
++            {...at(0.28)}
++            className="mt-3 flex min-h-9 items-center justify-center sm:mt-5 sm:min-h-10"
++          >
+             <AnimatePresence mode="wait" initial={false}>
+               {result.sync === "pending" ? (
+                 <motion.span
+@@ -107,7 +110,7 @@ export function EndScreen({
+         {result.outcome === "declined" ? (
+           <motion.div
+             {...at(0.3)}
+-            className="mt-8 flex flex-wrap items-center justify-center gap-3"
++            className="mt-5 flex flex-wrap items-center justify-center gap-2.5 sm:mt-8 sm:gap-3"
+           >
+             <motion.button
+               type="button"
+@@ -133,17 +136,17 @@ export function EndScreen({
+           <>
+             <motion.div
+               {...at(0.34)}
+-              className="mt-10 grid w-full gap-8 rounded-[1.75rem] bg-card p-6 text-left shadow-[0_0_0_1px_var(--color-border),0_30px_60px_-44px_oklch(0.2_0.02_110/0.45)] sm:grid-cols-[1.05fr_1fr] sm:p-8"
++              className="mt-6 grid w-full gap-5 rounded-[1.4rem] bg-card p-4 text-left shadow-[0_0_0_1px_var(--color-border),0_30px_60px_-44px_oklch(0.2_0.02_110/0.45)] sm:mt-10 sm:grid-cols-[1.05fr_1fr] sm:gap-8 sm:rounded-[1.75rem] sm:p-8"
+             >
+               <div>
+                 <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                   What happens next
+                 </p>
+-                <ol className="mt-4 space-y-3.5">
++                <ol className="mt-3 space-y-2.5 sm:mt-4 sm:space-y-3.5">
+                   {copy.steps.map((step, index) => (
+                     <li
+                       key={step}
+-                      className="flex items-start gap-3 text-sm leading-relaxed text-ink"
++                      className="flex items-start gap-2.5 text-xs leading-relaxed text-ink sm:gap-3 sm:text-sm"
+                     >
+                       <span className="mt-0.5 grid size-5 shrink-0 place-items-center rounded-full bg-primary/25 text-[0.65rem] font-semibold text-accent-text">
+                         {index + 1}
+@@ -157,14 +160,14 @@ export function EndScreen({
+                 <p className="text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                   {result.outcome === "callback" ? "What the team receives" : "Details confirmed"}
+                 </p>
+-                <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-4">
++                <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-3 sm:mt-4 sm:gap-x-6 sm:gap-y-4">
+                   {fields.map((field) => (
+                     <div key={field} className={field === "operations" ? "col-span-2" : ""}>
+                       <dt className="text-[0.62rem] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                         {FIELD_LABELS[field]}
+                       </dt>
+                       <dd
+-                        className={`mt-0.5 break-words text-sm font-medium ${collected[field] ? "text-ink" : "text-muted-foreground"}`}
++                        className={`mt-0.5 break-words text-xs font-medium sm:text-sm ${collected[field] ? "text-ink" : "text-muted-foreground"}`}
+                       >
+                         {collected[field] || "Skipped"}
+                       </dd>
+@@ -177,7 +180,7 @@ export function EndScreen({
+               {...at(0.5)}
+               type="button"
+               onClick={onRestart}
+-              className="mt-8 text-xs text-muted-foreground transition-colors hover:text-ink"
++              className="mt-5 min-h-11 text-xs text-muted-foreground transition-colors hover:text-ink sm:mt-8"
+             >
+               Start another conversation
+             </motion.button>
+diff --git a/src/features/mary/ui/landing.tsx b/src/features/mary/ui/landing.tsx
+index 2d6c8c8..74e5da1 100644
+--- a/src/features/mary/ui/landing.tsx
++++ b/src/features/mary/ui/landing.tsx
+@@ -29,13 +29,13 @@ function SpeechPreview({ play, className = "" }: { play: boolean; className?: st
+   const typing = count < OPENER.length;
+   return (
+     <div
+-      className={`rounded-[1.4rem] rounded-bl-md bg-card px-4 py-3.5 text-left shadow-[0_0_0_1px_var(--color-border),0_22px_44px_-28px_oklch(0.2_0.02_110/0.45)] ${className}`}
++      className={`rounded-[1.15rem] rounded-bl-md bg-card px-3 py-2.5 text-left shadow-[0_0_0_1px_var(--color-border),0_22px_44px_-28px_oklch(0.2_0.02_110/0.45)] sm:rounded-[1.4rem] sm:px-4 sm:py-3.5 ${className}`}
+     >
+       <p className="flex items-center gap-2 text-[0.62rem] font-semibold uppercase tracking-[0.16em] text-accent-text">
+         <span className={`size-1.5 rounded-full bg-primary ${typing ? "animate-pulse" : ""}`} />
+         MARY · {typing ? "speaking" : "waiting for you"}
+       </p>
+-      <p className="mt-1.5 min-h-[2.9em] text-[0.98rem] leading-snug text-ink sm:text-[1.05rem]">
++      <p className="mt-1 min-h-[2.9em] text-[0.82rem] leading-snug text-ink sm:mt-1.5 sm:text-[1.05rem]">
+         {OPENER.slice(0, count)}
+         {typing && (
+           <span className="ml-0.5 inline-block h-[1.05em] w-[2px] translate-y-[3px] animate-pulse bg-ink" />
+@@ -84,13 +84,13 @@ export function Landing({
+     <motion.section
+       key="landing"
+       exit={{ opacity: 0, transition: { duration: 0.35, ease: EASE } }}
+-      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-5 sm:px-8"
++      className="no-scrollbar fixed inset-0 flex flex-col overflow-y-auto px-4 sm:px-8"
+     >
+-      <SiteHeader centered start={<Logo />} />
+-      <div className="flex flex-1 flex-col items-center justify-center py-4 text-center">
++      <SiteHeader centered start={<Logo className="h-6 sm:h-7" />} />
++      <div className="flex flex-1 flex-col items-center justify-center py-2 text-center sm:py-4">
+         <div className="relative flex w-full max-w-3xl flex-col items-center">
+           {/* Phones: the speech card sits above the orb. */}
+-          <motion.div {...show(0.35)} className="mb-3 w-full max-w-sm sm:hidden">
++          <motion.div {...show(0.35)} className="mb-2 w-full max-w-xs sm:hidden">
+             <SpeechPreview play={ready} />
+           </motion.div>
+ 
+@@ -122,43 +122,43 @@ export function Landing({
+             </motion.div>
+           </div>
+ 
+-          <motion.div {...show(0.2)} className="mt-1">
++          <motion.div {...show(0.2)} className="mt-0.5 sm:mt-1">
+             <Waveform />
+           </motion.div>
+ 
+           <motion.h1
+             {...show(0.25)}
+-            className="mt-5 text-balance font-display text-5xl font-semibold leading-[0.95] tracking-[-0.045em] text-ink sm:text-7xl"
++            className="mt-3 text-balance font-display text-4xl font-semibold leading-[0.95] text-ink sm:mt-5 sm:text-7xl"
+           >
+             Meet MARY<span className="text-primary">.</span>
+           </motion.h1>
+           <motion.p
+             {...show(0.32)}
+-            className="mt-4 max-w-md text-pretty text-base leading-relaxed text-muted-foreground sm:max-w-xl sm:text-lg"
++            className="mt-3 max-w-sm text-pretty text-sm leading-relaxed text-muted-foreground sm:mt-4 sm:max-w-xl sm:text-lg"
+           >
+             Your AI Revenue Concierge. Talk to her for two minutes and she'll save your spot on the
+             OmniSuite launch waitlist.
+           </motion.p>
+           <motion.div
+             {...show(0.4)}
+-            className="mt-7 flex flex-wrap items-center justify-center gap-3"
++            className="mt-5 flex flex-wrap items-center justify-center gap-2.5 sm:mt-7 sm:gap-3"
+           >
+             <motion.button
+               type="button"
+               onClick={() => onStart(true)}
+               whileHover={reduced ? {} : { y: -2 }}
+               whileTap={reduced ? {} : { scale: 0.98 }}
+-              className="inline-flex h-14 items-center gap-3 rounded-full bg-primary pl-7 pr-2.5 text-base font-semibold text-ink shadow-[inset_0_1px_0_oklch(1_0_0/0.45),0_1px_0_oklch(0.55_0.15_118/0.5),0_18px_34px_-18px_oklch(0.55_0.15_118/0.75)] outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-background"
++              className="inline-flex h-12 items-center gap-2.5 rounded-full bg-primary pl-6 pr-2 text-sm font-semibold text-ink shadow-[inset_0_1px_0_oklch(1_0_0/0.45),0_1px_0_oklch(0.55_0.15_118/0.5),0_18px_34px_-18px_oklch(0.55_0.15_118/0.75)] outline-none focus-visible:ring-2 focus-visible:ring-ink focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:h-14 sm:gap-3 sm:pl-7 sm:pr-2.5 sm:text-base"
+             >
+               Start talking
+-              <span className="grid size-9 place-items-center rounded-full bg-ink text-primary">
++              <span className="grid size-8 place-items-center rounded-full bg-ink text-primary sm:size-9">
+                 <ArrowRight className="size-4" />
+               </span>
+             </motion.button>
+             <button
+               type="button"
+               onClick={() => onStart(false)}
+-              className="inline-flex h-14 items-center gap-2 rounded-full bg-card px-6 text-sm font-medium text-ink ring-1 ring-border transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ink"
++              className="inline-flex h-12 items-center gap-2 rounded-full bg-card px-5 text-xs font-medium text-ink ring-1 ring-border transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-ink sm:h-14 sm:px-6 sm:text-sm"
+             >
+               <Keyboard className="size-4 text-muted-foreground" />
+               Type instead
+diff --git a/src/features/mary/ui/progress-pills.tsx b/src/features/mary/ui/progress-pills.tsx
+index c8a919b..98dfcb4 100644
+--- a/src/features/mary/ui/progress-pills.tsx
++++ b/src/features/mary/ui/progress-pills.tsx
+@@ -11,7 +11,7 @@ export const ProgressPills = memo(function ProgressPills({ collected }: { collec
+   const next = WAITLIST_FIELDS.find((field) => !collected[field]);
+   return (
+     <ul
+-      className="no-scrollbar flex max-w-full items-center gap-1.5 overflow-x-auto"
++      className="no-scrollbar flex max-w-full items-center gap-1 overflow-x-auto sm:gap-1.5"
+       aria-label="Details MARY has so far"
+     >
+       {WAITLIST_FIELDS.map((field) => {
+@@ -20,7 +20,7 @@ export const ProgressPills = memo(function ProgressPills({ collected }: { collec
+         return (
+           <li
+             key={field}
+-            className={`flex shrink-0 items-center gap-1.5 rounded-full bg-card px-3 py-1.5 text-xs font-medium ring-1 transition-colors duration-300 ${
++            className={`flex shrink-0 items-center gap-1 rounded-full bg-card px-2 py-1 text-[0.65rem] font-medium ring-1 transition-colors duration-300 sm:gap-1.5 sm:px-3 sm:py-1.5 sm:text-xs ${
+               done
+                 ? "text-ink ring-border"
+                 : field === next
+diff --git a/src/features/mary/ui/site-frame.tsx b/src/features/mary/ui/site-frame.tsx
+index d924ef4..ded9763 100644
+--- a/src/features/mary/ui/site-frame.tsx
++++ b/src/features/mary/ui/site-frame.tsx
+@@ -31,7 +31,7 @@ export function SiteFooter({ className = "" }: { className?: string }) {
+   const onTap = useOwnerTaps();
+   return (
+     <footer
+-      className={`flex shrink-0 flex-wrap items-center justify-between gap-2 py-4 text-[0.7rem] text-muted-foreground ${className}`}
++      className={`flex shrink-0 flex-wrap items-center justify-between gap-1.5 py-2 text-[0.62rem] text-muted-foreground sm:gap-2 sm:py-4 sm:text-[0.7rem] ${className}`}
+     >
+       <span>OmniSuite · AI + human revenue infrastructure</span>
+       <span>
+@@ -59,7 +59,7 @@ export function SiteHeader({
+ }) {
+   return (
+     <header
+-      className={`flex min-h-14 shrink-0 items-center gap-4 ${centered ? "justify-center" : "justify-between"}`}
++      className={`flex min-h-12 shrink-0 items-center gap-2 sm:min-h-14 sm:gap-4 ${centered ? "justify-center" : "justify-between"}`}
+     >
+       {start ?? <Logo />}
+       {end}
+diff --git a/src/styles.css b/src/styles.css
+index 54ebc8a..2c5a503 100644
+--- a/src/styles.css
++++ b/src/styles.css
+@@ -259,6 +259,12 @@
+     mary-boot-in 0.9s cubic-bezier(0.22, 1, 0.36, 1) both,
+     mary-boot-breathe 2.4s ease-in-out 0.9s infinite;
+ }
++@media (max-width: 639px) {
++  .mary-boot-orb {
++    width: 106px;
++    height: 106px;
++  }
++}
+ .mary-boot-word,
+ .mary-boot-caption {
+   animation: mary-boot-rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.25s both;

@@ -4,8 +4,8 @@ import { MaryApp } from "@/features/mary/mary-app";
 import { BootScreen } from "@/features/mary/ui/boot-screen";
 
 // Shared links and QR codes need an absolute address for the preview card.
-// Update this when the custom domain goes live.
-const SITE_URL = "https://omnisuite.omnikom.ai";
+// This is the live custom domain (omnikom.ai does not resolve).
+const SITE_URL = "https://omnisuite.omnikom.io";
 
 const title = "Join the OmniSuite Waitlist — Talk to MARY by Omnikom";
 const description =

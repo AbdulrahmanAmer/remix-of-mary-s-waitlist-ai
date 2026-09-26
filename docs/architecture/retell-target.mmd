@@ -1,53 +1,78 @@
+%% MARY's Retell voice path as built (2026-09-26). DORMANT: every node marked "dormant" is a
+%% 404 or never loaded until VOICE_PROVIDER is not "mary" and RETELL_API_KEY + RETELL_AGENT_ID are
+%% set. diagram.retell.png is the render of the 2026-09-23 design and is stale; this file is current.
 flowchart LR
   visitor(("Visitor"))
 
-  subgraph browser["Browser (kept UI, new call adapter)"]
-    ui["mary-experience.tsx<br/>screen, orb, transcript, end screen"]
-    adapter["lib/retell-call.ts (NEW)<br/>wraps retell-client-js-sdk"]
-    typing["Typing fallback<br/>mary-stream.ts"]
+  subgraph browser["Browser (src/features/mary)"]
+    app["mary-app.tsx<br/>probes /api/voice at mount, picks the provider,<br/>tap handlers return early for Retell"]
+    provider["voice/voice-provider.ts<br/>fetchVoiceStatus + chooseVoiceProvider"]
+    loader["voice/retell-loader.ts (lazy chunk)<br/>the only value import of retell-client-js-sdk"]
+    adapter["voice/retell-call.ts<br/>RetellCall: proxy fetch, hooks -> store,<br/>orb from onAudio, poll, end"]
+    stage["ui/call-stage.tsx<br/>orb, pills, End call button"]
+    typing["Typing fallback<br/>lib/mary-stream.ts -> /api/turn (unchanged)"]
   end
 
   subgraph server["Our server - Cloudflare Worker on Lovable"]
-    guard["api-guard.ts<br/>403 cross-site / 413 / 429"]
-    webcall["POST /api/retell/web-call (NEW)<br/>mints the call with RETELL_API_KEY"]
-    savelead["POST /api/retell/functions/save-lead (NEW)<br/>verify x-retell-signature, ground fields"]
-    webhook["POST /api/retell/webhook (NEW)<br/>call_ended / call_analyzed"]
-    brainA["wss /api/retell/llm/{call_id}<br/>Option A: MARY's own brain<br/>mary-prompt + mary-grounding"]
-    turn["POST /api/turn<br/>typing only"]
-    lessons["mary-experience.server.ts<br/>debrief from Retell's transcript"]
-    sheets["sheets.server.ts"]
+    guard["lib/api-guard.ts<br/>403 cross-site / 413 / 429 per route"]
+    voice["GET /api/voice<br/>{provider, retell, transcriptKey}"]
+    webcall["POST /api/retell/web-call (dormant)<br/>mints the call with RETELL_API_KEY,<br/>passes the 5 fields through"]
+    status["POST /api/retell/call-status (dormant)<br/>GET /v2/get-call -> progress"]
+    inject["POST /api/retell/inject (dormant)<br/>typed text -> update-live-call additional_context"]
+    savelead["POST /api/retell/functions/save-lead (dormant)<br/>x-retell-signature, note_details + save_lead,<br/>groundCollected, metadata patch"]
+    webhook["POST /api/retell/webhook (dormant)<br/>call_ended / call_analyzed: row, debrief"]
+    handlers["lib/retell-handlers.server.ts<br/>+ retell-lead / retell-env / retell-signature"]
+    shared["lib/retell-shared.ts<br/>paths, schemas, opening lines"]
+    grounding["lib/mary-grounding.ts (kept)"]
+    lessons["lib/mary-experience.server.ts<br/>debrief from Retell's transcript"]
+    sheets["lib/sheets.server.ts"]
   end
 
   subgraph retell["Retell (managed voice agent)"]
-    session["Real-time voice session<br/>STT, turn-taking, barge-in,<br/>echo handling, TTS"]
-    agent["MARY agent<br/>Option B: Retell LLM + ported prompt"]
+    session["Real-time voice session<br/>STT, turn-taking, barge-in, echo, TTS<br/>WebRTC over WHIP to api.retellai.com"]
+    agent["MARY agent (retell/agent.json)<br/>Retell LLM gpt-5.6-terra + ported playbook<br/>(retell/llm.json, prompt-header.md)"]
   end
 
   sheet[("Google Sheet<br/>Waitlist / Experience / Activity")]
-  gateway{{"Lovable AI gateway"}}
+  gateway{{"Lovable AI gateway<br/>(debrief, typing)"}}
 
-  visitor -->|"taps start"| ui
-  ui --> adapter
-  adapter -->|"1. request call"| guard
+  visitor -->|"taps Start"| app
+  app -->|"at mount"| provider
+  provider -->|"GET, no-store"| voice
+  app -.->|"await import() only when Retell"| loader
+  loader --> adapter
+  adapter --> stage
+  adapter -->|"1. create-web-call via proxy fetch"| guard
   guard --> webcall
-  webcall -->|"2. create-web-call"| session
-  webcall -.->|"access_token"| adapter
-  adapter <-->|"3. WebRTC audio + transcript events"| session
+  webcall -->|"2. POST /v3/create-web-call"| session
+  webcall -.->|"call_id, access_token, transport,<br/>ice_servers, expires_at"| adapter
+  adapter <-->|"3. WebRTC audio (+ monitor socket with RETELL_PUBLIC_KEY)"| session
+  adapter -->|"typed text"| guard
+  guard --> inject
+  inject -->|"PATCH /v2/update-live-call"| session
+  adapter -->|"after the end, and slowly mid-call"| guard
+  guard --> status
+  status -->|"GET /v2/get-call"| session
   session --> agent
-  session <-.->|"4. Option A: response_required / response"| brainA
-  agent -->|"5. save_lead function"| savelead
-  savelead --> sheets
-  session -->|"7. webhooks"| webhook
-  webhook --> sheets
-  webhook --> lessons
+  agent -->|"4. note_details, save_lead (signed)"| savelead
+  savelead --> handlers
+  handlers --> grounding
+  handlers --> sheets
+  savelead -.->|"metadata patch"| session
+  session -->|"5. webhooks (signed)"| webhook
+  webhook --> handlers
+  handlers --> lessons
+  lessons --> gateway
   lessons --> sheets
   sheets --> sheet
-  ui --> typing --> turn --> gateway
-  brainA -.-> gateway
+  handlers --- shared
+  app --> typing --> gateway
 
   classDef newNode fill:#dcfce7,stroke:#16a34a,color:#14532d
+  classDef dormantNode fill:#f1f5f9,stroke:#64748b,stroke-dasharray:5 3,color:#0f172a
   classDef keptNode fill:#dbeafe,stroke:#2563eb,color:#172554
   classDef extNode fill:#fef3c7,stroke:#d97706,color:#78350f
-  class adapter,webcall,savelead,webhook,brainA newNode
-  class ui,typing,guard,turn,lessons,sheets keptNode
+  class provider,voice,shared,handlers newNode
+  class loader,adapter,webcall,status,inject,savelead,webhook dormantNode
+  class app,stage,typing,guard,grounding,lessons,sheets keptNode
   class session,agent,sheet,gateway extNode

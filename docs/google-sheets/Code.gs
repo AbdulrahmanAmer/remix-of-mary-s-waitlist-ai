@@ -17,6 +17,10 @@
  *   POST { action: "experience", lessons }    append field notes
  *   GET  ?action=ping                         health + counts
  *   GET  ?action=experience&limit=400         recent field notes
+ *
+ * Optional: a confirmation email to the visitor the first time their row lands
+ * on the waitlist. Off unless the script property CONFIRMATION_EMAIL is "on"
+ * (Project Settings → Script properties). See README.md, "Confirmation email".
  */
 
 // ---------------------------------------------------------------------------
@@ -36,9 +40,24 @@ var SPREADSHEET_ID = "";
 // Internals — no changes needed below
 // ---------------------------------------------------------------------------
 
-var VERSION = "2026-09-22";
+var VERSION = "2026-09-26";
 
 var TABS = { leads: "Waitlist", experience: "Experience", activity: "Activity" };
+
+/**
+ * Script properties that switch the confirmation email on and shape it.
+ * Set them under Project Settings → Script properties; none is required.
+ */
+var EMAIL_PROPS = {
+  enabled: "CONFIRMATION_EMAIL", // "on" to send; anything else (or unset) sends nothing
+  subject: "CONFIRMATION_SUBJECT", // optional; default below
+  replyTo: "CONFIRMATION_REPLY_TO", // optional; where a visitor's reply should go
+  fromName: "CONFIRMATION_FROM_NAME", // optional; the sender name shown in the inbox
+};
+var EMAIL_DEFAULT_SUBJECT = "You're on the OmniSuite early-access list";
+var EMAIL_DEFAULT_FROM_NAME = "MARY at Omnikom";
+/** Confirmations sent per row at most: the first address, plus one corrected address. */
+var EMAIL_MAX_PER_ROW = 2;
 
 var LEAD_COLUMNS = [
   "First seen",
@@ -69,6 +88,7 @@ var LEAD_COLUMNS = [
   "Referrer",
   "Device",
   "Transcript",
+  "Confirmation sent",
 ];
 
 var EXPERIENCE_COLUMNS = [
@@ -154,6 +174,7 @@ function ping() {
     leads: Math.max(0, leads.getLastRow() - 1),
     lessons: Math.max(0, experience.getLastRow() - 1),
     positionStart: POSITION_START,
+    confirmationEmail: confirmationEnabled(),
   };
 }
 
@@ -223,6 +244,12 @@ function upsertLead(body) {
     row[col["Position"] - 1] = position;
   }
 
+  // The row is written first: an email problem must never cost the lead.
+  var emailed = false;
+  if (String(row[col["Status"] - 1] || "") === STATUS.signed_up.label) {
+    emailed = sendConfirmation(row, col, position);
+  }
+
   if (existing) {
     sheet.getRange(rowNumber, 1, 1, row.length).setValues([row]);
   } else {
@@ -230,13 +257,108 @@ function upsertLead(body) {
     rowNumber = sheet.getLastRow();
   }
 
-  logActivity("lead", sessionId, (applyStatus ? STATUS[incomingOutcome].label : "update") + (position ? " · #" + position : ""));
+  logActivity(
+    "lead",
+    sessionId,
+    (applyStatus ? STATUS[incomingOutcome].label : "update") +
+      (position ? " · #" + position : "") +
+      (emailed ? " · emailed" : "")
+  );
   return {
     ok: true,
     row: rowNumber,
     status: String(row[col["Status"] - 1] || ""),
     position: typeof position === "number" && position > 0 ? position : null,
+    emailed: emailed,
   };
+}
+
+// ---------------------------------------------------------------------------
+// Confirmation email (optional)
+// ---------------------------------------------------------------------------
+
+function scriptProperty(name) {
+  try {
+    return String(PropertiesService.getScriptProperties().getProperty(name) || "").trim();
+  } catch (err) {
+    return "";
+  }
+}
+
+function confirmationEnabled() {
+  var value = scriptProperty(EMAIL_PROPS.enabled).toLowerCase();
+  return value === "on" || value === "true" || value === "yes" || value === "1";
+}
+
+function looksLikeEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(value || "").trim());
+}
+
+/**
+ * Sends the confirmation once per address, to at most two addresses per row
+ * (the one first heard, and one correction). The "Confirmation sent" cell keeps
+ * "address @ time" per send, so a replayed row never mails twice. Returns
+ * whether a mail went out on this call; never throws.
+ */
+function sendConfirmation(row, col, position) {
+  if (!confirmationEnabled()) return false;
+  var email = String(row[col["Email"] - 1] || "").trim();
+  if (!looksLikeEmail(email)) return false;
+  var sentCell = String(row[col["Confirmation sent"] - 1] || "");
+  var sent = sentCell ? sentCell.split("\n").filter(function (line) { return line.trim() !== ""; }) : [];
+  if (sent.length >= EMAIL_MAX_PER_ROW) return false;
+  for (var i = 0; i < sent.length; i++) {
+    if (sent[i].toLowerCase().indexOf(email.toLowerCase()) === 0) return false;
+  }
+  try {
+    var message = {
+      to: email,
+      subject: scriptProperty(EMAIL_PROPS.subject) || EMAIL_DEFAULT_SUBJECT,
+      body: confirmationBody(row, col, position),
+      name: scriptProperty(EMAIL_PROPS.fromName) || EMAIL_DEFAULT_FROM_NAME,
+    };
+    var replyTo = scriptProperty(EMAIL_PROPS.replyTo);
+    if (replyTo) message.replyTo = replyTo;
+    MailApp.sendEmail(message);
+    sent.push(email + " @ " + new Date().toISOString());
+    row[col["Confirmation sent"] - 1] = sent.join("\n");
+    return true;
+  } catch (err) {
+    logActivity("email-failed", row[col["Session"] - 1], String(err && err.message ? err.message : err));
+    return false;
+  }
+}
+
+/** Plain text, plain promises: only what the sheet actually holds. */
+function confirmationBody(row, col, position) {
+  var name = String(row[col["Name"] - 1] || "").trim();
+  var first = name.split(/\s+/)[0] || "";
+  var lines = [];
+  lines.push("Hi" + (first ? " " + first : "") + ",");
+  lines.push("");
+  lines.push(
+    "You're on the OmniSuite early-access list" +
+      (typeof position === "number" && position > 0 ? " — position #" + position + "." : ".")
+  );
+  lines.push("We'll write to this address the moment early access opens. Nothing to do until then.");
+  lines.push("");
+  lines.push("Here's what MARY noted:");
+  var fields = [
+    ["Name", name],
+    ["Email", String(row[col["Email"] - 1] || "")],
+    ["Phone", String(row[col["Phone"] - 1] || "")],
+    ["Business", String(row[col["Business"] - 1] || "")],
+    ["Industry", String(row[col["Industry"] - 1] || "")],
+  ];
+  for (var i = 0; i < fields.length; i++) {
+    if (String(fields[i][1]).trim()) lines.push("  " + fields[i][0] + ": " + String(fields[i][1]).trim());
+  }
+  lines.push("");
+  lines.push("If anything above is wrong, reply to this email and we'll fix it.");
+  lines.push("");
+  lines.push("— The Omnikom team");
+  lines.push("OmniSuite · AI + human revenue infrastructure · a product by Omnikom");
+  return lines.join("\n");
 }
 
 /** Field notes MARY wrote after a conversation. */
@@ -474,4 +596,34 @@ function selfTest() {
     ],
   });
   Logger.log(JSON.stringify({ first: first, second: second, ping: ping() }));
+}
+
+/**
+ * Sends the confirmation template to yourself, so you can read it and grant the
+ * script permission to send mail. Run this once before switching
+ * CONFIRMATION_EMAIL on (see README.md). It writes nothing to the sheet.
+ */
+function testConfirmationEmail() {
+  var me = Session.getEffectiveUser().getEmail();
+  var leads = ensureSheet(TABS.leads, LEAD_COLUMNS);
+  var col = columnIndex(leads, LEAD_COLUMNS);
+  var row = blankRow(leads.getLastColumn());
+  row[col["Session"] - 1] = "test_email";
+  row[col["Name"] - 1] = "Test Person";
+  row[col["Email"] - 1] = me;
+  row[col["Business"] - 1] = "Sample Realty";
+  row[col["Industry"] - 1] = "Real estate";
+  var message = {
+    to: me,
+    subject: scriptProperty(EMAIL_PROPS.subject) || EMAIL_DEFAULT_SUBJECT,
+    body: confirmationBody(row, col, POSITION_START),
+    name: scriptProperty(EMAIL_PROPS.fromName) || EMAIL_DEFAULT_FROM_NAME,
+  };
+  var replyTo = scriptProperty(EMAIL_PROPS.replyTo);
+  if (replyTo) message.replyTo = replyTo;
+  MailApp.sendEmail(message);
+  Logger.log(
+    "Sent to " + me + ". CONFIRMATION_EMAIL is " + (confirmationEnabled() ? "on" : "off") +
+      "; remaining daily quota: " + MailApp.getRemainingDailyQuota()
+  );
 }

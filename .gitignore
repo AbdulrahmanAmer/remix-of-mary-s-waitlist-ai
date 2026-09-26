@@ -31,6 +31,9 @@ dist-ssr
 *.sln
 *.sw?
 
+# Retell setup output (bun retell/setup.ts)
+retell/out/
+
 # Workspace tooling - derived, rebuild with: node .claude/tools/vector-index.mjs index
 .claude/index/
 .claude/settings.local.json

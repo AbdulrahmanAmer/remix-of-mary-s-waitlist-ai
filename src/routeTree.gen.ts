@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SoundcheckRouteImport } from './routes/soundcheck'
 import { Route as ApiAddresseeRouteImport } from './routes/api/addressee'
 import { Route as ApiLeadRouteImport } from './routes/api/lead'
@@ -17,10 +18,21 @@ import { Route as ApiReflectRouteImport } from './routes/api/reflect'
 import { Route as ApiSpeechRouteImport } from './routes/api/speech'
 import { Route as ApiTranscribeRouteImport } from './routes/api/transcribe'
 import { Route as ApiTurnRouteImport } from './routes/api/turn'
+import { Route as ApiVoiceRouteImport } from './routes/api/voice'
+import { Route as ApiRetellCallStatusRouteImport } from './routes/api/retell/call-status'
+import { Route as ApiRetellInjectRouteImport } from './routes/api/retell/inject'
+import { Route as ApiRetellWebCallRouteImport } from './routes/api/retell/web-call'
+import { Route as ApiRetellWebhookRouteImport } from './routes/api/retell/webhook'
+import { Route as ApiRetellFunctionsSaveLeadRouteImport } from './routes/api/retell/functions/save-lead'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SoundcheckRoute = SoundcheckRouteImport.update({
@@ -58,9 +70,41 @@ const ApiTurnRoute = ApiTurnRouteImport.update({
   path: '/api/turn',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiVoiceRoute = ApiVoiceRouteImport.update({
+  id: '/api/voice',
+  path: '/api/voice',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRetellCallStatusRoute = ApiRetellCallStatusRouteImport.update({
+  id: '/api/retell/call-status',
+  path: '/api/retell/call-status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRetellInjectRoute = ApiRetellInjectRouteImport.update({
+  id: '/api/retell/inject',
+  path: '/api/retell/inject',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRetellWebCallRoute = ApiRetellWebCallRouteImport.update({
+  id: '/api/retell/web-call',
+  path: '/api/retell/web-call',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRetellWebhookRoute = ApiRetellWebhookRouteImport.update({
+  id: '/api/retell/webhook',
+  path: '/api/retell/webhook',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiRetellFunctionsSaveLeadRoute =
+  ApiRetellFunctionsSaveLeadRouteImport.update({
+    id: '/api/retell/functions/save-lead',
+    path: '/api/retell/functions/save-lead',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/privacy': typeof PrivacyRoute
   '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
@@ -68,9 +112,16 @@ export interface FileRoutesByFullPath {
   '/api/speech': typeof ApiSpeechRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/turn': typeof ApiTurnRoute
+  '/api/voice': typeof ApiVoiceRoute
+  '/api/retell/call-status': typeof ApiRetellCallStatusRoute
+  '/api/retell/inject': typeof ApiRetellInjectRoute
+  '/api/retell/web-call': typeof ApiRetellWebCallRoute
+  '/api/retell/webhook': typeof ApiRetellWebhookRoute
+  '/api/retell/functions/save-lead': typeof ApiRetellFunctionsSaveLeadRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/privacy': typeof PrivacyRoute
   '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
@@ -78,10 +129,17 @@ export interface FileRoutesByTo {
   '/api/speech': typeof ApiSpeechRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/turn': typeof ApiTurnRoute
+  '/api/voice': typeof ApiVoiceRoute
+  '/api/retell/call-status': typeof ApiRetellCallStatusRoute
+  '/api/retell/inject': typeof ApiRetellInjectRoute
+  '/api/retell/web-call': typeof ApiRetellWebCallRoute
+  '/api/retell/webhook': typeof ApiRetellWebhookRoute
+  '/api/retell/functions/save-lead': typeof ApiRetellFunctionsSaveLeadRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/privacy': typeof PrivacyRoute
   '/soundcheck': typeof SoundcheckRoute
   '/api/addressee': typeof ApiAddresseeRoute
   '/api/lead': typeof ApiLeadRoute
@@ -89,11 +147,18 @@ export interface FileRoutesById {
   '/api/speech': typeof ApiSpeechRoute
   '/api/transcribe': typeof ApiTranscribeRoute
   '/api/turn': typeof ApiTurnRoute
+  '/api/voice': typeof ApiVoiceRoute
+  '/api/retell/call-status': typeof ApiRetellCallStatusRoute
+  '/api/retell/inject': typeof ApiRetellInjectRoute
+  '/api/retell/web-call': typeof ApiRetellWebCallRoute
+  '/api/retell/webhook': typeof ApiRetellWebhookRoute
+  '/api/retell/functions/save-lead': typeof ApiRetellFunctionsSaveLeadRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/privacy'
     | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
@@ -101,9 +166,16 @@ export interface FileRouteTypes {
     | '/api/speech'
     | '/api/transcribe'
     | '/api/turn'
+    | '/api/voice'
+    | '/api/retell/call-status'
+    | '/api/retell/inject'
+    | '/api/retell/web-call'
+    | '/api/retell/webhook'
+    | '/api/retell/functions/save-lead'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/privacy'
     | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
@@ -111,9 +183,16 @@ export interface FileRouteTypes {
     | '/api/speech'
     | '/api/transcribe'
     | '/api/turn'
+    | '/api/voice'
+    | '/api/retell/call-status'
+    | '/api/retell/inject'
+    | '/api/retell/web-call'
+    | '/api/retell/webhook'
+    | '/api/retell/functions/save-lead'
   id:
     | '__root__'
     | '/'
+    | '/privacy'
     | '/soundcheck'
     | '/api/addressee'
     | '/api/lead'
@@ -121,10 +200,17 @@ export interface FileRouteTypes {
     | '/api/speech'
     | '/api/transcribe'
     | '/api/turn'
+    | '/api/voice'
+    | '/api/retell/call-status'
+    | '/api/retell/inject'
+    | '/api/retell/web-call'
+    | '/api/retell/webhook'
+    | '/api/retell/functions/save-lead'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  PrivacyRoute: typeof PrivacyRoute
   SoundcheckRoute: typeof SoundcheckRoute
   ApiAddresseeRoute: typeof ApiAddresseeRoute
   ApiLeadRoute: typeof ApiLeadRoute
@@ -132,6 +218,12 @@ export interface RootRouteChildren {
   ApiSpeechRoute: typeof ApiSpeechRoute
   ApiTranscribeRoute: typeof ApiTranscribeRoute
   ApiTurnRoute: typeof ApiTurnRoute
+  ApiVoiceRoute: typeof ApiVoiceRoute
+  ApiRetellCallStatusRoute: typeof ApiRetellCallStatusRoute
+  ApiRetellInjectRoute: typeof ApiRetellInjectRoute
+  ApiRetellWebCallRoute: typeof ApiRetellWebCallRoute
+  ApiRetellWebhookRoute: typeof ApiRetellWebhookRoute
+  ApiRetellFunctionsSaveLeadRoute: typeof ApiRetellFunctionsSaveLeadRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -141,6 +233,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/soundcheck': {
@@ -192,11 +291,54 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiTurnRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/voice': {
+      id: '/api/voice'
+      path: '/api/voice'
+      fullPath: '/api/voice'
+      preLoaderRoute: typeof ApiVoiceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/retell/call-status': {
+      id: '/api/retell/call-status'
+      path: '/api/retell/call-status'
+      fullPath: '/api/retell/call-status'
+      preLoaderRoute: typeof ApiRetellCallStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/retell/inject': {
+      id: '/api/retell/inject'
+      path: '/api/retell/inject'
+      fullPath: '/api/retell/inject'
+      preLoaderRoute: typeof ApiRetellInjectRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/retell/web-call': {
+      id: '/api/retell/web-call'
+      path: '/api/retell/web-call'
+      fullPath: '/api/retell/web-call'
+      preLoaderRoute: typeof ApiRetellWebCallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/retell/webhook': {
+      id: '/api/retell/webhook'
+      path: '/api/retell/webhook'
+      fullPath: '/api/retell/webhook'
+      preLoaderRoute: typeof ApiRetellWebhookRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/retell/functions/save-lead': {
+      id: '/api/retell/functions/save-lead'
+      path: '/api/retell/functions/save-lead'
+      fullPath: '/api/retell/functions/save-lead'
+      preLoaderRoute: typeof ApiRetellFunctionsSaveLeadRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  PrivacyRoute: PrivacyRoute,
   SoundcheckRoute: SoundcheckRoute,
   ApiAddresseeRoute: ApiAddresseeRoute,
   ApiLeadRoute: ApiLeadRoute,
@@ -204,6 +346,12 @@ const rootRouteChildren: RootRouteChildren = {
   ApiSpeechRoute: ApiSpeechRoute,
   ApiTranscribeRoute: ApiTranscribeRoute,
   ApiTurnRoute: ApiTurnRoute,
+  ApiVoiceRoute: ApiVoiceRoute,
+  ApiRetellCallStatusRoute: ApiRetellCallStatusRoute,
+  ApiRetellInjectRoute: ApiRetellInjectRoute,
+  ApiRetellWebCallRoute: ApiRetellWebCallRoute,
+  ApiRetellWebhookRoute: ApiRetellWebhookRoute,
+  ApiRetellFunctionsSaveLeadRoute: ApiRetellFunctionsSaveLeadRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -3,6 +3,7 @@ import { useReducedMotion } from "motion/react";
 
 import type { PresenceState } from "../conversation/types";
 import { voiceLevel } from "../signal/signal";
+import { nextFrameDelay, orbInterval, orbShouldRest } from "./orb-pace";
 import { orbGpu } from "./orb-renderer";
 
 const STATE_LABEL: Record<PresenceState, string> = {
@@ -67,22 +68,28 @@ function drawFallback(
 /**
  * MARY's presence. The page's single GPU canvas is moved into this box (the newest
  * orb on screen takes it), her voice level is read from the signal store inside
- * the frame loop, and drawing pauses when nobody can see it.
+ * the frame loop, and drawing pauses when nobody can see it. The loop runs at
+ * full rate only while a voice moves the orb, and stops on the end screen once
+ * the bloom has settled.
  */
 export const MaryOrb = memo(function MaryOrb({
   state,
   size,
   className = "",
+  decorative = false,
 }: {
   state: PresenceState;
   size: number;
   className?: string;
+  /** On the landing the orb is scenery: screen readers skip it. */
+  decorative?: boolean;
 }) {
   const reduced = useReducedMotion();
   const boxRef = useRef<HTMLDivElement | null>(null);
   const fallbackRef = useRef<HTMLCanvasElement | null>(null);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const startRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     const box = boxRef.current;
@@ -92,13 +99,15 @@ export const MaryOrb = memo(function MaryOrb({
     const gpu = orbGpu();
     const token = gpu?.claim() ?? 0;
     if (gpu) box.appendChild(gpu.canvas);
+    const software = gpu?.software ?? false;
 
     let w = 1;
     let h = 1;
     const fit = () => {
       const rect = box.getBoundingClientRect();
       // The orb is soft: 1.5x looks the same as 2x and draws ~44% fewer pixels.
-      const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+      // Software GL shades every pixel on the CPU, so it gets 1x.
+      const dpr = Math.min(software ? 1 : 1.5, window.devicePixelRatio || 1);
       w = Math.max(1, Math.round(rect.width * dpr));
       h = Math.max(1, Math.round(rect.height * dpr));
       fallback.width = w;
@@ -109,11 +118,13 @@ export const MaryOrb = memo(function MaryOrb({
     resizeObserver?.observe(box);
 
     let raf = 0;
+    let timer = 0;
     let last = performance.now();
     let t = Math.random() * 20;
     let lv = 0;
     let bloom = 0;
     let lastState: PresenceState = stateRef.current;
+    let inState = 0;
     const cur = { ...TUNING[stateRef.current] };
     let visible = true;
     let usingGpu = false;
@@ -132,6 +143,7 @@ export const MaryOrb = memo(function MaryOrb({
     };
 
     const frame = (now: number) => {
+      raf = 0;
       const dt = Math.min(0.05, (now - last) / 1000);
       last = now;
       const current = stateRef.current;
@@ -145,21 +157,31 @@ export const MaryOrb = memo(function MaryOrb({
       const reading = Math.min(1, Math.max(0, voiceLevel.get())) * cur.gain;
       lv += (reading - lv) * Math.min(1, dt * (reading > lv ? 14 : 5));
       if (current === "done" && lastState !== "done") bloom = 1;
+      inState = current === lastState ? inState + dt : 0;
       lastState = current;
       bloom = Math.max(0, bloom - dt * 0.8);
       paint();
       // A newer orb has taken the GPU canvas: this one has nothing left to draw.
-      if (gpu && !gpu.owns(token)) {
-        raf = 0;
-        return;
+      if (gpu && !gpu.owns(token)) return;
+      if (!visible || document.hidden) return;
+      // Nothing will change on screen: rest until the state does.
+      if (orbShouldRest(current, inState, bloom)) return;
+      const wait = nextFrameDelay(orbInterval(current, software), performance.now() - now);
+      if (wait > 4) {
+        timer = window.setTimeout(() => {
+          timer = 0;
+          raf = requestAnimationFrame(frame);
+        }, wait);
+      } else {
+        raf = requestAnimationFrame(frame);
       }
-      raf = visible && !document.hidden ? requestAnimationFrame(frame) : 0;
     };
     const start = () => {
-      if (raf || (gpu && !gpu.owns(token))) return;
+      if (raf || timer || (gpu && !gpu.owns(token))) return;
       last = performance.now();
       raf = requestAnimationFrame(frame);
     };
+    startRef.current = start;
 
     if (reduced) {
       // A still frame; repainted briefly while the shader finishes compiling.
@@ -192,19 +214,27 @@ export const MaryOrb = memo(function MaryOrb({
 
     return () => {
       cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+      startRef.current = () => {};
       resizeObserver?.disconnect();
       intersection?.disconnect();
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [reduced]);
 
+  // A resting orb wakes when its state changes (the loop reads the state itself otherwise).
+  useEffect(() => {
+    startRef.current();
+  }, [state]);
+
   return (
     <div
       ref={boxRef}
       className={`pointer-events-none relative shrink-0 ${className}`}
       style={{ width: size, height: size }}
-      role="img"
-      aria-label={`MARY is ${STATE_LABEL[state]}`}
+      role={decorative ? undefined : "img"}
+      aria-hidden={decorative || undefined}
+      aria-label={decorative ? undefined : `MARY is ${STATE_LABEL[state]}`}
     >
       <canvas ref={fallbackRef} className="absolute inset-0 h-full w-full" />
     </div>

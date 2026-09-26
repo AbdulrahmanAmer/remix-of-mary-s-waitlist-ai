@@ -12,6 +12,9 @@ import {
 import { experienceForTurn } from "@/lib/mary-experience.server";
 import { TurnInput } from "@/lib/mary.functions";
 
+/** The whole generation, reasoning included, must finish within this. */
+const TURN_DEADLINE_MS = 30000;
+
 /**
  * Streams MARY's turn as it is written, so her first beat can start playing
  * while the rest of the turn is still being generated.
@@ -39,6 +42,11 @@ export const Route = createFileRoute("/api/turn")({
         // short budget so a slow sheet can never delay her reply.
         const experience = await experienceForTurn(data.experience, data.collected["industry"]);
 
+        // A model that goes quiet must not hold the conversation hostage, and a
+        // browser that gave up on this turn (a newer message, a hold) must not
+        // keep paying for it: both end the generation.
+        const abort = new AbortController();
+        const deadline = setTimeout(() => abort.abort(), TURN_DEADLINE_MS);
         const lovable = createOpenAI(gatewayConfig(key));
         const result = streamText({
           model: lovable.responses("openai/gpt-6-astra"),
@@ -48,12 +56,15 @@ export const Route = createFileRoute("/api/turn")({
           providerOptions: {
             openai: { forceReasoning: true, reasoningEffort: "low", store: false },
           },
-          // A model that goes quiet must not hold the conversation hostage.
-          abortSignal: AbortSignal.timeout(30000),
+          abortSignal: abort.signal,
         });
 
         const encoder = new TextEncoder();
         const stream = new ReadableStream<Uint8Array>({
+          cancel() {
+            clearTimeout(deadline);
+            abort.abort();
+          },
           async start(controller) {
             const send = (payload: unknown) =>
               controller.enqueue(encoder.encode(`${JSON.stringify(payload)}\n`));
@@ -83,7 +94,12 @@ export const Route = createFileRoute("/api/turn")({
               console.error("turn stream failed", error);
               send({ type: "error" });
             } finally {
-              controller.close();
+              clearTimeout(deadline);
+              try {
+                controller.close();
+              } catch {
+                // already cancelled by the client
+              }
             }
           },
         });

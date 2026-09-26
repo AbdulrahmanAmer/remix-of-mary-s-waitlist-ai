@@ -109,3 +109,64 @@ FOLLOW-UP (independent diagnosis + 3 skeptics from the research workflow)
 UNPROVEN / NEXT
 - A real iPhone. Operator: merge, Publish -> Update in Lovable, then on the iPhone open /soundcheck (ring switch silent and ring) and a real call.
 - Fix the AI gateway failure first, or no device will hear her.
+
+## 2026-09-23 - Apple readiness audit of merged main (44318ba) -> follow-up PR
+- Audit workflow (3 area auditors, 2 refuters per finding, completeness critic). Verdict: approach correct (ElevenLabs route); not provable without a device. Confidence: iPhone Safari with mic medium, no-mic path low, Mac Safari medium, desktop Chrome high (all assuming the voice backend works and main is published).
+- Fixed on the branch (restarted from main): screen wake lock for the call (requested in the tap, re-acquired on return, released at the end); recorder closed whenever the call screen goes away (a Hold press after "Type instead" left the mic on); element restarted once the mic is live so WebKit can join it to the voice-processing unit, as ElevenLabs builds its element after getUserMedia; /soundcheck test 6 reports a failed speech request; diagnostics no longer call the element route "echo cancellation degraded".
+- Verified in Chromium (iPhone, desktop, Mac-Safari profiles): elementRestarted trace, audio still reaches the element (0.40), wake lock requested inside the tap (denied in headless, handled), desktop unchanged; gates 0/0/67/0.
+- Still open (not code): voice backend 502 since ~08:00 UTC; publish main; real-device test (/soundcheck silent + ring, one call, one Type-instead call, Mac Safari call).
+
+## 2026-09-26 - iPhone confirmed; Retell voice path built dormant (branches retell/*, PR pending)
+
+FOUND
+- Operator confirmed on a real iPhone 13 that MARY is audible after PR #1 (the ElevenLabs-style `<audio>` element route, 44318ba + 210a1ea). First real-device proof of the Apple route; Mac Safari, the no-mic path and AirPods are still unproven.
+- Operator asked to finalize the Retell structure so the waitlist backend can switch to a Retell agent as soon as one exists. Decision: build it now, dormant behind `VOICE_PROVIDER` + keys (amends S4's "built later" for the code; going live still waits on the operator's Retell account).
+
+DONE (plan: scratchpad `retell/plan.md`, judged from two designs against the real SDK sources; three work packages in parallel worktrees, merged by an integration step)
+- WP0 contract `src/lib/retell-shared.ts` (c9aa879). WP1 server: env rule, HMAC signature (mirrors `retell-sdk` 6.0.1 `webhook_auth.ts`, golden vectors), call-to-lead mapping through the existing `groundCollected`, six handlers with injected deps, routes, guard budgets, fixtures. WP2 client: `/api/voice` probe at mount, lazy `retell-loader.ts` (the only value import of `retell-client-js-sdk` 3.0.1), `RetellCall` adapter with the proxy fetch, orb from `onAudio`, End call, typed-text inject, post-end poll, fallback to typing.
+- WP3 (this branch): `retell/` agent as code (`llm.json`, `agent.json`, `prompt-header.md`, `config.ts`, `setup.ts` with dry run / `--apply` / `--publish`, `sign.ts`), every Retell field name checked against `retell-sdk` 6.0.1 `resources/{llm,agent}.ts`; `tests/unit/retell-config.test.ts` (15 tests: playbook edits occur exactly once, prompt contents, tools and agent match the shared contract); docs rewritten to the built reality (`retell-migration.md` BUILT/DORMANT, `retell-target.mmd`, corrected diagram subgraph, README env rows, CLAUDE.md facts, roadmap V2 status, sheets README).
+- Dry run works: `bun retell/setup.ts --site https://example.com --voice test_voice` writes gitignored `retell/out/` and prints about 8k prompt tokens (about 2x Retell billing).
+
+UNPROVEN
+- No real Retell call, webhook, phone or Lovable deploy has run; unit tests use docs-shaped fixtures and fakes (`retell-migration.md` section 9 lists everything unverified).
+- Captions (`RETELL_PUBLIC_KEY`) unresolved; Option A (own brain over WebSocket) not built.
+- Whether `gpt-5.6-terra` follows the ported prompt's grounding discipline; five scripted calls must reach CLOSE with only grounded fields before `VOICE_PROVIDER=retell`.
+
+NEXT
+- Integration: merge WP1 + WP2 + WP3, all four gates, bundle check (`livekit` in exactly one lazy chunk, entry chunks grow < 5 KB), render gate with and without the Retell env, Worker smoke test with `.dev.vars`; open the PR (never push to `main`).
+- Operator: answer the six questions in `retell-migration.md` section 10 (cost, transcript storage, voice id, loud-room default, captions, call limits), create the Retell account, then follow `retell/README.md` go-live.
+
+## 2026-09-26 - CHECKPOINT (usage limit) - PR #2 branch claude/iphone-audio-playback-compat-lmufp8
+
+DONE (all pushed, CI green on 783f37c; gates: typecheck 0, lint 0, 394 tests, build 0)
+- Retell built dormant (c9aa879, 43c6b97, 84ee54b, 5f531ad) + condensed playbook as default prompt (bfb87c7).
+- Live phone layout from Lovable brought into git (b488afc); report + patch: `docs/audit/live-drift-2026-09-26.{md,patch}`.
+- V1 fixes merged: conversation 35e5126, call reliability f511644, leads b991dc7, screen 344e40f.
+- Review fixes: 406d586 (hold left MARY silent; fast-lane ending; Retell prompts), 783f37c (Try again/corrections/outbox went to the Retell lifecycle).
+
+IN FLIGHT when the limit hit
+- Experience audit workflow (run `wf_b7f8d06b-fd9`): lenses + merge + 12 of the verifications done; Plan and critic not run. Everything it produced is saved in `docs/audit/experience-2026-09-26/` (README has the resume command; in a new session run the Plan step by hand from `merged-findings.json` + `verdicts.json`).
+- Nothing else is running. Fix worktrees under the session scratchpad (`wt/`) are merged and disposable.
+
+NEXT
+- Map each UX-id to the fix commit, then write the operator plan (the audit's Plan step), leanly.
+- Consolidate the two opener lists (`OPENING_LINES` in retell-shared used by the MARY client, `OPENERS`/`welcomeTurn` in mary.functions).
+- Operator: check Lovable (domain owner, GitHub sync) before Publish; connect the Google Sheet (`SHEETS_WEBAPP_URL`); say "merge" to merge PR #2.
+- MARY cannot be exercised locally (no LOVABLE_API_KEY): verify by code reading and unit tests only.
+
+## 2026-09-26 - V1 fixes merged onto PR #2 (branch claude/iphone-audio-playback-compat-lmufp8)
+
+DONE
+- `bfb87c7` Retell: `retell/playbook-condensed.md` (about 3,200 tokens, about 1x billing) is the default prompt (`--playbook full` keeps the ported playbook); save_lead final needs only name + email; openers say what they get and how long; silence reminders 8 s x 2.
+- `b488afc` The live site's phone-layout edit (made in Lovable, never pushed to GitHub) reconstructed from the live bundle and committed; it rebuilds the live assets byte for byte on 44318ba. Report: scratchpad `drift/`.
+- `35e5126` Conversation: fast lane (name + email = spot), email at the reveal with a read-back, stricter grounding, honest promises; a seventh `PLAYBOOK_EDIT` for the Retell full prompt.
+- `f511644` Call reliability: never hangs, loops or goes silent; typed-form fallback; silence and mic-error effects skip Retell calls.
+- Gates: typecheck 0, lint 0, 345 tests.
+
+NOT DONE / UNPROVEN
+- `v1/fx-lead-truth` and `v1/fx-screen-polish` were still in progress (worktrees under the session scratchpad `wt/`); screen polish touches the same files as the phone-layout commit.
+- Two openers now exist: `OPENING_LINES` (retell-shared, used by the MARY client) and `OPENERS`/`welcomeTurn` (mary.functions); consolidate.
+- Operator: check in Lovable that `omnisuite.omnikom.io` belongs to this project and that GitHub sync is healthy BEFORE pressing Publish/Update.
+
+NEXT
+- Merge the last two fix branches, run all gates, push, update the PR #2 body.

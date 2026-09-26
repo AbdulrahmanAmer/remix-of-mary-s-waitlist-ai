@@ -1,0 +1,107 @@
+{
+  "name": "note_details",
+  "args": {
+    "name": "Leo Marsh",
+    "name_evidence": "I'm Leo, Leo Marsh",
+    "business": "Marsh Plumbing",
+    "business_evidence": "we're Marsh Plumbing",
+    "industry": "plumbing",
+    "industry_evidence": "we do plumbing, mostly emergency call-outs",
+    "operations": "calls come in, whoever's free grabs them",
+    "operations_evidence": "whoever's free grabs them"
+  },
+  "call": {
+    "call_type": "web_call",
+    "call_id": "call_fixture_live_0001",
+    "agent_id": "agent_mary_test",
+    "agent_version": 3,
+    "agent_name": "MARY waitlist",
+    "call_status": "ongoing",
+    "start_timestamp": 1789999850000,
+    "access_token": "eyJhbGciOiJIUzI1NiJ9.fixture_access_token_live",
+    "metadata": {
+      "v": 1,
+      "app": "mary-waitlist",
+      "sessionId": "w_lx3k2_ab12cd",
+      "known": {},
+      "context": {
+        "page": "https://mary.example.com/",
+        "referrer": "https://www.google.com/",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15",
+        "language": "en-US",
+        "timezone": "Europe/Berlin"
+      },
+      "startedAt": "2026-09-21T14:10:49.412Z"
+    },
+    "transcript_object": [
+      {
+        "role": "agent",
+        "content": "Hey — good to meet you. I'm MARY, the AI Revenue Concierge from Omnikom. OmniSuite is the revenue engine I run on — so what should I call you?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "I'm Leo, Leo Marsh.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Good to meet you, Leo. What's the business?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "We're Marsh Plumbing — we do plumbing, mostly emergency call-outs.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Emergency work lives or dies on speed. When a call comes in today, what happens to it?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Calls come in and whoever's free grabs them, honestly.",
+        "words": []
+      }
+    ],
+    "transcript_with_tool_calls": [
+      {
+        "role": "agent",
+        "content": "Hey — good to meet you. I'm MARY, the AI Revenue Concierge from Omnikom. OmniSuite is the revenue engine I run on — so what should I call you?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "I'm Leo, Leo Marsh.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Good to meet you, Leo. What's the business?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "We're Marsh Plumbing — we do plumbing, mostly emergency call-outs.",
+        "words": []
+      },
+      {
+        "role": "agent",
+        "content": "Emergency work lives or dies on speed. When a call comes in today, what happens to it?",
+        "words": []
+      },
+      {
+        "role": "user",
+        "content": "Calls come in and whoever's free grabs them, honestly.",
+        "words": []
+      },
+      {
+        "role": "tool_call_invocation",
+        "tool_call_id": "tc_note_1",
+        "name": "note_details",
+        "arguments": "{\"name\":\"Leo Marsh\",\"name_evidence\":\"I'm Leo, Leo Marsh\",\"business\":\"Marsh Plumbing\",\"business_evidence\":\"we're Marsh Plumbing\",\"industry\":\"plumbing\",\"industry_evidence\":\"we do plumbing, mostly emergency call-outs\",\"operations\":\"calls come in, whoever's free grabs them\",\"operations_evidence\":\"whoever's free grabs them\"}"
+      }
+    ]
+  }
+}

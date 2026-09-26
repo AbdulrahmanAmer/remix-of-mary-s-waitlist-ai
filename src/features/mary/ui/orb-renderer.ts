@@ -6,6 +6,8 @@
  * compile froze the page for over a second per orb.
  */
 
+import { isSoftwareRenderer } from "./orb-pace";
+
 const VERTEX = "attribute vec2 a; varying vec2 uv; void main(){ uv=a; gl_Position=vec4(a,0.,1.); }";
 
 // The approved "H" orb: a round form with lime and cobalt light moving through white
@@ -56,6 +58,8 @@ export type OrbGpu = {
   /** Newest orb wins: returns a token; only the holder of the latest token draws. */
   claim: () => number;
   owns: (token: number) => boolean;
+  /** WebGL is being emulated on the CPU (SwiftShader, llvmpipe): draw less, and smaller. */
+  software: boolean;
 };
 
 let shared: OrbGpu | null | undefined;
@@ -67,8 +71,16 @@ export function orbGpu(): OrbGpu | null {
   const canvas = document.createElement("canvas");
   canvas.style.cssText = "position:absolute;inset:0;width:100%;height:100%";
   canvas.setAttribute("aria-hidden", "true");
-  const gl = canvas.getContext("webgl", { premultipliedAlpha: true, alpha: true, antialias: true });
+  // The shader smooths its own edge, so multisampling would only cost fill rate;
+  // low-power keeps a dual-GPU laptop on its integrated chip for one soft ball.
+  const gl = canvas.getContext("webgl", {
+    premultipliedAlpha: true,
+    alpha: true,
+    antialias: false,
+    powerPreference: "low-power",
+  });
   if (!gl) return null;
+  const software = isSoftwareRenderer(rendererName(gl));
   const parallel = gl.getExtension("KHR_parallel_shader_compile") as {
     COMPLETION_STATUS_KHR: number;
   } | null;
@@ -143,8 +155,22 @@ export function orbGpu(): OrbGpu | null {
     },
     claim: () => ++token,
     owns: (held) => held === token,
+    software,
   };
   return shared;
+}
+
+/** The GPU (or CPU emulation) behind the context, where the browser will say. */
+function rendererName(gl: WebGLRenderingContext): string {
+  try {
+    const info = gl.getExtension("WEBGL_debug_renderer_info") as {
+      UNMASKED_RENDERER_WEBGL: number;
+    } | null;
+    const unmasked = info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : null;
+    return String(unmasked ?? gl.getParameter(gl.RENDERER) ?? "");
+  } catch {
+    return "";
+  }
 }
 
 /** Start compiling as early as possible, before the first orb is on screen. */
