@@ -46,9 +46,13 @@ describe("endingFor", () => {
     ).toBe("callback");
     expect(endingFor(turn({ callbackRequested: true, collected: { name: "Sarah" } }))).toBeNull();
   });
-  it("needs every field except phone for a sign-up", () => {
+  it("signs up on name and email alone, as the server's fast lane does", () => {
     expect(endingFor(turn({ complete: true, collected: full }))).toBe("signed_up");
+    expect(
+      endingFor(turn({ complete: true, collected: { name: "Dana", email: "dana@acme.co" } })),
+    ).toBe("signed_up");
     expect(endingFor(turn({ complete: true, collected: { ...full, email: "" } }))).toBeNull();
+    expect(endingFor(turn({ complete: false, collected: full }))).toBeNull();
   });
   it("ends on a decline, and otherwise carries on", () => {
     expect(endingFor(turn({ declined: true }))).toBe("declined");

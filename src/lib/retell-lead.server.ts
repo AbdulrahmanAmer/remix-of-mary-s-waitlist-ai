@@ -269,13 +269,9 @@ export function groundSaveLead(
       ...(reachable ? [] : ["phone" as const]),
     ];
     outcome = missing.length === 0 ? "callback" : "in_progress";
-  } else if (
-    stage === "final" &&
-    missing.length === 0 &&
-    rejected.every((field) => field === "phone")
-  ) {
-    // An ungrounded detail holds the save once, so the agent asks plainly or drops it. The phone
-    // is optional: a rejected one is simply left out.
+  } else if (stage === "final" && missing.length === 0) {
+    // Name and email are grounded: the spot stands. A detail they never said is left out of the
+    // row and listed in `rejected`, so the agent can still ask for it plainly.
     outcome = "signed_up";
   }
   return { collected, rejected, missing, outcome };
@@ -484,14 +480,18 @@ export function functionMessage(
     }
     return message;
   }
+  // Left out of the row because they never said it; the agent must not repeat it.
+  const left = d.rejected.length
+    ? ` Left out because they have not said it in their own words: ${d.rejected.join(", ")}. Do not repeat those values.`
+    : "";
   if (!sync.saved) {
-    return "Noted, but the list could not be updated right now. Do not give a position number and do not say it is saved. Thank them by first name, then close as usual.";
+    return `Noted, but the list could not be updated right now. Do not give a position number and do not say it is saved. Thank them by first name, then close as usual.${left}`;
   }
   if (d.outcome === "callback") {
-    return "Callback request saved. Confirm plainly, using their name, that the team will reach them on that number — no day or time. Then a short goodbye and end_call.";
+    return `Callback request saved. Confirm plainly, using their name, that the team will reach them on that number — no day or time. Then a short goodbye and end_call.${left}`;
   }
   if (sync.position !== null) {
-    return `Saved. They are number ${sync.position} on the early-access list. Give a short send-off with their first name and the number, then say the close line and call end_call.`;
+    return `Saved. They are number ${sync.position} on the early-access list. Give a short send-off with their first name and the number, then say the close line and call end_call.${left}`;
   }
-  return "Saved. There is no position number yet — do not give one. Short send-off, the close line, then end_call.";
+  return `Saved. There is no position number yet — do not give one. Short send-off, the close line, then end_call.${left}`;
 }

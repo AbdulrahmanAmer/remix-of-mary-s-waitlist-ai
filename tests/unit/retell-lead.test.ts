@@ -172,7 +172,7 @@ describe("groundSaveLead", () => {
     );
     expect(d.rejected).toEqual(["industry"]);
     expect(d.missing).toEqual([]);
-    expect(d.outcome).toBe("in_progress");
+    expect(d.outcome).toBe("signed_up"); // name and email hold the spot; the industry is left out
     expect(d.collected.industry).toBeUndefined();
   });
 

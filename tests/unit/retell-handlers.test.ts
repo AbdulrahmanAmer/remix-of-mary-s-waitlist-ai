@@ -575,21 +575,21 @@ describe("POST /api/retell/functions/save-lead", () => {
     expect(d.fetch).not.toHaveBeenCalled();
   });
 
-  it("lists what is not in their own words, and writes nothing", async () => {
+  it("saves the spot but leaves out what is not in their own words, and says so", async () => {
     const d = deps();
     const body = await result(await run(d, fixture("function.save-lead.ungrounded.json")));
     expect(body).toMatchObject({
       recorded: false,
-      saved: false,
-      outcome: "in_progress",
+      saved: true,
+      outcome: "signed_up",
       rejected: ["industry"],
       missing: [],
     });
     expect(body.collected.industry).toBeUndefined();
     expect(body.message).toContain(
-      "Not recorded because they have not said it in their own words: industry.",
+      "Left out because they have not said it in their own words: industry.",
     );
-    expect(d.sheetPost).not.toHaveBeenCalled();
+    expect(JSON.stringify(d.sheetPost.mock.calls)).not.toContain("roofing");
   });
 
   it("sends the same row for the same request twice", async () => {

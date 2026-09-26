@@ -22,7 +22,7 @@ import {
   type LeadPayload,
   type LeadSyncResult,
 } from "@/lib/lead-sync";
-import { WAITLIST_FIELDS, type Collected } from "@/lib/mary.functions";
+import { spotSecured, WAITLIST_FIELDS, type Collected } from "@/lib/mary.functions";
 import { maryTurnBounded, streamMaryTurn } from "@/lib/mary-stream";
 import { OPENING_LINES, welcomeBackLine } from "@/lib/retell-shared";
 import {
@@ -248,22 +248,28 @@ function createController(): Controller {
       if (reason === "short")
         store.dispatch({ type: "SET_NOTICE", key: "missedHold", value: true });
     },
+    // A real hold ends here, whatever came of it: the cut-in flag set on the press
+    // must not pause her next line.
     onText: (text) => {
+      voice.clearCutIn();
       store.dispatch({ type: "SET_NOTICE", key: "suggestTyping", value: false });
       // Words came through: whatever the microphone notice said is over.
       if (store.get().mic.error) store.dispatch({ type: "SET_MIC", mic: { error: null } });
       void runner.send(text, "voice");
     },
     onMissed: (inARow) => {
+      voice.clearCutIn();
       waiting();
       store.dispatch({ type: "SET_NOTICE", key: "missedHold", value: true });
       if (inARow >= 2) store.dispatch({ type: "SET_NOTICE", key: "suggestTyping", value: true });
     },
     onTranscribeFailed: () => {
+      voice.clearCutIn();
       waiting();
       voice.aside(TRANSCRIBE_FAILED_LINE);
     },
     onError: (error) => {
+      voice.clearCutIn();
       waiting();
       store.dispatch({ type: "SET_MIC", mic: { live: false, error: micMessage(error) } });
     },
@@ -508,6 +514,11 @@ function useCallEffects(
       )
         return;
       if (Date.now() - lastFromThem >= SILENCE_END_MS) {
+        // Name and email in hand: the spot stands, as it would on the server.
+        if (spotSecured(state.collected)) {
+          void c.lead.finalize(state.collected, "signed_up");
+          return;
+        }
         c.lead.flush();
         c.store.dispatch({ type: "FINISH", outcome: "declined" });
         return;
@@ -525,9 +536,10 @@ function useCallEffects(
     };
   }, [c, stage, micLive, micMuted, talkMode, via]);
 
-  // Tab closed or backgrounded mid-call: whatever was said still reaches the sheet.
+  // Tab closed or backgrounded mid-call (or on the no-AI form): whatever was said still
+  // reaches the sheet.
   useEffect(() => {
-    if (stage !== "call") return;
+    if (stage !== "call" && stage !== "fallback") return;
     // A Retell call is hung up with the tab; its webhook writes the row.
     if (via === "retell") {
       const hangUp = () => void c.retell.current?.end();

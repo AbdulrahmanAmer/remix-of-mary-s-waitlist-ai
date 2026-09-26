@@ -294,7 +294,7 @@ export class LeadLifecycle {
   flush(): void {
     setLive(this);
     const state = this.deps.store.get();
-    if (this.finished || state.stage !== "call") return;
+    if (this.finished || (state.stage !== "call" && state.stage !== "fallback")) return;
     const turns = state.lines.filter((line) => line.role === "user").length;
     if (turns < 1) return;
     const fields = fieldsKey(state.collected);

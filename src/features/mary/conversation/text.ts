@@ -1,5 +1,5 @@
 import { isInAppBrowser, MicUnavailableError, type MicFailure } from "@/lib/audio-engine";
-import { WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
+import { spotSecured, WAITLIST_FIELDS, type Collected, type MaryTurn } from "@/lib/mary.functions";
 import { CUT_OFF_MARK } from "@/lib/voice-logic";
 
 import type { ConversationOutcome, Line } from "./types";
@@ -78,8 +78,8 @@ export function endingFor(
   turn: Pick<MaryTurn, "complete" | "declined" | "callbackRequested" | "collected">,
 ): ConversationOutcome | null {
   if (turn.callbackRequested && turn.collected.name && turn.collected.phone) return "callback";
-  if (turn.complete && WAITLIST_FIELDS.filter((f) => f !== "phone").every((f) => turn.collected[f]))
-    return "signed_up";
+  // The server sets complete only once name and email secure the spot.
+  if (turn.complete && spotSecured(turn.collected)) return "signed_up";
   if (turn.declined) return "declined";
   return null;
 }

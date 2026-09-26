@@ -34,8 +34,8 @@ const llmJson = JSON.parse(read("retell/llm.json")) as Record<string, unknown>;
 const agentJson = JSON.parse(read("retell/agent.json")) as Record<string, unknown>;
 
 const SITE = "https://example.com";
-const CLOSE_LINE =
-  "Thanks for signing up — we'll be in touch as soon as OmniSuite launches, a product by Omnikom.";
+/** The close MARY's playbook and the header share since the fast-lane funnel. */
+const CLOSE_LINE = "your invite goes to that email the moment early access opens.";
 
 type ToolProperty = { type: string; enum?: string[]; description?: string };
 type Tool = {
@@ -94,6 +94,12 @@ describe("buildGeneralPrompt", () => {
 
   it("keeps the close line, the tools and the variables, and ends with the field notes", () => {
     expect(prompt).toContain(CLOSE_LINE);
+    for (const gone of [
+      "a product by Omnikom",
+      "confirm their spot by email",
+      "Ask nothing in that turn",
+    ])
+      expect(prompt, gone).not.toContain(gone);
     for (const fn of [...RETELL_FUNCTIONS, "end_call"]) expect(prompt).toContain(fn);
     expect(prompt).toContain("{{known_summary}}");
     expect(prompt.endsWith("{{field_notes}}")).toBe(true);
@@ -130,6 +136,8 @@ describe("condensed playbook (the default general_prompt)", () => {
       "Set complete true",
       "confirmation email",
       "a product by Omnikom",
+      "confirm by email",
+      "confirm their spot by email",
     ]) {
       expect(prompt, gone).not.toContain(gone);
     }
