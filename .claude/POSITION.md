@@ -135,3 +135,20 @@ UNPROVEN
 NEXT
 - Integration: merge WP1 + WP2 + WP3, all four gates, bundle check (`livekit` in exactly one lazy chunk, entry chunks grow < 5 KB), render gate with and without the Retell env, Worker smoke test with `.dev.vars`; open the PR (never push to `main`).
 - Operator: answer the six questions in `retell-migration.md` section 10 (cost, transcript storage, voice id, loud-room default, captions, call limits), create the Retell account, then follow `retell/README.md` go-live.
+
+## 2026-09-26 - V1 fixes merged onto PR #2 (branch claude/iphone-audio-playback-compat-lmufp8)
+
+DONE
+- `bfb87c7` Retell: `retell/playbook-condensed.md` (about 3,200 tokens, about 1x billing) is the default prompt (`--playbook full` keeps the ported playbook); save_lead final needs only name + email; openers say what they get and how long; silence reminders 8 s x 2.
+- `b488afc` The live site's phone-layout edit (made in Lovable, never pushed to GitHub) reconstructed from the live bundle and committed; it rebuilds the live assets byte for byte on 44318ba. Report: scratchpad `drift/`.
+- `35e5126` Conversation: fast lane (name + email = spot), email at the reveal with a read-back, stricter grounding, honest promises; a seventh `PLAYBOOK_EDIT` for the Retell full prompt.
+- `f511644` Call reliability: never hangs, loops or goes silent; typed-form fallback; silence and mic-error effects skip Retell calls.
+- Gates: typecheck 0, lint 0, 345 tests.
+
+NOT DONE / UNPROVEN
+- `v1/fx-lead-truth` and `v1/fx-screen-polish` were still in progress (worktrees under the session scratchpad `wt/`); screen polish touches the same files as the phone-layout commit.
+- Two openers now exist: `OPENING_LINES` (retell-shared, used by the MARY client) and `OPENERS`/`welcomeTurn` (mary.functions); consolidate.
+- Operator: check in Lovable that `omnisuite.omnikom.io` belongs to this project and that GitHub sync is healthy BEFORE pressing Publish/Update.
+
+NEXT
+- Merge the last two fix branches, run all gates, push, update the PR #2 body.
