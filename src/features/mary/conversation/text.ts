@@ -8,12 +8,20 @@ export function uid(): string {
   return Math.random().toString(36).slice(2);
 }
 
-/** The conversation as the model should see it; cut-off lines say so. */
+/** The conversation as the model should see it; cut-off lines say so, asides are not part of it. */
 export function toMessages(lines: Line[]) {
-  return lines.map((line) => ({
-    role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
-    content: line.role === "mary" && line.interrupted ? `${line.text} ${CUT_OFF_MARK}` : line.text,
-  }));
+  return lines
+    .filter((line) => !line.aside)
+    .map((line) => ({
+      role: line.role === "mary" ? ("assistant" as const) : ("user" as const),
+      content:
+        line.role === "mary" && line.interrupted ? `${line.text} ${CUT_OFF_MARK}` : line.text,
+    }));
+}
+
+/** Her real lines so far, for the repeat check: asides were never her turn. */
+export function spokenLines(lines: Line[]): string[] {
+  return lines.filter((line) => line.role === "mary" && !line.aside).map((line) => line.text);
 }
 
 export function transcriptOf(lines: Line[]): string {
@@ -25,23 +33,41 @@ export function transcriptOf(lines: Line[]): string {
     .join("\n");
 }
 
+/** An address the person typed or said before her line went down, so the form starts filled. */
+export function emailFromLines(lines: Line[]): string {
+  for (let i = lines.length - 1; i >= 0; i -= 1) {
+    const line = lines[i]!;
+    if (line.role !== "user") continue;
+    const match = line.text.match(/[^\s@,;:"'<>()]+@[^\s@,;:"'<>()]+\.[a-z]{2,}/i);
+    if (match) return match[0].toLowerCase();
+  }
+  return "";
+}
+
 export function fieldsKey(collected: Collected): string {
   return WAITLIST_FIELDS.map((field) => collected[field] ?? "").join("\u0001");
 }
 
+/** Below this many words, only the identical line counts as a repeat ("Got it." is not one). */
+const REPEAT_MIN_WORDS = 6;
+
 /** Word-overlap check: catches MARY re-saying a line she already delivered. */
 export function isNearRepeat(previous: string, next: string): boolean {
-  const words = (text: string) =>
-    new Set(
-      text
-        .toLowerCase()
-        .replace(/[^a-z0-9\s]/g, "")
-        .split(/\s+/)
-        .filter(Boolean),
-    );
-  const a = words(previous);
-  const b = words(next);
-  if (!a.size || !b.size) return false;
+  const normalise = (text: string) =>
+    text
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, "")
+      .split(/\s+/)
+      .filter(Boolean);
+  const wordsA = normalise(previous);
+  const wordsB = normalise(next);
+  if (!wordsA.length || !wordsB.length) return false;
+  // Short reactions share their few words with half of what she says; those only
+  // repeat when they are the same line.
+  if (Math.min(wordsA.length, wordsB.length) < REPEAT_MIN_WORDS)
+    return wordsA.join(" ") === wordsB.join(" ");
+  const a = new Set(wordsA);
+  const b = new Set(wordsB);
   let overlap = 0;
   for (const word of a) if (b.has(word)) overlap += 1;
   return overlap / Math.min(a.size, b.size) >= 0.8;
@@ -101,9 +127,11 @@ export function micMessage(error: unknown): string {
   if (isInAppBrowser() && (reason === "denied" || reason === "unsupported")) {
     return "This is an in-app browser, so it won't hand me the microphone. Tap the ⋯ menu and choose “Open in browser” for voice — or just type here.";
   }
+  // Every one of these is shown next to a mic button: a failed microphone moves the
+  // call to typing, where that button is the way to ask again.
   switch (reason) {
     case "denied":
-      return "I couldn't get the microphone. Tap the mic button to ask again, allow it, or just type — I'm reading either way.";
+      return "I couldn't get the microphone. Allow it for this site in your browser settings, then tap the mic button — or just type, I'm reading either way.";
     case "no-device":
       return "I can't find a microphone on this device. Typing works perfectly.";
     case "busy":
@@ -133,9 +161,40 @@ export const FIELD_LABELS: Record<string, string> = {
   operations: "Operations",
 };
 
-/** Only when she cannot hear you (muted mic, no microphone) and nothing is happening. */
+/** When she cannot hear you (muted mic, no microphone) and nothing is happening. */
 export const IDLE_NUDGES = [
-  "Whenever you're ready — you can talk to me or type it out.",
-  "I'm still here. Say the word, or type it if that's easier.",
-  "No rush at all — I'll be right here when you want to pick it back up.",
+  "Whenever you're ready — I'm reading, so type away, or turn the mic on.",
+  "I'm still here. Type it whenever suits you.",
 ];
+
+/** The line is open but nobody has spoken for a while. */
+export const SILENCE_NUDGES = {
+  hold: [
+    "Still with me? No rush — hold the button when you're ready, or type it below.",
+    "I'll hold your spot as long as you like. Hold the button, or type, whenever you're back.",
+  ],
+  "hands-free": [
+    "Still with me? No rush.",
+    "I'll hold your spot as long as you like — just say the word when you're back.",
+  ],
+} as const;
+
+/** Milliseconds of nothing before the first check-in, by whether she can hear the room. */
+export const SILENCE_NUDGE_MS = { canHear: 45000, cannotHear: 22000 } as const;
+/** Milliseconds of nothing after which the call lets go, releasing the microphone and the screen. */
+export const SILENCE_END_MS = 180000;
+
+/** One turn went wrong: the same apology twice in a row would sound like a loop. */
+export const SNAG_LINES = [
+  "I hit a snag on my side — could you try that once more?",
+  "Sorry, that one didn't get through to me. Once more?",
+] as const;
+
+/** Her reply never made it: the runner stops asking for repeats after this many failures in a row. */
+export const FALLBACK_AFTER_FAILURES = 2;
+/** What she says as the call gives way to the form. */
+export const FALLBACK_LINE =
+  "I can't reach my team right now, so I'll stop wasting your time. Leave your details below and a real person will follow up.";
+export const OFFLINE_LINE = "You look offline — I'll pick this up the moment you're back.";
+export const TRANSCRIBE_FAILED_LINE =
+  "I couldn't process that just now — hold the button and say it again, or type it below.";

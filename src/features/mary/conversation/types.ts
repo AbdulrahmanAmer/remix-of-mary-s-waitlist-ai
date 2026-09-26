@@ -1,6 +1,7 @@
 import type { Collected, TurnFlags } from "@/lib/mary.functions";
 
-export type Stage = "landing" | "call" | "done";
+/** "fallback": MARY's line is down; a plain form takes the details instead. */
+export type Stage = "landing" | "call" | "fallback" | "done";
 
 /** What the orb shows. */
 export type PresenceState = "idle" | "listening" | "hearing" | "thinking" | "speaking" | "done";
@@ -22,6 +23,11 @@ export type Line = {
   text: string;
   /** She was cut off; `text` holds only what was actually heard. */
   interrupted?: boolean;
+  /**
+   * A status line shown in her voice ("you look offline") but never spoken and
+   * never part of the conversation the model sees.
+   */
+  aside?: boolean;
 };
 
 export type ConversationOutcome = "signed_up" | "callback" | "declined";
@@ -97,4 +103,6 @@ export type SessionAction =
   | { type: "NOTE_SOURCE"; via: "voice" | "text" }
   | { type: "FINISH"; outcome: ConversationOutcome }
   | { type: "SET_RESULT"; result: ConversationResult }
-  | { type: "RESUME" };
+  | { type: "RESUME" }
+  /** Repeated turn failures: the call gives way to the no-AI details form. */
+  | { type: "ENTER_FALLBACK" };

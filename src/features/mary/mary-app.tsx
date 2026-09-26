@@ -12,7 +12,6 @@ import {
   setOutputRoute,
   releaseAudioOutput,
   replayLastLine,
-  transcribe,
   unlockAudio,
 } from "@/lib/audio-engine";
 import { addLessons, lessonsForTurn, type StoredLesson } from "@/lib/experience-store";
@@ -23,8 +22,9 @@ import {
   type LeadPayload,
   type LeadSyncResult,
 } from "@/lib/lead-sync";
-import { maryTurn, WAITLIST_FIELDS, type Collected } from "@/lib/mary.functions";
-import { streamMaryTurn } from "@/lib/mary-stream";
+import { WAITLIST_FIELDS, type Collected } from "@/lib/mary.functions";
+import { maryTurnBounded, streamMaryTurn } from "@/lib/mary-stream";
+import { OPENING_LINES, welcomeBackLine } from "@/lib/retell-shared";
 import {
   loadProgress,
   newSession,
@@ -35,7 +35,14 @@ import {
 
 import { LeadLifecycle } from "./conversation/lead-lifecycle";
 import { createSessionStore, useSession, type SessionStore } from "./conversation/store";
-import { IDLE_NUDGES, micMessage } from "./conversation/text";
+import {
+  IDLE_NUDGES,
+  SILENCE_END_MS,
+  SILENCE_NUDGE_MS,
+  SILENCE_NUDGES,
+  TRANSCRIBE_FAILED_LINE,
+  micMessage,
+} from "./conversation/text";
 import type { TalkMode, VoiceVia } from "./conversation/types";
 import { voiceLevel } from "./signal/signal";
 import { TurnRunner } from "./conversation/turn-runner";
@@ -43,10 +50,11 @@ import { BootScreen } from "./ui/boot-screen";
 import { CallStage } from "./ui/call-stage";
 import { EndScreen } from "./ui/end-screen";
 import { Landing } from "./ui/landing";
+import { LeadFallback, type FallbackFields } from "./ui/lead-fallback";
 import { hasFinePointer, useKeyboardViewport, useViewportHeight } from "./ui/use-viewport";
 import { warmOrb } from "./ui/orb-renderer";
 import { HoldRecorder } from "./voice/hold-recorder";
-import { HoldTalk } from "./voice/hold-talk";
+import { HoldTalk, transcribeHeldAudio } from "./voice/hold-talk";
 import type { RetellCall, RetellEnd } from "./voice/retell-call";
 import { VoiceLine } from "./voice/voice-line";
 import { chooseVoiceProvider, fetchVoiceStatus } from "./voice/voice-provider";
@@ -95,6 +103,8 @@ type Controller = {
   hold: HoldTalk;
   /** Whether the person wants the microphone (false after "Type instead"). */
   voiceWanted: { current: boolean };
+  /** Start was tapped: a second tap while the mic prompt is open must not start it twice. */
+  starting: { current: boolean };
   /** The iPhone "Can't hear her?" row: tapped, or dismissed (and on which output). */
   hint: { tapped: boolean; dismissed: boolean; dismissedOnSpeakers: boolean };
   focusComposer: { current: () => void };
@@ -154,19 +164,39 @@ function createController(): Controller {
   const runner = new TurnRunner({
     store,
     streamTurn: streamMaryTurn,
-    retryTurn: (request) =>
-      maryTurn({
-        data: {
+    retryTurn: (request, signal) =>
+      maryTurnBounded(
+        {
           messages: request.messages,
           collected: request.collected as Record<string, string>,
           flags: request.flags,
         },
-      }),
+        signal,
+      ),
     say: (text) => voice.say(text),
+    aside: (text) => voice.aside(text),
     stopSpeaking: () => voice.stopSpeaking(),
     isHeld: () => voice.isHeld(),
     wait: (ms) => new Promise((resolve) => window.setTimeout(resolve, ms)),
     lessons: (industry) => lessonsForTurn(industry),
+    // The same openers Retell would use, spoken the moment the call opens; the
+    // model only comes in once the person has answered.
+    openingLine: (known) =>
+      known.name
+        ? welcomeBackLine(known.name)
+        : OPENING_LINES[Math.floor(Math.random() * OPENING_LINES.length)]!,
+    online: () => navigator.onLine !== false,
+    whenOnline: (signal) =>
+      new Promise((resolve) => {
+        if (navigator.onLine !== false || signal.aborted) return resolve();
+        const done = () => {
+          window.removeEventListener("online", done);
+          signal.removeEventListener("abort", done);
+          resolve();
+        };
+        window.addEventListener("online", done);
+        signal.addEventListener("abort", done);
+      }),
     onFinish: (collected, outcome) => void lead.finalize(collected, outcome),
     onSettled: () => {
       // Mid-hold the floor is already theirs; the hold decides what the screen shows.
@@ -185,36 +215,53 @@ function createController(): Controller {
   // does the same): iOS then stays in its loudspeaker call mode for the whole call.
   const recorder = new HoldRecorder(isAppleMobile());
   recorder.onLevel = (level) => voiceLevel.set(level);
+  // The floor is free again. "Thinking" belongs to a turn in progress, never to a
+  // hold that came to nothing: that is how the orb used to stay stuck.
   const waiting = () => {
     store.dispatch({ type: "SET_LISTENING", listening: "listening" });
-    if (store.get().presence === "hearing")
-      store.dispatch({ type: "SET_PRESENCE", presence: "idle" });
+    const presence = store.get().presence;
+    if (presence === "hearing" || presence === "thinking")
+      store.dispatch({ type: "SET_PRESENCE", presence: runner.busy ? "thinking" : "idle" });
   };
   hold = new HoldTalk({
     recorder,
     // Held audio is the person by definition: straight to transcription, no addressee judge.
-    transcribeHeld: transcribe,
+    transcribeHeld: transcribeHeldAudio,
     onPress: () => {
-      // Same event as the press: her audio stops and the rest of her turn is dropped.
-      runner.interrupt();
+      // Same event as the press: she goes quiet. A tap gives her the line back;
+      // only a real hold (onCommit) ends it and drops the rest of her turn.
+      voice.pauseForPress();
       voiceLevel.set(0);
       store.dispatch({ type: "SET_NOTICE", key: "missedHold", value: false });
       store.dispatch({ type: "SET_PRESENCE", presence: "hearing" });
       store.dispatch({ type: "SET_LISTENING", listening: "hearing" });
     },
+    onCommit: () => runner.interrupt(),
     onRelease: () => {
       store.dispatch({ type: "SET_LISTENING", listening: "finishing" });
       store.dispatch({ type: "SET_PRESENCE", presence: "thinking" });
     },
-    onCancel: waiting,
+    onCancel: (reason) => {
+      voice.resumeAfterTap();
+      waiting();
+      // A tap on the big button is the most common way to learn it wants a hold.
+      if (reason === "short")
+        store.dispatch({ type: "SET_NOTICE", key: "missedHold", value: true });
+    },
     onText: (text) => {
       store.dispatch({ type: "SET_NOTICE", key: "suggestTyping", value: false });
+      // Words came through: whatever the microphone notice said is over.
+      if (store.get().mic.error) store.dispatch({ type: "SET_MIC", mic: { error: null } });
       void runner.send(text, "voice");
     },
     onMissed: (inARow) => {
       waiting();
       store.dispatch({ type: "SET_NOTICE", key: "missedHold", value: true });
       if (inARow >= 2) store.dispatch({ type: "SET_NOTICE", key: "suggestTyping", value: true });
+    },
+    onTranscribeFailed: () => {
+      waiting();
+      voice.aside(TRANSCRIBE_FAILED_LINE);
     },
     onError: (error) => {
       waiting();
@@ -254,6 +301,7 @@ function createController(): Controller {
     recorder,
     hold,
     voiceWanted: { current: true },
+    starting: { current: false },
     hint: { tapped: false, dismissed: false, dismissedOnSpeakers: false },
     focusComposer,
     retell: { current: null },
@@ -269,6 +317,7 @@ function useCallEffects(
   micLive: boolean,
   micMuted: boolean,
   micAttempt: number,
+  micError: string | null,
   talkMode: TalkMode,
   via: VoiceVia,
 ) {
@@ -414,28 +463,67 @@ function useCallEffects(
     if (stage === "done") releaseAudioOutput();
   }, [stage]);
 
-  // She nudges only when she cannot hear you (muted, or no microphone) and nothing is happening.
-  // Retell's agent runs its own silence reminders.
+  // A microphone that will not open leaves a Hold button that does nothing. The call
+  // moves to typing instead, where the mic button is the way to ask again and every
+  // microphone notice points at a control that exists.
   useEffect(() => {
-    if (stage !== "call" || via === "retell" || (micLive && !micMuted)) return;
-    let lastActivity = Date.now();
+    if (stage !== "call" || via === "retell" || talkMode !== "hold" || micLive || !micError) return;
+    c.voiceWanted.current = false;
+    c.store.dispatch({ type: "SET_TALK_MODE", mode: "hands-free" });
+  }, [c, stage, talkMode, micLive, micError, via]);
+
+  // Silence. She checks in after a while (sooner when she cannot hear you at all),
+  // and a call nobody comes back to lets go: the microphone and the screen are
+  // released, and whatever was said is kept. Retell's agent runs its own silence reminders.
+  useEffect(() => {
+    if (stage !== "call" || via === "retell") return;
+    const canHear = micLive && !micMuted;
+    const lines: readonly string[] = canHear ? SILENCE_NUDGES[talkMode] : IDLE_NUDGES;
+    const nudgeAfter = canHear ? SILENCE_NUDGE_MS.canHear : SILENCE_NUDGE_MS.cannotHear;
+    let lastChange = Date.now();
+    let lastFromThem = Date.now();
+    let answers = c.store.get().lines.filter((line) => line.role === "user").length;
     let nudges = 0;
-    const touch = () => (lastActivity = Date.now());
-    const off = c.store.subscribe(touch);
-    window.addEventListener("keydown", touch);
+    const theirs = () => {
+      lastFromThem = Date.now();
+      lastChange = lastFromThem;
+    };
+    const off = c.store.subscribe(() => {
+      lastChange = Date.now();
+      const state = c.store.get();
+      const now = state.lines.filter((line) => line.role === "user").length;
+      if (now !== answers || state.listening === "hearing" || state.interim) theirs();
+      answers = now;
+    });
+    window.addEventListener("keydown", theirs);
+    window.addEventListener("pointerdown", theirs);
     const timer = window.setInterval(() => {
-      if (c.runner.busy || c.voice.isSpeaking() || nudges >= IDLE_NUDGES.length) return;
-      if (Date.now() - lastActivity < 22000) return;
-      const line = IDLE_NUDGES[nudges];
+      const state = c.store.get();
+      if (
+        c.runner.busy ||
+        c.voice.isSpeaking() ||
+        c.hold.holding ||
+        state.listening === "hearing" ||
+        state.listening === "finishing"
+      )
+        return;
+      if (Date.now() - lastFromThem >= SILENCE_END_MS) {
+        c.lead.flush();
+        c.store.dispatch({ type: "FINISH", outcome: "declined" });
+        return;
+      }
+      if (nudges >= lines.length || Date.now() - lastChange < nudgeAfter) return;
+      const line = lines[nudges];
       nudges += 1;
       if (line) void c.voice.say(line);
     }, 4000);
     return () => {
       off();
-      window.removeEventListener("keydown", touch);
+      window.removeEventListener("keydown", theirs);
+      window.removeEventListener("pointerdown", theirs);
       window.clearInterval(timer);
     };
-  }, [c, stage, micLive, micMuted, via]);
+  }, [c, stage, micLive, micMuted, talkMode, via]);
 
   // Tab closed or backgrounded mid-call: whatever was said still reaches the sheet.
   useEffect(() => {
@@ -579,7 +667,7 @@ export function MaryApp() {
       node.focus({ preventScroll: true });
   };
 
-  useCallEffects(c, stage, mic.live, mic.muted, mic.attempt, talkMode, via);
+  useCallEffects(c, stage, mic.live, mic.muted, mic.attempt, mic.error, talkMode, via);
 
   useEffect(
     () => () => {
@@ -595,7 +683,8 @@ export function MaryApp() {
 
   const start = useCallback(
     async (withVoice: boolean) => {
-      if (store.get().stage !== "landing") return;
+      if (store.get().stage !== "landing" || c.starting.current) return;
+      c.starting.current = true;
       const retell = c.retell.current;
       if (withVoice && retell) {
         c.voiceWanted.current = false; // Retell owns the microphone; MARY's mic effects stay closed
@@ -631,7 +720,13 @@ export function MaryApp() {
       const micLive = await primed;
       primeOutput({ micLive });
       store.dispatch({ type: "START_CALL", at: Date.now() });
-      if (!withVoice) store.dispatch({ type: "SET_LISTENING", listening: "paused" });
+      if (!withVoice) {
+        // "Type instead" is a chat: her words appear at reading pace with no sound,
+        // the Hold button stays away, and the mic button is the way to voice.
+        store.dispatch({ type: "SET_TALK_MODE", mode: "hands-free" });
+        store.dispatch({ type: "SET_VOICE_OFF", off: true });
+        store.dispatch({ type: "SET_LISTENING", listening: "paused" });
+      }
       void c.runner.welcome();
     },
     [c, store],
@@ -728,6 +823,25 @@ export function MaryApp() {
 
   const onHangUp = useCallback(() => void c.retell.current?.end(), [c]);
 
+  // The no-AI form: the same pipeline as a finished conversation, so the row
+  // lands in the sheet and the end screen tells them where they stand.
+  const onFallbackSubmit = useCallback(
+    (fields: FallbackFields) => {
+      const collected: Collected = {
+        ...store.get().collected,
+        name: fields.name,
+        email: fields.email,
+      };
+      if (fields.business) collected.business = fields.business;
+      void c.lead.finalize(collected, "signed_up");
+    },
+    [c, store],
+  );
+  const onFallbackRetry = useCallback(() => {
+    // Back to the call; the very next failed turn returns here.
+    store.dispatch({ type: "RESUME" });
+  }, [store]);
+
   const tight = viewportHeight < 640;
   const landingOrb = Math.round(
     Math.min(300, Math.max(136, viewportHeight * (tight ? 0.208 : 0.256))),
@@ -760,6 +874,15 @@ export function MaryApp() {
               onHoldEnd={onHoldEnd}
               onToggleTalkMode={onToggleTalkMode}
               onHangUp={via === "retell" ? onHangUp : undefined}
+            />
+          )}
+          {stage === "fallback" && (
+            <LeadFallback
+              key="fallback"
+              store={store}
+              orbSize={landingOrb}
+              onSubmit={onFallbackSubmit}
+              onRetry={onFallbackRetry}
             />
           )}
           {stage === "done" && (

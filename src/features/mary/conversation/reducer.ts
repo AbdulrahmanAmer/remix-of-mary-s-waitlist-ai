@@ -108,5 +108,8 @@ export function reduce(state: SessionState, action: SessionAction): SessionState
       return state.stage === "done" ? { ...state, result: action.result } : state;
     case "RESUME":
       return { ...state, stage: "call", result: null, presence: "idle" };
+    case "ENTER_FALLBACK":
+      if (state.stage !== "call") return state;
+      return { ...state, stage: "fallback", presence: "idle", listening: "idle", interim: "" };
   }
 }
