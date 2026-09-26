@@ -1,6 +1,6 @@
 import { memo, useState, type RefObject } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
-import { Hand, MessageSquareText, Radio, Volume2, VolumeX, X } from "lucide-react";
+import { Hand, MessageSquareText, PhoneOff, Radio, Volume2, VolumeX, X } from "lucide-react";
 
 import type { SessionStore } from "../conversation/store";
 import { useSession } from "../conversation/store";
@@ -97,6 +97,7 @@ export function CallStage({
   onHoldStart,
   onHoldEnd,
   onToggleTalkMode,
+  onHangUp,
 }: {
   store: SessionStore;
   orbSize: number;
@@ -111,6 +112,8 @@ export function CallStage({
   onHoldStart: () => void;
   onHoldEnd: () => void;
   onToggleTalkMode: () => void;
+  /** Retell calls: one "End call" button takes the place of the talk-mode and voice toggles. */
+  onHangUp?: (() => void) | undefined;
 }) {
   const reduced = useReducedMotion();
   const [panel, setPanel] = useState(false);
@@ -146,31 +149,45 @@ export function CallStage({
             <div className="hidden min-w-0 md:block">
               <ProgressPills collected={collected} />
             </div>
-            <button
-              type="button"
-              onClick={onToggleTalkMode}
-              aria-pressed={talkMode === "hands-free"}
-              aria-label={
-                talkMode === "hold"
-                  ? "Quiet room: switch to hands-free talking"
-                  : "Loud room: switch to hold to talk"
-              }
-              className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink"
-            >
-              {talkMode === "hold" ? <Radio className="size-4" /> : <Hand className="size-4" />}
-              <span className="hidden sm:inline">
-                {talkMode === "hold" ? "Quiet room? Go hands-free" : "Hold to talk"}
-              </span>
-            </button>
-            <button
-              type="button"
-              onClick={onToggleVoice}
-              aria-label={voiceOff ? "Turn MARY's voice on" : "Turn MARY's voice off"}
-              className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-ink"
-            >
-              {voiceOff ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
-              <span className="hidden sm:inline">{voiceOff ? "Voice off" : "Voice on"}</span>
-            </button>
+            {onHangUp ? (
+              <button
+                type="button"
+                onClick={onHangUp}
+                aria-label="End the call"
+                className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink"
+              >
+                <PhoneOff className="size-4" />
+                <span className="hidden sm:inline">End call</span>
+              </button>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={onToggleTalkMode}
+                  aria-pressed={talkMode === "hands-free"}
+                  aria-label={
+                    talkMode === "hold"
+                      ? "Quiet room: switch to hands-free talking"
+                      : "Loud room: switch to hold to talk"
+                  }
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground ring-1 ring-border transition-colors hover:text-ink"
+                >
+                  {talkMode === "hold" ? <Radio className="size-4" /> : <Hand className="size-4" />}
+                  <span className="hidden sm:inline">
+                    {talkMode === "hold" ? "Quiet room? Go hands-free" : "Hold to talk"}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={onToggleVoice}
+                  aria-label={voiceOff ? "Turn MARY's voice on" : "Turn MARY's voice off"}
+                  className="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-2 text-xs font-medium text-muted-foreground transition-colors hover:text-ink"
+                >
+                  {voiceOff ? <VolumeX className="size-4" /> : <Volume2 className="size-4" />}
+                  <span className="hidden sm:inline">{voiceOff ? "Voice off" : "Voice on"}</span>
+                </button>
+              </>
+            )}
           </div>
         }
       />

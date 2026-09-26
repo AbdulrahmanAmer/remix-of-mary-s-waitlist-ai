@@ -15,6 +15,7 @@ export function initialState(): SessionState {
     mic: { live: false, muted: false, error: null, attempt: 0 },
     voiceOff: false,
     talkMode: "hold",
+    via: "mary",
     notices: {
       echoHint: false,
       voiceFailed: false,
@@ -37,6 +38,20 @@ export function reduce(state: SessionState, action: SessionAction): SessionState
       return { ...state, stage: "call", startedAt: state.startedAt || action.at };
     case "ADD_LINE":
       return { ...state, lines: [...state.lines, action.line] };
+    case "UPSERT_LINE": {
+      const i = state.lines.findIndex((line) => line.id === action.line.id);
+      if (i < 0) return { ...state, lines: [...state.lines, action.line] };
+      const old = state.lines[i]!;
+      if (
+        old.role === action.line.role &&
+        old.text === action.line.text &&
+        old.interrupted === action.line.interrupted
+      )
+        return state;
+      const lines = state.lines.slice();
+      lines[i] = action.line;
+      return { ...state, lines };
+    }
     case "CUT_LINE": {
       if (!state.lines.some((line) => line.id === action.id)) return state;
       const lines = action.spoken
@@ -69,6 +84,8 @@ export function reduce(state: SessionState, action: SessionAction): SessionState
     }
     case "SET_TALK_MODE":
       return state.talkMode === action.mode ? state : { ...state, talkMode: action.mode };
+    case "SET_VIA":
+      return state.via === action.via ? state : { ...state, via: action.via };
     case "SET_VOICE_OFF":
       return state.voiceOff === action.off ? state : { ...state, voiceOff: action.off };
     case "SET_NOTICE":

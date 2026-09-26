@@ -16,7 +16,13 @@ import {
   unlockAudio,
 } from "@/lib/audio-engine";
 import { addLessons, lessonsForTurn, type StoredLesson } from "@/lib/experience-store";
-import { beaconLead, browserContext, syncLead, type LeadPayload } from "@/lib/lead-sync";
+import {
+  beaconLead,
+  browserContext,
+  syncLead,
+  type LeadPayload,
+  type LeadSyncResult,
+} from "@/lib/lead-sync";
 import { maryTurn, WAITLIST_FIELDS, type Collected } from "@/lib/mary.functions";
 import { streamMaryTurn } from "@/lib/mary-stream";
 import {
@@ -30,7 +36,7 @@ import {
 import { LeadLifecycle } from "./conversation/lead-lifecycle";
 import { createSessionStore, useSession, type SessionStore } from "./conversation/store";
 import { IDLE_NUDGES, micMessage } from "./conversation/text";
-import type { TalkMode } from "./conversation/types";
+import type { TalkMode, VoiceVia } from "./conversation/types";
 import { voiceLevel } from "./signal/signal";
 import { TurnRunner } from "./conversation/turn-runner";
 import { BootScreen } from "./ui/boot-screen";
@@ -41,7 +47,9 @@ import { hasFinePointer, useKeyboardViewport, useViewportHeight } from "./ui/use
 import { warmOrb } from "./ui/orb-renderer";
 import { HoldRecorder } from "./voice/hold-recorder";
 import { HoldTalk } from "./voice/hold-talk";
+import type { RetellCall, RetellEnd } from "./voice/retell-call";
 import { VoiceLine } from "./voice/voice-line";
+import { chooseVoiceProvider, fetchVoiceStatus } from "./voice/voice-provider";
 
 /**
  * The screen stays on for the whole call, as ElevenLabs does: a locked iPhone
@@ -90,6 +98,11 @@ type Controller = {
   /** The iPhone "Can't hear her?" row: tapped, or dismissed (and on which output). */
   hint: { tapped: boolean; dismissed: boolean; dismissedOnSpeakers: boolean };
   focusComposer: { current: () => void };
+  /** The Retell voice line, once the server offers it and its chunk has loaded; else null. */
+  retell: { current: RetellCall | null };
+  /** Local saves and the end screen for Retell calls; the server writes their sheet row. */
+  retellLead: LeadLifecycle;
+  finishRetell: (end: RetellEnd) => void;
 };
 
 async function reflect(payload: LeadPayload): Promise<StoredLesson[] | null> {
@@ -211,6 +224,28 @@ function createController(): Controller {
     setTimer: (fn, ms) => window.setTimeout(fn, ms),
     clearTimer: (id) => window.clearTimeout(id),
   });
+
+  // Retell calls reuse the same finalize (local save, end screen, the sheet's answer), but the
+  // server already wrote the row (save_lead and the webhook) and runs the debrief itself.
+  let retellSynced: LeadSyncResult = { configured: false, saved: false, position: null };
+  const retellLead = new LeadLifecycle({
+    store,
+    sessionId,
+    syncLead: async () => retellSynced,
+    beaconLead: () => {},
+    saveProgress,
+    reflect: async () => null,
+    addLessons,
+    context: browserContext,
+    positionFor,
+    now: () => Date.now(),
+    setTimer: (fn, ms) => window.setTimeout(fn, ms),
+    clearTimer: (id) => window.clearTimeout(id),
+  });
+  const finishRetell = (end: RetellEnd) => {
+    retellSynced = end.synced;
+    void retellLead.finalize(end.collected, end.outcome);
+  };
   return {
     store,
     voice,
@@ -221,6 +256,9 @@ function createController(): Controller {
     voiceWanted: { current: true },
     hint: { tapped: false, dismissed: false, dismissedOnSpeakers: false },
     focusComposer,
+    retell: { current: null },
+    retellLead,
+    finishRetell,
   };
 }
 
@@ -232,6 +270,7 @@ function useCallEffects(
   micMuted: boolean,
   micAttempt: number,
   talkMode: TalkMode,
+  via: VoiceVia,
 ) {
   // Hands-free (quiet rooms): the line opens itself and stays open, like a phone call.
   useEffect(() => {
@@ -376,8 +415,9 @@ function useCallEffects(
   }, [stage]);
 
   // She nudges only when she cannot hear you (muted, or no microphone) and nothing is happening.
+  // Retell's agent runs its own silence reminders.
   useEffect(() => {
-    if (stage !== "call" || (micLive && !micMuted)) return;
+    if (stage !== "call" || via === "retell" || (micLive && !micMuted)) return;
     let lastActivity = Date.now();
     let nudges = 0;
     const touch = () => (lastActivity = Date.now());
@@ -395,11 +435,17 @@ function useCallEffects(
       window.removeEventListener("keydown", touch);
       window.clearInterval(timer);
     };
-  }, [c, stage, micLive, micMuted]);
+  }, [c, stage, micLive, micMuted, via]);
 
   // Tab closed or backgrounded mid-call: whatever was said still reaches the sheet.
   useEffect(() => {
     if (stage !== "call") return;
+    // A Retell call is hung up with the tab; its webhook writes the row.
+    if (via === "retell") {
+      const hangUp = () => void c.retell.current?.end();
+      window.addEventListener("pagehide", hangUp);
+      return () => window.removeEventListener("pagehide", hangUp);
+    }
     const flush = () => c.lead.flush();
     const onVisibility = () => {
       if (document.visibilityState === "hidden") flush();
@@ -410,7 +456,7 @@ function useCallEffects(
       window.removeEventListener("pagehide", flush);
       document.removeEventListener("visibilitychange", onVisibility);
     };
-  }, [c, stage]);
+  }, [c, stage, via]);
 }
 
 export function MaryApp() {
@@ -419,6 +465,7 @@ export function MaryApp() {
   const stage = useSession(store, (s) => s.stage);
   const mic = useSession(store, (s) => s.mic);
   const talkMode = useSession(store, (s) => s.talkMode);
+  const via = useSession(store, (s) => s.via);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const viewportHeight = useViewportHeight();
   const keyboardHeight = useKeyboardViewport(stage === "call");
@@ -473,6 +520,47 @@ export function MaryApp() {
     if (Object.keys(known).length) store.dispatch({ type: "SET_COLLECTED", collected: known });
   }, [store]);
 
+  // Which voice runs the call, asked once here and never inside a tap. Only a Retell answer
+  // downloads its chunk; a tap before all this finishes (or any failure) is MARY's call.
+  useEffect(() => {
+    if (import.meta.env.SSR) return;
+    const controller = new AbortController();
+    let alive = true;
+    void (async () => {
+      const status = await fetchVoiceStatus(window.fetch.bind(window), controller.signal);
+      if (!alive || chooseVoiceProvider(status, window.location.search) !== "retell") return;
+      const { createRetellCall } = await import("./voice/retell-loader");
+      if (!alive) return;
+      c.retell.current = createRetellCall(
+        {
+          store,
+          level: voiceLevel,
+          fetch: window.fetch.bind(window),
+          sessionId,
+          context: browserContext,
+          releasePrimedMic,
+          isVisible: () => document.visibilityState === "visible",
+          finish: c.finishRetell,
+          fallback: (queued) => {
+            c.voiceWanted.current = false;
+            if (queued.length) for (const text of queued) void c.runner.send(text, "text");
+            else void c.runner.welcome();
+          },
+          now: () => Date.now(),
+          setTimer: (fn, ms) => window.setTimeout(fn, ms),
+          clearTimer: (id) => window.clearTimeout(id),
+        },
+        { transcriptKey: status.transcriptKey },
+      );
+    })().catch(() => {});
+    return () => {
+      alive = false;
+      controller.abort();
+      c.retell.current?.dispose();
+      c.retell.current = null;
+    };
+  }, [c, store]);
+
   // Every change to the collected details is saved at once and checkpointed to the sheet.
   useEffect(() => {
     let previous = store.get().collected;
@@ -480,7 +568,7 @@ export function MaryApp() {
       const next = store.get().collected;
       if (next === previous) return;
       previous = next;
-      c.lead.onCollectedChanged();
+      (store.get().via === "retell" ? c.retellLead : c.lead).onCollectedChanged();
     });
   }, [c, store]);
 
@@ -491,7 +579,7 @@ export function MaryApp() {
       node.focus({ preventScroll: true });
   };
 
-  useCallEffects(c, stage, mic.live, mic.muted, mic.attempt, talkMode);
+  useCallEffects(c, stage, mic.live, mic.muted, mic.attempt, talkMode, via);
 
   useEffect(
     () => () => {
@@ -508,6 +596,20 @@ export function MaryApp() {
   const start = useCallback(
     async (withVoice: boolean) => {
       if (store.get().stage !== "landing") return;
+      const retell = c.retell.current;
+      if (withVoice && retell) {
+        c.voiceWanted.current = false; // Retell owns the microphone; MARY's mic effects stay closed
+        const micReady = primeMicPermission().then(
+          () => true,
+          (error: unknown) => {
+            store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
+            return false;
+          },
+        );
+        holdScreenAwake(true);
+        retell.start(store.get().collected, micReady);
+        return;
+      }
       c.voiceWanted.current = withVoice;
       // Her voice always plays through an <audio> element. Safari, iPhone and iPad feed it
       // straight from Web Audio; a looped-back call stream can arrive muted there.
@@ -537,14 +639,24 @@ export function MaryApp() {
 
   const send = useCallback(
     (text: string) => {
+      const r = c.retell.current;
+      if (store.get().via === "retell" && r?.active) {
+        r.sendText(text);
+        return;
+      }
       c.voice.clearCutIn();
       void c.runner.send(text, "text");
     },
-    [c],
+    [c, store],
   );
 
   const onMicButton = useCallback(() => {
     const current = store.get().mic;
+    const r = c.retell.current;
+    if (store.get().via === "retell" && r?.active) {
+      if (current.live) r.setMuted(!current.muted);
+      return;
+    }
     if (!current.live) {
       c.voiceWanted.current = true;
       store.dispatch({
@@ -575,24 +687,46 @@ export function MaryApp() {
   const onPlaySound = useCallback(() => {
     c.hint.tapped = true;
     c.hint.dismissed = false;
+    if (store.get().via === "retell") {
+      void c.retell.current?.resumeAudio();
+      return;
+    }
     void replayLastLine({ otherOutput: true });
-  }, [c]);
+  }, [c, store]);
   const onHearHer = useCallback(() => {
     c.hint.dismissed = true;
     c.hint.dismissedOnSpeakers = c.voice.directOutputUsed();
     store.dispatch({ type: "SET_NOTICE", key: "silentHint", value: false });
   }, [c, store]);
   const onResume = useCallback(() => {
+    const r = c.retell.current;
+    if (store.get().via === "retell" && r) {
+      // A new Retell call from this tap: same session, so the same sheet row.
+      const micReady = primeMicPermission().then(
+        () => true,
+        (error: unknown) => {
+          store.dispatch({ type: "SET_MIC", mic: { error: micMessage(error) } });
+          return false;
+        },
+      );
+      holdScreenAwake(true);
+      c.retellLead.resume();
+      r.start(store.get().collected, micReady);
+      return;
+    }
     // Inside the tap: the output element is rebuilt and started where iOS allows it.
     holdScreenAwake(true);
     void unlockAudio();
     c.lead.resume();
-  }, [c]);
+  }, [c, store]);
   const onRestart = useCallback(() => {
+    c.retell.current?.dispose();
     c.voice.dispose();
     newSession();
     window.location.reload();
   }, [c]);
+
+  const onHangUp = useCallback(() => void c.retell.current?.end(), [c]);
 
   const tight = viewportHeight < 640;
   const landingOrb = Math.round(
@@ -625,6 +759,7 @@ export function MaryApp() {
               onHoldStart={onHoldStart}
               onHoldEnd={onHoldEnd}
               onToggleTalkMode={onToggleTalkMode}
+              onHangUp={via === "retell" ? onHangUp : undefined}
             />
           )}
           {stage === "done" && (

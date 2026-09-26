@@ -93,3 +93,41 @@ describe("talk mode", () => {
     expect(reduce(hands, { type: "SET_TALK_MODE", mode: "hands-free" })).toBe(hands);
   });
 });
+
+describe("voice via (Retell)", () => {
+  it("starts on MARY's own pipeline", () => {
+    expect(initialState().via).toBe("mary");
+  });
+
+  it("switches the voice and returns the same object when unchanged", () => {
+    const s = reduce(initialState(), { type: "SET_VIA", via: "retell" });
+    expect(s.via).toBe("retell");
+    expect(reduce(s, { type: "SET_VIA", via: "retell" })).toBe(s);
+    expect(reduce(s, { type: "SET_VIA", via: "mary" }).via).toBe("mary");
+  });
+
+  it("keeps the voice through FINISH and RESUME", () => {
+    let s = reduce(initialState(), { type: "SET_VIA", via: "retell" });
+    s = reduce(s, { type: "START_CALL", at: 1 });
+    s = reduce(s, { type: "FINISH", outcome: "declined" });
+    expect(s.via).toBe("retell");
+    s = reduce(s, { type: "RESUME" });
+    expect(s.via).toBe("retell");
+  });
+});
+
+describe("UPSERT_LINE", () => {
+  it("appends a new id, replaces an existing one in place, and skips an identical line", () => {
+    let s = reduce(initialState(), { type: "ADD_LINE", line: mary("a", "Hi") });
+    s = reduce(s, { type: "UPSERT_LINE", line: mary("r1", "Hey") });
+    expect(s.lines.map((l) => l.id)).toEqual(["a", "r1"]);
+    s = reduce(s, { type: "ADD_LINE", line: { id: "u", role: "user", text: "Hello" } });
+    s = reduce(s, { type: "UPSERT_LINE", line: mary("r1", "Hey — good to meet you.") });
+    expect(s.lines).toEqual([
+      mary("a", "Hi"),
+      mary("r1", "Hey — good to meet you."),
+      { id: "u", role: "user", text: "Hello" },
+    ]);
+    expect(reduce(s, { type: "UPSERT_LINE", line: mary("r1", "Hey — good to meet you.") })).toBe(s);
+  });
+});
